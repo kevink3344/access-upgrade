@@ -1,15 +1,25 @@
--- =====================================================================
+﻿-- =====================================================================
 --  Project Enlightenment Training Database
 --  Target schema for Azure SQL (project-enlightenment)
 --
 --  Source of truth: database/TrainingDatabase.accdb, read 2026-11-19.
 --  Column names, types, sizes and nullability were extracted from the
 --  live Access database, NOT copied from the migration plan's abridged
---  DDL — the plan's assumed names differ from reality in several places
+--  DDL - the plan's assumed names differ from reality in several places
 --  (see docs/completions/2026-11-19-schema.md).
 --
---  Idempotent: safe to re-run. Every object is dropped and recreated.
+--  IDEMPOTENT AND NON-DESTRUCTIVE.
+--
+--  This file never drops anything. Every object is created only if it
+--  does not already exist, so it is safe to run against a populated
+--  database: existing tables and their data are left untouched.
+--
+--  It is therefore NOT a migration tool. To change an object that
+--  already exists, write a targeted ALTER in db/migrations/ and apply
+--  it to both databases (see docs/features/schema-environments.md).
+--
 --  Data load is a separate step (db/etl) and is NOT performed here.
+
 -- =====================================================================
 
 SET NOCOUNT ON;
@@ -17,6 +27,7 @@ GO
 
 -- =====================================================================
 --  Schemas
+
 -- =====================================================================
 IF SCHEMA_ID('ref')     IS NULL EXEC('CREATE SCHEMA ref');
 GO
@@ -28,122 +39,157 @@ IF SCHEMA_ID('staging') IS NULL EXEC('CREATE SCHEMA staging');
 GO
 
 -- =====================================================================
---  Drop existing objects (children first)
--- =====================================================================
-DECLARE @sql NVARCHAR(MAX) = N'';
-
-SELECT @sql += N'ALTER TABLE ' + QUOTENAME(SCHEMA_NAME(t.schema_id)) + N'.' +
-               QUOTENAME(t.name) + N' DROP CONSTRAINT ' + QUOTENAME(fk.name) + N';' + CHAR(10)
-FROM sys.foreign_keys fk
-JOIN sys.tables t ON t.object_id = fk.parent_object_id;
-
-SELECT @sql += N'DROP VIEW ' + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTENAME(name) + N';' + CHAR(10)
-FROM sys.views WHERE schema_id IN (SCHEMA_ID('ref'), SCHEMA_ID('core'), SCHEMA_ID('audit'), SCHEMA_ID('staging'));
-
-SELECT @sql += N'DROP TABLE ' + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTENAME(name) + N';' + CHAR(10)
-FROM sys.tables WHERE schema_id IN (SCHEMA_ID('ref'), SCHEMA_ID('core'), SCHEMA_ID('audit'), SCHEMA_ID('staging'));
-
-IF @sql <> N'' EXEC sp_executesql @sql;
-GO
+--  ref -- lookup tables (29). One row per legacy lst* table.
 
 -- =====================================================================
---  ref — lookup tables (29). One row per legacy lst* table.
--- =====================================================================
+IF OBJECT_ID('ref.AgencyType', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.AgencyType (
     AgencyTypeID  INT           NOT NULL CONSTRAINT PK_AgencyType PRIMARY KEY,
     TypeName      NVARCHAR(50)  NULL
 );
+END
 
+IF OBJECT_ID('ref.Age', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.Age (
     AgesID        INT            NOT NULL CONSTRAINT PK_Age PRIMARY KEY,
     Ages          NVARCHAR(100)  NULL,
     SortOrder     INT            NULL      -- legacy column named [Order]
 );
+END
 
+IF OBJECT_ID('ref.BackupTime', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.BackupTime (
     BackupTimeID  INT           NOT NULL CONSTRAINT PK_BackupTime PRIMARY KEY,
     BackupTime    NVARCHAR(15)  NULL
 );
+END
 
+IF OBJECT_ID('ref.Category', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.Category (
     CategoryID    INT           NOT NULL CONSTRAINT PK_Category PRIMARY KEY,
     CategoryCode  NVARCHAR(50)  NULL,
     CategoryType  NVARCHAR(10)  NULL,     -- legacy [Type]: 'Classroom' | 'Workshops' | 'Grant'
     IsInUse       BIT           NOT NULL CONSTRAINT DF_Category_InUse DEFAULT 1
 );
+END
 
+IF OBJECT_ID('ref.City', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.City (
     CityID        INT           NOT NULL CONSTRAINT PK_City PRIMARY KEY,
     RegionID      INT           NULL,
     City          NVARCHAR(30)  NULL
 );
+END
 
+IF OBJECT_ID('ref.Component', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.Component (
     ComponentID   INT           NOT NULL CONSTRAINT PK_Component PRIMARY KEY,
     PrEComponent  NVARCHAR(30)  NULL,
     PrECompAbbrev NVARCHAR(10)  NULL
 );
+END
 
+IF OBJECT_ID('ref.ContactType', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.ContactType (
     ContactTypeID INT           NOT NULL CONSTRAINT PK_ContactType PRIMARY KEY,
     ContactType   NVARCHAR(50)  NULL
 );
+END
 
+IF OBJECT_ID('ref.County', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.County (
     CountyID      INT           NOT NULL CONSTRAINT PK_County PRIMARY KEY,
     County        NVARCHAR(20)  NULL
 );
+END
 
+IF OBJECT_ID('ref.CreditSlipCategory', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.CreditSlipCategory (
     CreditSlipsCategoryID INT          NOT NULL CONSTRAINT PK_CreditSlipCategory PRIMARY KEY,
     CreditSlipsCategory   NVARCHAR(30) NULL
 );
+END
 
+IF OBJECT_ID('ref.CreditType', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.CreditType (
     CreditTypeID      INT           NOT NULL CONSTRAINT PK_CreditType PRIMARY KEY,
     CreditCode        NVARCHAR(50)  NULL,
     CreditDescription NVARCHAR(50)  NULL
 );
+END
 
+IF OBJECT_ID('ref.DesiredTopicCategory', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.DesiredTopicCategory (
     DesiredTopicCategoryID INT           NOT NULL CONSTRAINT PK_DesiredTopicCategory PRIMARY KEY,
     DesiredTopicCategory   NVARCHAR(255) NULL
 );
+END
 
+IF OBJECT_ID('ref.Equipment', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.Equipment (
     EquipmentID   INT           NOT NULL CONSTRAINT PK_Equipment PRIMARY KEY,
     Equipment     NVARCHAR(255) NULL
 );
+END
 
+IF OBJECT_ID('ref.EvalQuestionType', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.EvalQuestionType (
     EvalQuestTypeID INT          NOT NULL CONSTRAINT PK_EvalQuestionType PRIMARY KEY,
     EvalQuestType   NVARCHAR(15) NULL
 );
+END
 
+IF OBJECT_ID('ref.EvalType', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.EvalType (
     -- Legacy PK is named WorkshopTypeID; renamed per plan §B.1
     EvalTypeID    INT           NOT NULL CONSTRAINT PK_EvalType PRIMARY KEY,
     WorkshopType  NVARCHAR(255) NULL
 );
+END
 
+IF OBJECT_ID('ref.EventType', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.EventType (
     EventTypeID   INT           NOT NULL CONSTRAINT PK_EventType PRIMARY KEY,
     EventType     NVARCHAR(100) NULL
 );
+END
 
+IF OBJECT_ID('ref.FacilityType', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.FacilityType (
     FacilityTypeID INT           NOT NULL CONSTRAINT PK_FacilityType PRIMARY KEY,
     FacilityType   NVARCHAR(255) NULL
 );
+END
 
+IF OBJECT_ID('ref.MailingList', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.MailingList (
     MailingListID INT           NOT NULL CONSTRAINT PK_MailingList PRIMARY KEY,
     MailingList   NVARCHAR(25)  NULL
 );
+END
 
 -- Legacy table has no PK and a space in the column name; 1,091 rows but
 -- only 106 distinct ZIPs, so the ZIP is NOT unique. A surrogate key is
 -- added and the legacy data is preserved verbatim.
+IF OBJECT_ID('ref.ZipCode', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.ZipCode (
     ZipCodeRowID  INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ZipCode PRIMARY KEY,
     ZipCode       NVARCHAR(10)  NULL,     -- legacy column named [Zip Code]
@@ -151,41 +197,63 @@ CREATE TABLE ref.ZipCode (
     City          NVARCHAR(255) NULL,
     County        NVARCHAR(255) NULL
 );
-CREATE INDEX IX_ZipCode_ZipCode ON ref.ZipCode(ZipCode);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ZipCode_ZipCode' AND object_id = OBJECT_ID('ref.ZipCode'))
+    CREATE INDEX IX_ZipCode_ZipCode ON ref.ZipCode(ZipCode);
 
+IF OBJECT_ID('ref.Other', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.Other (
     OtherID       INT           NOT NULL CONSTRAINT PK_Other PRIMARY KEY,
     OtherNickname NVARCHAR(50)  NULL,
     Description   NVARCHAR(50)  NULL
 );
+END
 
+IF OBJECT_ID('ref.PaymentMethod', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.PaymentMethod (
     PaymentMethodID INT          NOT NULL CONSTRAINT PK_PaymentMethod PRIMARY KEY,
     PaymentMethod   NVARCHAR(50) NULL
 );
+END
 
+IF OBJECT_ID('ref.PreferredTime', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.PreferredTime (
     PreferredTimesID    INT           NOT NULL CONSTRAINT PK_PreferredTime PRIMARY KEY,
     PreferredTimes      NVARCHAR(25)  NULL,
     PreferredTimesNotes NVARCHAR(255) NULL
 );
+END
 
+IF OBJECT_ID('ref.ReferralType', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.ReferralType (
     ReferralTypeID INT          NOT NULL CONSTRAINT PK_ReferralType PRIMARY KEY,
     ReferralType   NVARCHAR(35) NULL,
     ReferralAbrev  NVARCHAR(10) NULL
 );
+END
 
+IF OBJECT_ID('ref.Region', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.Region (
     RegionID      INT           NOT NULL CONSTRAINT PK_Region PRIMARY KEY,
     Region        NVARCHAR(50)  NULL
 );
+END
 
+IF OBJECT_ID('ref.Salutation', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.Salutation (
     SalutationID  INT           NOT NULL CONSTRAINT PK_Salutation PRIMARY KEY,
     Salutation    NVARCHAR(50)  NULL
 );
+END
 
+IF OBJECT_ID('ref.SchoolYear', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.SchoolYear (
     SchoolYearID  INT           NOT NULL CONSTRAINT PK_SchoolYear PRIMARY KEY,  -- legacy SYID
     SchoolYear    NVARCHAR(50)  NULL,
@@ -193,29 +261,42 @@ CREATE TABLE ref.SchoolYear (
     BeginDate     DATETIME2(0)  NULL,
     EndDate       DATETIME2(0)  NULL
 );
+END
 
+IF OBJECT_ID('ref.State', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.State (
     StateID       INT           NOT NULL CONSTRAINT PK_State PRIMARY KEY,
     State         NVARCHAR(2)   NULL
 );
+END
 
+IF OBJECT_ID('ref.StreetType', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.StreetType (
     StreetTypeID     INT          NOT NULL CONSTRAINT PK_StreetType PRIMARY KEY,
     StreetTypeName   NVARCHAR(15) NULL,
     StreetTypeAbbrev NVARCHAR(8)  NULL
 );
+END
 
+IF OBJECT_ID('ref.SummaryCountType', 'U') IS NULL
+BEGIN
 CREATE TABLE ref.SummaryCountType (
     -- Legacy PK is named CountyTypeID; renamed per plan §B.1
     SummaryCountTypeID INT          NOT NULL CONSTRAINT PK_SummaryCountType PRIMARY KEY,
     CountType          NVARCHAR(25) NULL
 );
+END
 GO
 
 -- =====================================================================
---  core — operational tables (32)
+--  core -- operational tables (32)
+
 -- =====================================================================
 
+IF OBJECT_ID('core.Agency', 'U') IS NULL
+BEGIN
 CREATE TABLE core.Agency (
     AgencyID           INT            NOT NULL CONSTRAINT PK_Agency PRIMARY KEY,
     WakeSitesFacilityID INT           NULL,
@@ -246,8 +327,12 @@ CREATE TABLE core.Agency (
     CreatedAt          DATETIME2(0)   NULL,
     UpdatedAt          DATETIME2(0)   NULL
 );
-CREATE INDEX IX_Agency_Name ON core.Agency(AgencyName);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Agency_Name' AND object_id = OBJECT_ID('core.Agency'))
+    CREATE INDEX IX_Agency_Name ON core.Agency(AgencyName);
 
+IF OBJECT_ID('core.AgencyMailAddress', 'U') IS NULL
+BEGIN
 CREATE TABLE core.AgencyMailAddress (
     AgencyID             INT           NOT NULL CONSTRAINT PK_AgencyMailAddress PRIMARY KEY,
     StreetTypeID         INT           NULL REFERENCES ref.StreetType(StreetTypeID),
@@ -257,9 +342,15 @@ CREATE TABLE core.AgencyMailAddress (
     MailingAddressLine2  NVARCHAR(20)  NULL,
     MailingZipCode       NVARCHAR(255) NULL
 );
+END
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = 'FK_AgencyMailAddress_Agency' AND type IN ('F','C'))
+BEGIN
 ALTER TABLE core.AgencyMailAddress
     ADD CONSTRAINT FK_AgencyMailAddress_Agency FOREIGN KEY (AgencyID) REFERENCES core.Agency(AgencyID);
+END
 
+IF OBJECT_ID('core.BoardMember', 'U') IS NULL
+BEGIN
 CREATE TABLE core.BoardMember (
     BoardID       INT           NOT NULL CONSTRAINT PK_BoardMember PRIMARY KEY,
     AgencyID      INT           NULL,
@@ -274,9 +365,15 @@ CREATE TABLE core.BoardMember (
     BoardPhone     NVARCHAR(14) NULL,
     BoardEmail     NVARCHAR(255) NULL
 );
+END
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = 'FK_BoardMember_Agency' AND type IN ('F','C'))
+BEGIN
 ALTER TABLE core.BoardMember
     ADD CONSTRAINT FK_BoardMember_Agency FOREIGN KEY (AgencyID) REFERENCES core.Agency(AgencyID);
+END
 
+IF OBJECT_ID('core.Participant', 'U') IS NULL
+BEGIN
 CREATE TABLE core.Participant (
     ParticipantID      INT           NOT NULL CONSTRAINT PK_Participant PRIMARY KEY,
     WebID              INT           NULL,
@@ -310,16 +407,25 @@ CREATE TABLE core.Participant (
     DateOfEntry        DATETIME2(0)  NULL,
     UpdatedAt          DATETIME2(0)  NULL    -- legacy DateUpdated
 );
-CREATE INDEX IX_Participant_LastName ON core.Participant(LastName, FirstName);
-CREATE INDEX IX_Participant_Email    ON core.Participant(Email);   -- non-unique: 962 duplicate groups
-CREATE INDEX IX_Participant_Agency   ON core.Participant(AgencyID);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Participant_LastName' AND object_id = OBJECT_ID('core.Participant'))
+    CREATE INDEX IX_Participant_LastName ON core.Participant(LastName, FirstName);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Participant_Email' AND object_id = OBJECT_ID('core.Participant'))
+    CREATE INDEX IX_Participant_Email ON core.Participant(Email); -- non-unique: 962 duplicate groups
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Participant_Agency' AND object_id = OBJECT_ID('core.Participant'))
+    CREATE INDEX IX_Participant_Agency ON core.Participant(AgencyID);
 
+IF OBJECT_ID('core.Payee', 'U') IS NULL
+BEGIN
 CREATE TABLE core.Payee (
     PayeeID  INT           NOT NULL CONSTRAINT PK_Payee PRIMARY KEY,
     Payee    NVARCHAR(255) NULL,
     IsDeleted BIT NOT NULL CONSTRAINT DF_Payee_Deleted DEFAULT 0   -- legacy [Delete]
 );
+END
 
+IF OBJECT_ID('core.Payment', 'U') IS NULL
+BEGIN
 CREATE TABLE core.Payment (
     PaymentID       INT            NOT NULL CONSTRAINT PK_Payment PRIMARY KEY,
     PaymentMethodID INT            NULL REFERENCES ref.PaymentMethod(PaymentMethodID),
@@ -331,8 +437,12 @@ CREATE TABLE core.Payment (
     PaidDate        DATETIME2(0)   NULL,
     Notes           NVARCHAR(255)  NULL    -- legacy PaymentNotes
 );
-CREATE INDEX IX_Payment_Payee ON core.Payment(PayeeID);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Payment_Payee' AND object_id = OBJECT_ID('core.Payment'))
+    CREATE INDEX IX_Payment_Payee ON core.Payment(PayeeID);
 
+IF OBJECT_ID('core.WorkshopName', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopName (
     WorkshopNameID    INT           NOT NULL CONSTRAINT PK_WorkshopName PRIMARY KEY,
     AgesID            INT           NULL REFERENCES ref.Age(AgesID),
@@ -345,7 +455,10 @@ CREATE TABLE core.WorkshopName (
     TopicNums         NVARCHAR(15)  NULL,
     IsLiteracy        BIT NOT NULL CONSTRAINT DF_WorkshopName_Literacy DEFAULT 0  -- legacy Literacy
 );
+END
 
+IF OBJECT_ID('core.Workshop', 'U') IS NULL
+BEGIN
 CREATE TABLE core.Workshop (
     WorkshopID        INT            NOT NULL CONSTRAINT PK_Workshop PRIMARY KEY,
     LegacyWorkshopID  INT            NULL,   -- legacy WorkshopID_Old (1,438 populated, unique)
@@ -408,13 +521,19 @@ CREATE TABLE core.Workshop (
     CreatedAt         DATETIME2(0)   NULL,   -- legacy DateCreated
     UpdatedAt         DATETIME2(0)   NULL    -- legacy DateUpdated
 );
-CREATE INDEX IX_Workshop_SchoolYear_Start ON core.Workshop(SchoolYearID, StartDate);
-CREATE INDEX IX_Workshop_Code             ON core.Workshop(WorkshopCode);
-CREATE INDEX IX_Workshop_WorkshopName     ON core.Workshop(WorkshopNameID);
--- NOTE: CK_Workshop_Dates is intentionally NOT added yet — 9 legacy rows have
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Workshop_SchoolYear_Start' AND object_id = OBJECT_ID('core.Workshop'))
+    CREATE INDEX IX_Workshop_SchoolYear_Start ON core.Workshop(SchoolYearID, StartDate);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Workshop_Code' AND object_id = OBJECT_ID('core.Workshop'))
+    CREATE INDEX IX_Workshop_Code ON core.Workshop(WorkshopCode);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Workshop_WorkshopName' AND object_id = OBJECT_ID('core.Workshop'))
+    CREATE INDEX IX_Workshop_WorkshopName ON core.Workshop(WorkshopNameID);
+-- NOTE: CK_Workshop_Dates is intentionally NOT added yet -- 9 legacy rows have
 -- StartDate > EndDate. Add it after those rows are corrected during ETL.
 GO
 
+IF OBJECT_ID('core.WorkshopSession', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopSession (
     WorkshopSessionID INT           NOT NULL CONSTRAINT PK_WorkshopSession PRIMARY KEY,
     WorkshopID        INT           NULL REFERENCES core.Workshop(WorkshopID),
@@ -424,8 +543,12 @@ CREATE TABLE core.WorkshopSession (
     RegAttend         INT           NULL,
     ESchoolAttend     INT           NULL
 );
-CREATE INDEX IX_WorkshopSession_Workshop ON core.WorkshopSession(WorkshopID);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_WorkshopSession_Workshop' AND object_id = OBJECT_ID('core.WorkshopSession'))
+    CREATE INDEX IX_WorkshopSession_Workshop ON core.WorkshopSession(WorkshopID);
 
+IF OBJECT_ID('core.PresenterStaff', 'U') IS NULL
+BEGIN
 CREATE TABLE core.PresenterStaff (
     PresenterStaffID   INT           NOT NULL CONSTRAINT PK_PresenterStaff PRIMARY KEY,
     SalutationID       INT           NULL REFERENCES ref.Salutation(SalutationID),
@@ -446,14 +569,21 @@ CREATE TABLE core.PresenterStaff (
     DateOfEntry        DATETIME2(0)  NULL,   -- legacy StaffDateOfEntry
     UpdatedAt          DATETIME2(0)  NULL    -- legacy PresenterDateUpdated
 );
+END
 
+IF OBJECT_ID('core.WorkshopPresenter', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopPresenter (
     WorkshopPresenterID INT NOT NULL CONSTRAINT PK_WorkshopPresenter PRIMARY KEY,
     PresenterID         INT NULL REFERENCES core.PresenterStaff(PresenterStaffID),
     WorkshopID          INT NULL REFERENCES core.Workshop(WorkshopID)
 );
-CREATE INDEX IX_WorkshopPresenter_Workshop ON core.WorkshopPresenter(WorkshopID);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_WorkshopPresenter_Workshop' AND object_id = OBJECT_ID('core.WorkshopPresenter'))
+    CREATE INDEX IX_WorkshopPresenter_Workshop ON core.WorkshopPresenter(WorkshopID);
 
+IF OBJECT_ID('core.Registration', 'U') IS NULL
+BEGIN
 CREATE TABLE core.Registration (
     RegistrationID     INT            NOT NULL CONSTRAINT PK_Registration PRIMARY KEY,
     ParticipantID      INT            NULL,   -- FK added after orphan quarantine
@@ -479,19 +609,30 @@ CREATE TABLE core.Registration (
     Source             NVARCHAR(20)   NOT NULL CONSTRAINT DF_Registration_Source DEFAULT 'Manual',
     RegistrationLinkID INT            NULL
 );
-CREATE INDEX IX_Registration_Workshop    ON core.Registration(WorkshopID);
-CREATE INDEX IX_Registration_Participant ON core.Registration(ParticipantID);
-CREATE INDEX IX_Registration_Payment     ON core.Registration(PaymentID);
-CREATE INDEX IX_Registration_Source      ON core.Registration(Source);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Registration_Workshop' AND object_id = OBJECT_ID('core.Registration'))
+    CREATE INDEX IX_Registration_Workshop ON core.Registration(WorkshopID);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Registration_Participant' AND object_id = OBJECT_ID('core.Registration'))
+    CREATE INDEX IX_Registration_Participant ON core.Registration(ParticipantID);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Registration_Payment' AND object_id = OBJECT_ID('core.Registration'))
+    CREATE INDEX IX_Registration_Payment ON core.Registration(PaymentID);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Registration_Source' AND object_id = OBJECT_ID('core.Registration'))
+    CREATE INDEX IX_Registration_Source ON core.Registration(Source);
 
+IF OBJECT_ID('core.SessionParticipant', 'U') IS NULL
+BEGIN
 CREATE TABLE core.SessionParticipant (
     ParticipantID     INT NOT NULL,
     WorkshopSessionID INT NOT NULL,
     IsLate            BIT NOT NULL CONSTRAINT DF_SessionParticipant_Late DEFAULT 0, -- legacy Late
     CONSTRAINT PK_SessionParticipant PRIMARY KEY (ParticipantID, WorkshopSessionID)
 );
-CREATE INDEX IX_SessionParticipant_Session ON core.SessionParticipant(WorkshopSessionID);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_SessionParticipant_Session' AND object_id = OBJECT_ID('core.SessionParticipant'))
+    CREATE INDEX IX_SessionParticipant_Session ON core.SessionParticipant(WorkshopSessionID);
 
+IF OBJECT_ID('core.CreditSlip', 'U') IS NULL
+BEGIN
 CREATE TABLE core.CreditSlip (
     CreditSlipID          INT           NOT NULL CONSTRAINT PK_CreditSlip PRIMARY KEY,
     CreditSlipsCategoryID INT           NULL REFERENCES ref.CreditSlipCategory(CreditSlipsCategoryID),
@@ -505,7 +646,10 @@ CREATE TABLE core.CreditSlip (
     TrackingYear          INT           NULL,
     Email                 BIT NOT NULL CONSTRAINT DF_CreditSlip_Email DEFAULT 0
 );
+END
 
+IF OBJECT_ID('core.EvalQuestion', 'U') IS NULL
+BEGIN
 CREATE TABLE core.EvalQuestion (
     EvalQuestID       INT           NOT NULL CONSTRAINT PK_EvalQuestion PRIMARY KEY,
     EvaluationTypeID  INT           NULL REFERENCES ref.EvalType(EvalTypeID),
@@ -514,7 +658,10 @@ CREATE TABLE core.EvalQuestion (
     EvalQuestNum      INT           NULL,
     IsActive          BIT NOT NULL CONSTRAINT DF_EvalQuestion_Active DEFAULT 1
 );
+END
 
+IF OBJECT_ID('core.WorkshopEvalQuestion', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopEvalQuestion (
     -- Legacy PK is named WorkshopEvaluations; renamed per plan §B.1.
     -- It is genuinely unique (3,540/3,540), so it is a real surrogate key.
@@ -524,34 +671,50 @@ CREATE TABLE core.WorkshopEvalQuestion (
     WorkshopEvalRating   INT NULL,
     WorkshopEvalQty      INT NULL
 );
-CREATE INDEX IX_WorkshopEvalQuestion_Workshop ON core.WorkshopEvalQuestion(WorkshopID);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_WorkshopEvalQuestion_Workshop' AND object_id = OBJECT_ID('core.WorkshopEvalQuestion'))
+    CREATE INDEX IX_WorkshopEvalQuestion_Workshop ON core.WorkshopEvalQuestion(WorkshopID);
 
+IF OBJECT_ID('core.WorkshopComment', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopComment (
     WorkshopCommentID INT           NOT NULL CONSTRAINT PK_WorkshopComment PRIMARY KEY,
     WorkshopID        INT           NULL REFERENCES core.Workshop(WorkshopID),
     Comment           NVARCHAR(MAX) NULL
 );
+END
 
+IF OBJECT_ID('core.WorkshopPresenterComment', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopPresenterComment (
     WorkshopPresenterCommentID INT           NOT NULL CONSTRAINT PK_WorkshopPresenterComment PRIMARY KEY,
     WorkshopID                 INT           NULL REFERENCES core.Workshop(WorkshopID),
     PresenterComment           NVARCHAR(255) NULL
 );
+END
 
+IF OBJECT_ID('core.WorkshopDesiredTopic', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopDesiredTopic (
     WorkshopDesiredTopicsID INT           NOT NULL CONSTRAINT PK_WorkshopDesiredTopic PRIMARY KEY,
     WorkshopID              INT           NULL REFERENCES core.Workshop(WorkshopID),
     DesiredTopicCategoryID  INT           NULL REFERENCES ref.DesiredTopicCategory(DesiredTopicCategoryID),
     WorkshopDesiredTopics   NVARCHAR(255) NULL
 );
+END
 
+IF OBJECT_ID('core.WorkshopPreferredTime', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopPreferredTime (
     WorkshopPreferredTime    INT NOT NULL CONSTRAINT PK_WorkshopPreferredTime PRIMARY KEY, -- legacy WorkshopPreferredTime
     WorkshopID               INT NULL REFERENCES core.Workshop(WorkshopID),
     PreferredTimeID          INT NULL REFERENCES ref.PreferredTime(PreferredTimesID),
     WorkshopPreferredTimeQty INT NULL
 );
+END
 
+IF OBJECT_ID('core.WorkshopReferral', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopReferral (
     WorkshopReferralID INT           NOT NULL CONSTRAINT PK_WorkshopReferral PRIMARY KEY,
     WorkshopID         INT           NULL REFERENCES core.Workshop(WorkshopID),
@@ -559,25 +722,37 @@ CREATE TABLE core.WorkshopReferral (
     ReferralNum        INT           NULL,
     ReferralNotes      NVARCHAR(255) NULL
 );
+END
 
+IF OBJECT_ID('core.WorkshopLikedMost', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopLikedMost (
     LikedMostID INT           NOT NULL CONSTRAINT PK_WorkshopLikedMost PRIMARY KEY,
     WorkshopID  INT           NULL REFERENCES core.Workshop(WorkshopID),
     LikedMost   NVARCHAR(255) NULL
 );
+END
 
+IF OBJECT_ID('core.WorkshopLikedLeast', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopLikedLeast (
     LikedLeastID INT           NOT NULL CONSTRAINT PK_WorkshopLikedLeast PRIMARY KEY,
     WorkshopID   INT           NULL REFERENCES core.Workshop(WorkshopID),
     LikedLeast   NVARCHAR(255) NULL
 );
+END
 
+IF OBJECT_ID('core.WorkshopPractice', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopPractice (
     WorkshopsPracticesID INT           NOT NULL CONSTRAINT PK_WorkshopPractice PRIMARY KEY,
     WorkshopID           INT           NULL REFERENCES core.Workshop(WorkshopID),
     WorkshopPractice     NVARCHAR(255) NULL
 );
+END
 
+IF OBJECT_ID('core.WorkshopSummaryCount', 'U') IS NULL
+BEGIN
 CREATE TABLE core.WorkshopSummaryCount (
     WorkshopSummaryCountsID INT NOT NULL CONSTRAINT PK_WorkshopSummaryCount PRIMARY KEY,
     WorkshopID              INT NULL REFERENCES core.Workshop(WorkshopID),
@@ -585,14 +760,20 @@ CREATE TABLE core.WorkshopSummaryCount (
     [Count]                 INT NULL,
     CountSessionNum         SMALLINT NULL
 );
+END
 
+IF OBJECT_ID('core.OtherCount', 'U') IS NULL
+BEGIN
 CREATE TABLE core.OtherCount (
     OtherCountID INT NOT NULL CONSTRAINT PK_OtherCount PRIMARY KEY,
     OtherID      INT NULL REFERENCES ref.Other(OtherID),
     WorkshopID   INT NULL REFERENCES core.Workshop(WorkshopID),
     NumberParents INT NULL
 );
+END
 
+IF OBJECT_ID('core.CommunityEvent', 'U') IS NULL
+BEGIN
 CREATE TABLE core.CommunityEvent (
     EventID         INT           NOT NULL CONSTRAINT PK_CommunityEvent PRIMARY KEY,
     ComponentID     INT           NULL REFERENCES ref.Component(ComponentID),
@@ -608,13 +789,19 @@ CREATE TABLE core.CommunityEvent (
     NumTeachers     SMALLINT      NULL,
     EventDateEntered DATETIME2(0) NULL
 );
+END
 
+IF OBJECT_ID('core.CommunityEventStaff', 'U') IS NULL
+BEGIN
 CREATE TABLE core.CommunityEventStaff (
     EventID  INT NOT NULL REFERENCES core.CommunityEvent(EventID),
     StaffID  INT NOT NULL,
     CONSTRAINT PK_CommunityEventStaff PRIMARY KEY (EventID, StaffID)  -- 620/620 unique
 );
+END
 
+IF OBJECT_ID('core.TrainingRequest', 'U') IS NULL
+BEGIN
 CREATE TABLE core.TrainingRequest (
     TrainingRequestID INT            NOT NULL CONSTRAINT PK_TrainingRequest PRIMARY KEY,
     AgencyID          INT            NULL REFERENCES core.Agency(AgencyID),
@@ -632,14 +819,20 @@ CREATE TABLE core.TrainingRequest (
     AmtDue            DECIMAL(19,4)  NULL,
     IsActive          BIT NOT NULL CONSTRAINT DF_TrainingRequest_Active DEFAULT 1
 );
+END
 
+IF OBJECT_ID('core.TrainingRequestContact', 'U') IS NULL
+BEGIN
 CREATE TABLE core.TrainingRequestContact (
     TrainingRequestContactID INT           NOT NULL CONSTRAINT PK_TrainingRequestContact PRIMARY KEY,
     TrainingRequestID        INT           NULL REFERENCES core.TrainingRequest(TrainingRequestID),
     ContactDate              DATETIME2(0)  NULL,
     Note                     NVARCHAR(MAX) NULL
 );
+END
 
+IF OBJECT_ID('core.TrainingRequestQuote', 'U') IS NULL
+BEGIN
 CREATE TABLE core.TrainingRequestQuote (
     TrainingRequestQuoteID INT           NOT NULL CONSTRAINT PK_TrainingRequestQuote PRIMARY KEY,
     TrainingRequestID      INT           NULL REFERENCES core.TrainingRequest(TrainingRequestID),
@@ -654,24 +847,33 @@ CREATE TABLE core.TrainingRequestQuote (
     SpecialEquip           NVARCHAR(255) NULL,
     RequestAmt             DECIMAL(19,4) NULL
 );
+END
 
+IF OBJECT_ID('core.TrainingRequestScheduled', 'U') IS NULL
+BEGIN
 CREATE TABLE core.TrainingRequestScheduled (
     TrainingRequestID INT           NULL REFERENCES core.TrainingRequest(TrainingRequestID),
     WorkshopID        INT           NULL REFERENCES core.Workshop(WorkshopID),
     ScheduledOn       DATETIME2(0)  NULL
 );
+END
 -- 84 rows / 81 distinct (TrainingRequestID, WorkshopID): 3 duplicates exist.
 -- No PK is declared; the ETL must resolve them first.
 
+IF OBJECT_ID('core.TrainingRequestPayment', 'U') IS NULL
+BEGIN
 CREATE TABLE core.TrainingRequestPayment (
     TrainingRequestID INT NOT NULL REFERENCES core.TrainingRequest(TrainingRequestID),
     PaymentID         INT NOT NULL REFERENCES core.Payment(PaymentID),
     CONSTRAINT PK_TrainingRequestPayment PRIMARY KEY (TrainingRequestID, PaymentID)
 );
+END
 
 -- Certificate template settings, staff-editable per school year.
 -- See plan §8.6. Versioned by year so reissued certificates keep the
 -- logo and signatories they were issued with.
+IF OBJECT_ID('core.CertificateTemplate', 'U') IS NULL
+BEGIN
 CREATE TABLE core.CertificateTemplate (
     CertificateTemplateID  INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CertificateTemplate PRIMARY KEY,
     SchoolYearID           INT           NOT NULL REFERENCES ref.SchoolYear(SchoolYearID),
@@ -691,12 +893,16 @@ CREATE TABLE core.CertificateTemplate (
     CONSTRAINT UQ_CertificateTemplate UNIQUE (SchoolYearID, CertificateType),
     CONSTRAINT CK_CertificateTemplate_Type CHECK (CertificateType IN ('CEU','CHC'))
 );
+END
 GO
 
 -- =====================================================================
---  audit — change tracking and public-form submissions
+--  audit -- change tracking and public-form submissions
+
 -- =====================================================================
 
+IF OBJECT_ID('audit.ChangeLog', 'U') IS NULL
+BEGIN
 CREATE TABLE audit.ChangeLog (
     ChangeLogID  BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ChangeLog PRIMARY KEY,
     SchemaName   NVARCHAR(128) NOT NULL,
@@ -708,8 +914,12 @@ CREATE TABLE audit.ChangeLog (
     OldValues    NVARCHAR(MAX) NULL,
     NewValues    NVARCHAR(MAX) NULL
 );
-CREATE INDEX IX_ChangeLog_Table_Record ON audit.ChangeLog(TableName, RecordID);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ChangeLog_Table_Record' AND object_id = OBJECT_ID('audit.ChangeLog'))
+    CREATE INDEX IX_ChangeLog_Table_Record ON audit.ChangeLog(TableName, RecordID);
 
+IF OBJECT_ID('audit.PublicSubmission', 'U') IS NULL
+BEGIN
 CREATE TABLE audit.PublicSubmission (
     PublicSubmissionID BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_PublicSubmission PRIMARY KEY,
     RegistrationLinkID INT           NULL,
@@ -720,13 +930,18 @@ CREATE TABLE audit.PublicSubmission (
     Reason             NVARCHAR(200) NULL,
     PayloadHash        VARBINARY(32) NULL
 );
-CREATE INDEX IX_PublicSubmission_SubmittedAt ON audit.PublicSubmission(SubmittedAt);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PublicSubmission_SubmittedAt' AND object_id = OBJECT_ID('audit.PublicSubmission'))
+    CREATE INDEX IX_PublicSubmission_SubmittedAt ON audit.PublicSubmission(SubmittedAt);
 GO
 
 -- =====================================================================
---  staging — raw landing zone for the Access extract
+--  staging -- raw landing zone for the Access extract
 --  Everything lands as text/JSON so nothing is lost or coerced.
+
 -- =====================================================================
+IF OBJECT_ID('staging.RawRow', 'U') IS NULL
+BEGIN
 CREATE TABLE staging.RawRow (
     RawRowID      BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RawRow PRIMARY KEY,
     SourceTable   NVARCHAR(128) NOT NULL,
@@ -734,8 +949,12 @@ CREATE TABLE staging.RawRow (
     LoadedAt      DATETIME2(0)  NOT NULL CONSTRAINT DF_RawRow_LoadedAt DEFAULT SYSUTCDATETIME(),
     RawJson       NVARCHAR(MAX) NULL
 );
-CREATE INDEX IX_RawRow_Source ON staging.RawRow(SourceTable);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_RawRow_Source' AND object_id = OBJECT_ID('staging.RawRow'))
+    CREATE INDEX IX_RawRow_Source ON staging.RawRow(SourceTable);
 
+IF OBJECT_ID('staging.Quarantine', 'U') IS NULL
+BEGIN
 CREATE TABLE staging.Quarantine (
     QuarantineID  BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Quarantine PRIMARY KEY,
     SourceTable   NVARCHAR(128) NOT NULL,
@@ -744,38 +963,83 @@ CREATE TABLE staging.Quarantine (
     QuarantinedAt DATETIME2(0)  NOT NULL CONSTRAINT DF_Quarantine_QuarantinedAt DEFAULT SYSUTCDATETIME(),
     RawJson       NVARCHAR(MAX) NULL
 );
-CREATE INDEX IX_Quarantine_Table ON staging.Quarantine(SourceTable, Reason);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Quarantine_Table' AND object_id = OBJECT_ID('staging.Quarantine'))
+    CREATE INDEX IX_Quarantine_Table ON staging.Quarantine(SourceTable, Reason);
 GO
 
 -- =====================================================================
---  Views — replace stored, drifting totals (plan §5.4)
+--  Constraints that depend on loaded data
+--
+--  These live here rather than in the CREATE TABLE blocks so that
+--  db/schema.sql alone reproduces production exactly. transform.sql
+--  re-applies them after the data load, which is why both files list them.
+
 -- =====================================================================
-CREATE VIEW core.vw_WorkshopCounts
-AS
-SELECT w.WorkshopID,
-       COUNT(DISTINCT r.RegistrationID)                                   AS TotalRegistrations,
-       COUNT(DISTINCT r.ParticipantID)                                    AS TotalParticipants,
-       COUNT(DISTINCT CASE WHEN r.Attended = 1 THEN r.ParticipantID END)  AS TotalAttended
-FROM core.Workshop w
-LEFT JOIN core.Registration r
-       ON r.WorkshopID = w.WorkshopID
-      AND r.IsCancelled = 0
-GROUP BY w.WorkshopID;
+
+-- Deferred from the CREATE TABLE above: the legacy data has 4 orphan
+-- Registration rows. transform.sql quarantines them before this runs.
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = 'FK_Registration_Participant' AND type IN ('F','C'))
+BEGIN
+ALTER TABLE core.Registration
+    ADD CONSTRAINT FK_Registration_Participant FOREIGN KEY (ParticipantID) REFERENCES core.Participant(ParticipantID);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = 'FK_Registration_Workshop' AND type IN ('F','C'))
+BEGIN
+ALTER TABLE core.Registration
+    ADD CONSTRAINT FK_Registration_Workshop FOREIGN KEY (WorkshopID) REFERENCES core.Workshop(WorkshopID);
+END
+
+-- Access allowed inverted date ranges; 9 rows had them and were corrected
+-- during migration. Enforced from here on.
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = 'CK_Workshop_Dates' AND type IN ('F','C'))
+BEGIN
+ALTER TABLE core.Workshop
+    ADD CONSTRAINT CK_Workshop_Dates CHECK (EndDate IS NULL OR StartDate IS NULL OR EndDate >= StartDate);
+END
 GO
 
-CREATE VIEW core.vw_ParticipantCertificate
-AS
-SELECT p.ParticipantID,
-       p.FirstName,
-       p.LastName,
-       p.MiddleName,
-       p.Email,
-       a.AgencyName,
-       p.HasCeuCertificate,
-       p.HasChcCertificate
-FROM core.Participant p
-LEFT JOIN core.Agency a ON a.AgencyID = p.AgencyID;
+-- =====================================================================
+--  Views -- replace stored, drifting totals (plan §5.4)
+
+-- =====================================================================
+IF OBJECT_ID('core.vw_WorkshopCounts', 'V') IS NULL
+    EXEC('CREATE VIEW core.vw_WorkshopCounts AS
+    SELECT w.WorkshopID,
+           COUNT(DISTINCT r.RegistrationID)                                   AS TotalRegistrations,
+           COUNT(DISTINCT r.ParticipantID)                                    AS TotalParticipants,
+           COUNT(DISTINCT CASE WHEN r.Attended = 1 THEN r.ParticipantID END)  AS TotalAttended
+    FROM core.Workshop w
+    LEFT JOIN core.Registration r
+           ON r.WorkshopID = w.WorkshopID
+          AND r.IsCancelled = 0
+    GROUP BY w.WorkshopID');
 GO
 
-PRINT 'Schema created: 4 schemas, 29 ref tables, 32 core tables, 2 audit tables, 2 staging tables, 2 views.';
+IF OBJECT_ID('core.vw_ParticipantCertificate', 'V') IS NULL
+    EXEC('CREATE VIEW core.vw_ParticipantCertificate AS
+    SELECT p.ParticipantID,
+           p.FirstName,
+           p.LastName,
+           p.MiddleName,
+           p.Email,
+           a.AgencyName,
+           p.HasCeuCertificate,
+           p.HasChcCertificate
+    FROM core.Participant p
+    LEFT JOIN core.Agency a ON a.AgencyID = p.AgencyID');
+GO
+
+-- Review view for negative payments (refunds and corrections).
+IF OBJECT_ID('core.vw_NegativePayment', 'V') IS NULL
+    EXEC('CREATE VIEW core.vw_NegativePayment AS
+    SELECT r.RegistrationID, r.ParticipantID, p.LastName, p.FirstName,
+           r.WorkshopID, w.WorkshopCode, r.PaidAmount, r.RegistrationDate, r.IsCancelled
+    FROM core.Registration r
+    JOIN core.Participant p ON p.ParticipantID = r.ParticipantID
+    LEFT JOIN core.Workshop w ON w.WorkshopID = r.WorkshopID
+    WHERE r.PaidAmount < 0');
+GO
+
+PRINT 'Schema created: 4 schemas, 29 ref tables, 32 core tables, 2 audit tables, 2 staging tables, 3 views.';
 GO

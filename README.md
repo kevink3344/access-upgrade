@@ -106,9 +106,27 @@ pwsh db/etl/extract.ps1
 sqlcmd -S <server> -d <database> -U <user> -P <password> -i db/etl/transform.sql
 ```
 
+## Two databases
+
+There is a production database and a test database for staff training. **Schema changes
+must be applied to both** — see [docs/features/schema-environments.md](docs/features/schema-environments.md).
+
+```powershell
+# Rebuild the test database from production (production is read-only here)
+powershell -File db/etl/copy-database.ps1 -Force
+
+# Verify the two schemas have not drifted apart
+powershell -File db/etl/compare-schema.ps1
+```
+
+`db/schema.sql` is idempotent and non-destructive — it creates objects only when absent, so
+it is safe to run against a populated database. To change an existing object, add a guarded
+`ALTER` in `db/migrations/` and apply it to both databases.
+
 ## Documentation
 
 - [Migration plan](docs/plans/access-migration.md) — architecture, schema, phases, risks
+- [Schema environments](docs/features/schema-environments.md) — production vs test, and the dual-change rule
 - [Public registration](docs/features/public-registration.md) — the two-audience split
 - [Responsive & mobile](docs/features/responsive-mobile.md) — the phone-first requirement
 - [School Cash Online integration](docs/plans/schoolcash-integration.md) — payment data plan
