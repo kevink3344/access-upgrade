@@ -253,20 +253,22 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
               : 'All places for online registration have been taken. Please contact Project Enlightenment to be added to a waiting list.'}
           </p>
           {done && link.redirectToPayment && link.paymentUrl && (
-            <>
-              <p style={{ marginTop: 4 }}>
-                Payment is handled separately. Continue to the payment page to complete
+            <div className="payment-step">
+              <p className="payment-step-lead">
+                <strong>One more step: payment.</strong>
+              </p>
+              <p className="payment-step-body">
+                Your place is reserved, but it is not confirmed until payment is received.
+                Continue to the secure payment page to complete your registration.
+              </p>
+              <a className="btn btn-primary payment-step-btn" href={link.paymentUrl}>
+                Proceed to payment
+              </a>
+              <p className="payment-step-note">
+                You will leave this site. Keep this page open if you would like a record of
                 your registration.
               </p>
-              <a
-                className="btn btn-primary"
-                href={link.paymentUrl}
-                rel="noopener noreferrer"
-                style={{ display: 'inline-block', marginTop: 8, textDecoration: 'none' }}
-              >
-                Continue to payment
-              </a>
-            </>
+            </div>
           )}
         </div>
       </PublicChrome>
@@ -555,8 +557,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
           {link.redirectToPayment && link.paymentUrl && (
             <p className="payment-notice">
               <strong>
-                After submitting your registration, you will be redirected to the website
-                for payment.
+                After registering you will be able to continue to the website for payment.
               </strong>
             </p>
           )}
