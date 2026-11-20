@@ -6,6 +6,7 @@ import { useAuth } from '../auth';
 import { AppShell } from '../components/AppShell';
 import { IconWorkshops } from '../components/icons';
 import { WorkshopDrawer } from '../components/WorkshopDrawer';
+import { useRecentVisits, relativeTime } from '../hooks/useRecentVisits';
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -56,6 +57,7 @@ export function WorkshopsPage() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const recent = useRecentVisits('pe.recentWorkshops');
 
   const pageSize = 25;
 
@@ -124,6 +126,17 @@ export function WorkshopsPage() {
   function openEdit(id: number) {
     setEditingId(id);
     setDrawerOpen(true);
+
+      // Record the visit for the "recently visited" chips. The row may not be
+      // on the current page, so fall back to what the list already knows.
+      const row = rows.find((r) => r.workshopId === id);
+      if (row) {
+        recent.record({
+          id,
+          title: row.workshopName ?? 'Untitled workshop',
+          subtitle: row.workshopCode,
+        });
+      }
   }
 
   return (
@@ -188,6 +201,39 @@ export function WorkshopsPage() {
 
         <span className="toolbar-count">{total.toLocaleString()} workshops</span>
       </div>
+
+      {recent.items.length > 0 && (
+        <section className="recent-visits" aria-label="Recently visited workshops">
+          <div className="recent-visits-head">
+            <span className="recent-visits-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+              Recently visited
+            </span>
+            <button type="button" className="link-button recent-clear" onClick={recent.clear}>
+              Clear
+            </button>
+          </div>
+
+          <div className="recent-chips">
+            {recent.items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="recent-chip"
+                onClick={() => openEdit(item.id)}
+                title={`Open ${item.title}`}
+              >
+                <span className="recent-chip-title">{item.title}</span>
+                {item.subtitle && <span className="recent-chip-sub">{item.subtitle}</span>}
+                <span className="recent-chip-time">{relativeTime(item.visitedAt)}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {isError && (
         <div className="alert alert-error" role="alert">
