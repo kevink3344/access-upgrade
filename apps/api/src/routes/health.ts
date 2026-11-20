@@ -36,34 +36,6 @@ healthRouter.get('/', (_req, res) => {
   });
 });
 
-// TEMPORARY diagnostic - remove once the static-file layout is confirmed.
-healthRouter.get('/diag', async (_req, res) => {
-  const fs = await import('node:fs');
-  const path = await import('node:path');
-  const { fileURLToPath } = await import('node:url');
-
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const list = (p: string) => {
-    try {
-      return fs.readdirSync(p);
-    } catch (e) {
-      return `ERR: ${(e as Error).message}`;
-    }
-  };
-
-  res.json({
-    nodeEnv: process.env.NODE_ENV ?? '(unset)',
-    cwd: process.cwd(),
-    here,
-    hereParent: list(path.resolve(here, '..')),
-    hereGrandparent: list(path.resolve(here, '../..')),
-    candidates: [
-      path.resolve(here, '../web/dist'),
-      path.resolve(here, '../../web/dist'),
-    ].map((p) => ({ path: p, exists: fs.existsSync(p), index: fs.existsSync(path.join(p, 'index.html')) })),
-  });
-});
-
 /**
  * @openapi
  * /health/ready:

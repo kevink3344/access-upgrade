@@ -203,22 +203,22 @@ app.use('/api/lookups', lookupsRouter);
 app.use('/api/public', publicRouter);
 
 // ---- Static frontend -----------------------------------------------------
-// In production the built React app is served from the same origin as the
-// API, so staff use one URL and there is no CORS to configure. In
-// development Vite serves the app on its own port and this block is skipped.
+// The built React app is served from the same origin as the API, so staff
+// use one URL and there is no CORS to configure. Vite serves it in
+// development, so this only activates when a build is actually present -
+// which is a more reliable signal than NODE_ENV. An App Service can be left
+// on the default NODE_ENV and the frontend would otherwise silently not load.
 //
 // The package is ESM ("type": "module"), so __dirname does not exist.
-// The web build can sit in either of two places depending on how the app is
-// packaged, so both are probed rather than assuming one:
-//   deployed:   <root>/dist/server.js  +  <root>/web/dist
-//   in-repo:    apps/api/dist/server.js +  apps/web/dist
+// This file lives in dist/routes/, so the app root is two levels up.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webDist = [
+  path.resolve(here, '../../web/dist'), // dist/routes -> app root
   path.resolve(here, '../web/dist'),
-  path.resolve(here, '../../web/dist'),
+  path.resolve(here, '../../../web/dist'), // in-repo: apps/api/dist/routes
 ].find((p) => fs.existsSync(path.join(p, 'index.html')));
 
-if (isProd && webDist) {
+if (webDist) {
   app.use(
     express.static(webDist, {
       index: false,
@@ -242,8 +242,8 @@ if (isProd && webDist) {
   });
 
   console.log(`  Web      serving ${webDist}`);
-} else if (isProd) {
-  console.warn('  Web      no build found - serving the API only');
+} else {
+  console.log('  Web      no build found - serving the API only (expected in dev)');
 }
 
 // ---- Errors --------------------------------------------------------------
