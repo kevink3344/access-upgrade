@@ -444,6 +444,72 @@ export interface AgencyWrite {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Presenters and staff                                               */
+/* ------------------------------------------------------------------ */
+
+export interface PresenterRow {
+  PresenterStaffID: number;
+  FirstName: string | null;
+  LastName: string | null;
+  HomeEmail: string | null;
+  WorkPhone: string | null;
+  CellPhone: string | null;
+  IsRetired: boolean;
+  AgencyName: string | null;
+  WorkshopCount: number;
+}
+
+export interface PresenterListResponse {
+  data: PresenterRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+/** Full presenter record, as returned by GET /api/presenters/:id. */
+export interface PresenterDetail {
+  PresenterStaffID: number;
+  SalutationID: number | null;
+  AgencyID: number | null;
+  CityID: number | null;
+  StateID: number | null;
+  FirstName: string | null;
+  LastName: string | null;
+  MiddleName: string | null;
+  WorkPhone: string | null;
+  Extension: number | null;
+  HomePhone: string | null;
+  CellPhone: string | null;
+  HomeEmail: string | null;
+  Address: string | null;
+  Zip: string | null;
+  IsRetired: boolean;
+  AgencyName: string | null;
+  City: string | null;
+  State: string | null;
+  Salutation: string | null;
+}
+
+/** Writable fields — camelCase, matches the API contract. */
+export interface PresenterWrite {
+  salutationId?: number | null;
+  agencyId?: number | null;
+  cityId?: number | null;
+  stateId?: number | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  middleName?: string | null;
+  workPhone?: string | null;
+  extension?: number | null;
+  homePhone?: string | null;
+  cellPhone?: string | null;
+  homeEmail?: string | null;
+  address?: string | null;
+  zip?: string | null;
+  isRetired?: boolean;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Public registration                                                */
 /* ------------------------------------------------------------------ */
 

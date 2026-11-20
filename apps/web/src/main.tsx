@@ -17,6 +17,7 @@ import { WorkshopsPage } from './pages/WorkshopsPage';
 import { RegistrationsPage } from './pages/RegistrationsPage';
 import { ParticipantsPage } from './pages/ParticipantsPage';
 import { AgenciesPage } from './pages/AgenciesPage';
+import { PresentersPage } from './pages/PresentersPage';
 import { ApiDocsPage } from './pages/ApiDocsPage';
 import { PublicRegisterPage } from './pages/PublicRegisterPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
@@ -109,6 +110,8 @@ function Router() {
   if (path === '/participants') return <ParticipantsPage />;
 
   if (path === '/agencies') return <AgenciesPage />;
+
+  if (path === '/presenters') return <PresentersPage />;
 
   if (path === '/admin/users') {
     if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {

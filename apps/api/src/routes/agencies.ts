@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { query, sql, type SqlParam } from '../db.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
+import { queryBoolean } from '../query.js';
 
 export const agenciesRouter = Router();
 
@@ -9,7 +10,7 @@ const listQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(25),
   q: z.string().trim().optional(),
-  includeOutOfBusiness: z.coerce.boolean().default(false),
+  includeOutOfBusiness: queryBoolean(false),
 });
 
 /**

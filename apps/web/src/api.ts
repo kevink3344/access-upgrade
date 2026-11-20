@@ -262,6 +262,39 @@ export const api = {
       ),
   },
 
+  presenters: {
+    list: (params: { page?: number; pageSize?: number; q?: string; includeRetired?: boolean } = {}) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<import('@pe/shared').PresenterListResponse>(`/api/presenters${suffix}`);
+    },
+    get: (id: number) => request<import('@pe/shared').PresenterDetail>(`/api/presenters/${id}`),
+    workshops: (id: number) =>
+      request<{
+        data: {
+          WorkshopID: number;
+          WorkshopCode: string | null;
+          WorkshopName: string | null;
+          StartDate: string | null;
+          SchoolYear: string | null;
+        }[];
+      }>(`/api/presenters/${id}/workshops`),
+    create: (body: import('@pe/shared').PresenterWrite) =>
+      request<{ presenterStaffId: number }>('/api/presenters', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    update: (id: number, body: Partial<import('@pe/shared').PresenterWrite>) =>
+      request<{ presenterStaffId: number }>(`/api/presenters/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    remove: (id: number) => request<void>(`/api/presenters/${id}`, { method: 'DELETE' }),
+  },
+
   lookups: {
     list: () => request<{ data: string[] }>('/api/lookups'),
     get: (name: string) =>
