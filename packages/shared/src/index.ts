@@ -376,6 +376,7 @@ export interface AgencyRow {
   IsOutOfBusiness: boolean;
   IsWorkshopSite: boolean;
   City: string | null;
+  AgencyType: string | null;
   ParticipantCount: number;
 }
 
@@ -384,6 +385,62 @@ export interface AgencyListResponse {
   page: number;
   pageSize: number;
   total: number;
+}
+
+/** Full agency record, as returned by GET /api/agencies/:id. */
+export interface AgencyDetail {
+  AgencyID: number;
+  AgencyName: string | null;
+  AgencyShortName: string | null;
+  AgencyTypeID: number | null;
+  FacilityTypeID: number | null;
+  CountyID: number | null;
+  CityID: number | null;
+  StateID: number | null;
+  StreetTypeID: number | null;
+  AgencyAddress1: string | null;
+  AgencyAddress2: string | null;
+  AgencyZip: string | null;
+  AgencyPhone: string | null;
+  AgencyFax: string | null;
+  AgencyEmail: string | null;
+  AgencyWebsite: string | null;
+  DirectorFirstName: string | null;
+  DirectorLastName: string | null;
+  AltContactFirstName: string | null;
+  AltContactLastName: string | null;
+  IsOutOfBusiness: boolean;
+  IsWorkshopSite: boolean;
+  Notes: string | null;
+  City: string | null;
+  State: string | null;
+  County: string | null;
+}
+
+/** Writable fields — camelCase, matches the API contract. */
+export interface AgencyWrite {
+  agencyName?: string | null;
+  agencyShortName?: string | null;
+  agencyTypeId?: number | null;
+  facilityTypeId?: number | null;
+  countyId?: number | null;
+  cityId?: number | null;
+  stateId?: number | null;
+  streetTypeId?: number | null;
+  agencyAddress1?: string | null;
+  agencyAddress2?: string | null;
+  agencyZip?: string | null;
+  agencyPhone?: string | null;
+  agencyFax?: string | null;
+  agencyEmail?: string | null;
+  agencyWebsite?: string | null;
+  directorFirstName?: string | null;
+  directorLastName?: string | null;
+  altContactFirstName?: string | null;
+  altContactLastName?: string | null;
+  isOutOfBusiness?: boolean;
+  isWorkshopSite?: boolean;
+  notes?: string | null;
 }
 
 /* ------------------------------------------------------------------ */

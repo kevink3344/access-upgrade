@@ -210,7 +210,18 @@ export const api = {
       const suffix = qs.toString() ? `?${qs}` : '';
       return request<import('@pe/shared').AgencyListResponse>(`/api/agencies${suffix}`);
     },
-    get: (id: number) => request<Record<string, unknown>>(`/api/agencies/${id}`),
+    get: (id: number) => request<import('@pe/shared').AgencyDetail>(`/api/agencies/${id}`),
+    create: (body: import('@pe/shared').AgencyWrite) =>
+      request<{ agencyId: number }>('/api/agencies', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    update: (id: number, body: Partial<import('@pe/shared').AgencyWrite>) =>
+      request<{ agencyId: number }>(`/api/agencies/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    remove: (id: number) => request<void>(`/api/agencies/${id}`, { method: 'DELETE' }),
   },
 
   registrationLink: {
