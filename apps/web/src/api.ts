@@ -295,6 +295,39 @@ export const api = {
     remove: (id: number) => request<void>(`/api/presenters/${id}`, { method: 'DELETE' }),
   },
 
+  workshopNames: {
+    list: (params: { page?: number; pageSize?: number; q?: string; includeUnused?: boolean } = {}) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<import('@pe/shared').WorkshopNameListResponse>(`/api/workshop-names${suffix}`);
+    },
+    get: (id: number) =>
+      request<import('@pe/shared').WorkshopNameDetail>(`/api/workshop-names/${id}`),
+    workshops: (id: number) =>
+      request<{
+        data: {
+          WorkshopID: number;
+          WorkshopCode: string | null;
+          StartDate: string | null;
+          SchoolYear: string | null;
+        }[];
+      }>(`/api/workshop-names/${id}/workshops`),
+    create: (body: import('@pe/shared').WorkshopNameWrite) =>
+      request<{ workshopNameId: number }>('/api/workshop-names', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    update: (id: number, body: Partial<import('@pe/shared').WorkshopNameWrite>) =>
+      request<{ workshopNameId: number }>(`/api/workshop-names/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    remove: (id: number) => request<void>(`/api/workshop-names/${id}`, { method: 'DELETE' }),
+  },
+
   lookups: {
     list: () => request<{ data: string[] }>('/api/lookups'),
     get: (name: string) =>

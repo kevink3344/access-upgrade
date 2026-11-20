@@ -510,6 +510,57 @@ export interface PresenterWrite {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Workshop catalog                                                   */
+/* ------------------------------------------------------------------ */
+
+export interface WorkshopNameRow {
+  WorkshopNameID: number;
+  WorkshopName: string | null;
+  ShortName: string | null;
+  ECourseNum: number | null;
+  IsLiteracy: boolean;
+  Ages: string | null;
+  /** 1 when a description exists, 0 when it does not. */
+  HasDescription: number;
+  WorkshopCount: number;
+}
+
+export interface WorkshopNameListResponse {
+  data: WorkshopNameRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+/** Full catalog entry, as returned by GET /api/workshop-names/:id. */
+export interface WorkshopNameDetail {
+  WorkshopNameID: number;
+  AgesID: number | null;
+  WorkshopName: string | null;
+  ShortName: string | null;
+  ECourseNum: number | null;
+  WLCourse: number | null;
+  Prerequisites: string | null;
+  Description: string | null;
+  TopicNums: string | null;
+  IsLiteracy: boolean;
+  Ages: string | null;
+}
+
+/** Writable fields — camelCase, matches the API contract. */
+export interface WorkshopNameWrite {
+  agesId?: number | null;
+  workshopName?: string | null;
+  shortName?: string | null;
+  eCourseNum?: number | null;
+  wlCourse?: number | null;
+  prerequisites?: string | null;
+  description?: string | null;
+  topicNums?: string | null;
+  isLiteracy?: boolean;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Public registration                                                */
 /* ------------------------------------------------------------------ */
 

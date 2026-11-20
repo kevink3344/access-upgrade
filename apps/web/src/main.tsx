@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -18,6 +18,7 @@ import { RegistrationsPage } from './pages/RegistrationsPage';
 import { ParticipantsPage } from './pages/ParticipantsPage';
 import { AgenciesPage } from './pages/AgenciesPage';
 import { PresentersPage } from './pages/PresentersPage';
+import { WorkshopNamesPage } from './pages/WorkshopNamesPage';
 import { ApiDocsPage } from './pages/ApiDocsPage';
 import { PublicRegisterPage } from './pages/PublicRegisterPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
@@ -112,6 +113,8 @@ function Router() {
   if (path === '/agencies') return <AgenciesPage />;
 
   if (path === '/presenters') return <PresentersPage />;
+
+  if (path === '/workshop-names') return <WorkshopNamesPage />;
 
   if (path === '/admin/users') {
     if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
