@@ -67,6 +67,9 @@ export const api = {
 
   dashboard: () => request<import('@pe/shared').DashboardSummary>('/api/dashboard'),
 
+  /** Non-sensitive UI config, e.g. the deployment badge. */
+  config: () => request<{ mode: string | null }>('/health/config'),
+
   users: {
     list: (params: { q?: string; role?: string; isActive?: boolean } = {}) => {
       const qs = new URLSearchParams();

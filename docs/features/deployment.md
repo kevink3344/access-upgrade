@@ -61,6 +61,21 @@ They are **not** in the repository — `apps/api/.env` is local only.
 | `WEB_ORIGIN` | `https://projelmt-dev.azurewebsites.net` |
 | `SUPER_ADMIN_EMAIL` | `admin@oracleinsights.local` |
 | `SUPER_ADMIN_PASSWORD` | *(initial admin password)* |
+| `MODE` | `TEST SITE` for test, **blank** for production |
+
+### The `MODE` badge
+
+`MODE` is a deployment label shown as a badge next to the WCPSS badge on the
+sign-in page. It tells staff at a glance which environment they are signing into.
+
+| Value | Result |
+| --- | --- |
+| `MODE=TEST SITE` | Gold **TEST SITE** badge appears |
+| `MODE=` (blank or unset) | No badge |
+
+Production needs no configuration — leave it blank. The value is served by
+`GET /health/config` (unauthenticated, non-sensitive) because the React bundle
+is static and cannot read server environment variables at runtime.
 
 Generate a JWT secret:
 

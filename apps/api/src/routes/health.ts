@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getPool } from '../db.js';
+import { env } from '../env.js';
 
 export const healthRouter = Router();
 
@@ -34,6 +35,38 @@ healthRouter.get('/', (_req, res) => {
     version: process.env.npm_package_version ?? '0.1.0',
     timestamp: new Date().toISOString(),
   });
+});
+
+/**
+ * @openapi
+ * /health/config:
+ *   get:
+ *     tags: [Health]
+ *     summary: Public UI configuration
+ *     description: >
+ *       Non-sensitive settings the browser needs before anyone logs in, such
+ *       as the deployment badge. Deliberately unauthenticated — it must not
+ *       ever expose secrets.
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Public configuration
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 mode:
+ *                   type: string
+ *                   nullable: true
+ *                   description: >
+ *                     Deployment label such as "TEST SITE". Null when the
+ *                     MODE environment variable is blank or unset.
+ *                   example: TEST SITE
+ */
+healthRouter.get('/config', (_req, res) => {
+  const mode = env.MODE && env.MODE.length > 0 ? env.MODE : null;
+  res.json({ mode });
 });
 
 /**

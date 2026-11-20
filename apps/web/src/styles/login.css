@@ -39,6 +39,14 @@
   max-width: 420px;
 }
 
+.login-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
 .login-kicker {
   display: inline-block;
   font-size: 11.5px;
@@ -48,7 +56,22 @@
   background: rgba(255, 255, 255, .14);
   padding: 5px 12px;
   border-radius: 999px;
-  margin-bottom: 20px;
+}
+
+/* Deployment badge - only rendered when MODE is set (e.g. "TEST SITE").
+   Deliberately high-contrast so nobody mistakes a test environment for
+   production at a glance. */
+.login-mode-badge {
+  display: inline-block;
+  font-size: 11.5px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  font-weight: 800;
+  background: var(--cc-fourth-color);
+  color: #3d3200;
+  padding: 5px 12px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, .18);
 }
 
 .login-brand h1 {

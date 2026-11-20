@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { z } from 'zod';
 import { useAuth } from '../auth';
-import { HttpError } from '../api';
+import { api, HttpError } from '../api';
 import { IconAlert } from '../components/icons';
 
 const schema = z.object({
@@ -19,6 +19,21 @@ export function LoginPage() {
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [mode, setMode] = useState<string | null>(null);
+
+  // Deployment badge ("TEST SITE"). Fetched before login because staff need
+  // to know which environment they are about to sign into. A failure here
+  // must never block signing in, so errors are swallowed.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .config()
+      .then((c) => !cancelled && setMode(c.mode))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -62,7 +77,10 @@ export function LoginPage() {
     <div className="login-page">
       <section className="login-brand" aria-hidden="true">
         <div className="login-brand-inner">
-          <span className="login-kicker">Wake County Public School System</span>
+          <div className="login-badges">
+            <span className="login-kicker">Wake County Public School System</span>
+            {mode && <span className="login-mode-badge">{mode}</span>}
+          </div>
           <h1>Project Enlightenment Training Database</h1>
           <p>
             Workshop scheduling, participant records, registrations, payments and

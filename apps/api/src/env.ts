@@ -9,6 +9,12 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3001),
 
+  /**
+   * Deployment label shown as a badge in the UI, e.g. "TEST SITE".
+   * Blank or absent means no badge, so production needs no configuration.
+   */
+  MODE: z.string().trim().optional(),
+
   AZURE_SQL_SERVER: z.string().min(1),
   AZURE_SQL_DATABASE: z.string().min(1),
   AZURE_SQL_USER: z.string().min(1),
