@@ -1,0 +1,138 @@
+import { useEffect, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+import '@pe/shared/tokens.css';
+import './styles/layout.css';
+import './styles/login.css';
+import './styles/dashboard.css';
+import './styles/ui.css';
+import './styles/public.css';
+
+import { AuthProvider, useAuth } from './auth';
+import { LoginPage } from './pages/LoginPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { UsersPage } from './pages/UsersPage';
+import { WorkshopsPage } from './pages/WorkshopsPage';
+import { RegistrationsPage } from './pages/RegistrationsPage';
+import { ParticipantsPage } from './pages/ParticipantsPage';
+import { ApiDocsPage } from './pages/ApiDocsPage';
+import { PublicRegisterPage } from './pages/PublicRegisterPage';
+import { PlaceholderPage } from './pages/PlaceholderPage';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, refetchOnWindowFocus: false },
+  },
+});
+
+/** Minimal router — swap for TanStack Router once there are more screens. */
+function usePathname(): string {
+  const [path, setPath] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', onPop);
+
+    // Intercept same-origin link clicks for client-side navigation.
+    const onClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest('a');
+      if (!anchor) return;
+      const href = anchor.getAttribute('href');
+      if (!href || !href.startsWith('/') || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      e.preventDefault();
+      // Keep the query string — pages read it for deep links (?edit=, ?status=).
+      window.history.pushState({}, '', href);
+      setPath(window.location.pathname);
+      // Let the target page see the new query string.
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    };
+    document.addEventListener('click', onClick);
+
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      document.removeEventListener('click', onClick);
+    };
+  }, []);
+
+  return path;
+}
+
+const ROUTES: Record<string, string> = {
+  '/workshops': 'Workshops',
+  '/workshops/approval': 'Workshop approval',
+  '/workshop-names': 'Workshop catalog',
+  '/participants': 'Participants',
+  '/agencies': 'Agencies',
+  '/presenters': 'Presenters & staff',
+  '/registrations': 'Registrations',
+  '/payments': 'Payments & receipts',
+  '/credit-slips': 'Credit slips',
+  '/training-requests': 'Training requests',
+  '/community-events': 'Community events',
+  '/eschools': 'eSchools reconciliation',
+  '/folders': 'Folder builder',
+  '/reports': 'Reports hub',
+  '/mailing-lists': 'Mailing lists',
+  '/admin': 'Admin',
+  '/admin/users': 'Users',
+  '/admin/utilities': 'Utilities',
+  '/api-docs': 'API documentation',
+};
+
+function Router() {
+  const { user, loading } = useAuth();
+  const path = usePathname();
+
+  // Public surface — checked before auth so it never renders staff chrome
+  // and never requires a session.
+  const publicMatch = /^\/register\/([A-Za-z0-9_-]+)\/?$/.exec(path);
+  if (publicMatch) {
+    return <PublicRegisterPage slug={publicMatch[1]!} />;
+  }
+
+  if (loading) {
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
+        <p style={{ color: 'var(--text-faint)', fontSize: 14 }}>Loading…</p>
+      </div>
+    );
+  }
+
+  if (!user) return <LoginPage />;
+
+  if (path === '/') return <DashboardPage />;
+
+  if (path === '/workshops') return <WorkshopsPage />;
+
+  if (path === '/registrations') return <RegistrationsPage />;
+
+  if (path === '/participants') return <ParticipantsPage />;
+
+  if (path === '/admin/users') {
+    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
+      return <PlaceholderPage path={path} title="Not available" />;
+    }
+    return <UsersPage />;
+  }
+
+  if (path === '/api-docs') {
+    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
+      return <PlaceholderPage path={path} title="Not available" />;
+    }
+    return <ApiDocsPage />;
+  }
+
+  const title = ROUTES[path];
+  if (title) return <PlaceholderPage path={path} title={title} />;
+
+  return <PlaceholderPage path={path} title="Not found" />;
+}
+
+createRoot(document.getElementById('root')!).render(
+  <QueryClientProvider client={queryClient}>
+    <AuthProvider>
+      <Router />
+    </AuthProvider>
+  </QueryClientProvider>,
+);

@@ -1,0 +1,781 @@
+-- =====================================================================
+--  Project Enlightenment Training Database
+--  Target schema for Azure SQL (project-enlightenment)
+--
+--  Source of truth: database/TrainingDatabase.accdb, read 2026-11-19.
+--  Column names, types, sizes and nullability were extracted from the
+--  live Access database, NOT copied from the migration plan's abridged
+--  DDL — the plan's assumed names differ from reality in several places
+--  (see docs/completions/2026-11-19-schema.md).
+--
+--  Idempotent: safe to re-run. Every object is dropped and recreated.
+--  Data load is a separate step (db/etl) and is NOT performed here.
+-- =====================================================================
+
+SET NOCOUNT ON;
+GO
+
+-- =====================================================================
+--  Schemas
+-- =====================================================================
+IF SCHEMA_ID('ref')     IS NULL EXEC('CREATE SCHEMA ref');
+GO
+IF SCHEMA_ID('core')    IS NULL EXEC('CREATE SCHEMA core');
+GO
+IF SCHEMA_ID('audit')   IS NULL EXEC('CREATE SCHEMA audit');
+GO
+IF SCHEMA_ID('staging') IS NULL EXEC('CREATE SCHEMA staging');
+GO
+
+-- =====================================================================
+--  Drop existing objects (children first)
+-- =====================================================================
+DECLARE @sql NVARCHAR(MAX) = N'';
+
+SELECT @sql += N'ALTER TABLE ' + QUOTENAME(SCHEMA_NAME(t.schema_id)) + N'.' +
+               QUOTENAME(t.name) + N' DROP CONSTRAINT ' + QUOTENAME(fk.name) + N';' + CHAR(10)
+FROM sys.foreign_keys fk
+JOIN sys.tables t ON t.object_id = fk.parent_object_id;
+
+SELECT @sql += N'DROP VIEW ' + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTENAME(name) + N';' + CHAR(10)
+FROM sys.views WHERE schema_id IN (SCHEMA_ID('ref'), SCHEMA_ID('core'), SCHEMA_ID('audit'), SCHEMA_ID('staging'));
+
+SELECT @sql += N'DROP TABLE ' + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTENAME(name) + N';' + CHAR(10)
+FROM sys.tables WHERE schema_id IN (SCHEMA_ID('ref'), SCHEMA_ID('core'), SCHEMA_ID('audit'), SCHEMA_ID('staging'));
+
+IF @sql <> N'' EXEC sp_executesql @sql;
+GO
+
+-- =====================================================================
+--  ref — lookup tables (29). One row per legacy lst* table.
+-- =====================================================================
+CREATE TABLE ref.AgencyType (
+    AgencyTypeID  INT           NOT NULL CONSTRAINT PK_AgencyType PRIMARY KEY,
+    TypeName      NVARCHAR(50)  NULL
+);
+
+CREATE TABLE ref.Age (
+    AgesID        INT            NOT NULL CONSTRAINT PK_Age PRIMARY KEY,
+    Ages          NVARCHAR(100)  NULL,
+    SortOrder     INT            NULL      -- legacy column named [Order]
+);
+
+CREATE TABLE ref.BackupTime (
+    BackupTimeID  INT           NOT NULL CONSTRAINT PK_BackupTime PRIMARY KEY,
+    BackupTime    NVARCHAR(15)  NULL
+);
+
+CREATE TABLE ref.Category (
+    CategoryID    INT           NOT NULL CONSTRAINT PK_Category PRIMARY KEY,
+    CategoryCode  NVARCHAR(50)  NULL,
+    CategoryType  NVARCHAR(10)  NULL,     -- legacy [Type]: 'Classroom' | 'Workshops' | 'Grant'
+    IsInUse       BIT           NOT NULL CONSTRAINT DF_Category_InUse DEFAULT 1
+);
+
+CREATE TABLE ref.City (
+    CityID        INT           NOT NULL CONSTRAINT PK_City PRIMARY KEY,
+    RegionID      INT           NULL,
+    City          NVARCHAR(30)  NULL
+);
+
+CREATE TABLE ref.Component (
+    ComponentID   INT           NOT NULL CONSTRAINT PK_Component PRIMARY KEY,
+    PrEComponent  NVARCHAR(30)  NULL,
+    PrECompAbbrev NVARCHAR(10)  NULL
+);
+
+CREATE TABLE ref.ContactType (
+    ContactTypeID INT           NOT NULL CONSTRAINT PK_ContactType PRIMARY KEY,
+    ContactType   NVARCHAR(50)  NULL
+);
+
+CREATE TABLE ref.County (
+    CountyID      INT           NOT NULL CONSTRAINT PK_County PRIMARY KEY,
+    County        NVARCHAR(20)  NULL
+);
+
+CREATE TABLE ref.CreditSlipCategory (
+    CreditSlipsCategoryID INT          NOT NULL CONSTRAINT PK_CreditSlipCategory PRIMARY KEY,
+    CreditSlipsCategory   NVARCHAR(30) NULL
+);
+
+CREATE TABLE ref.CreditType (
+    CreditTypeID      INT           NOT NULL CONSTRAINT PK_CreditType PRIMARY KEY,
+    CreditCode        NVARCHAR(50)  NULL,
+    CreditDescription NVARCHAR(50)  NULL
+);
+
+CREATE TABLE ref.DesiredTopicCategory (
+    DesiredTopicCategoryID INT           NOT NULL CONSTRAINT PK_DesiredTopicCategory PRIMARY KEY,
+    DesiredTopicCategory   NVARCHAR(255) NULL
+);
+
+CREATE TABLE ref.Equipment (
+    EquipmentID   INT           NOT NULL CONSTRAINT PK_Equipment PRIMARY KEY,
+    Equipment     NVARCHAR(255) NULL
+);
+
+CREATE TABLE ref.EvalQuestionType (
+    EvalQuestTypeID INT          NOT NULL CONSTRAINT PK_EvalQuestionType PRIMARY KEY,
+    EvalQuestType   NVARCHAR(15) NULL
+);
+
+CREATE TABLE ref.EvalType (
+    -- Legacy PK is named WorkshopTypeID; renamed per plan §B.1
+    EvalTypeID    INT           NOT NULL CONSTRAINT PK_EvalType PRIMARY KEY,
+    WorkshopType  NVARCHAR(255) NULL
+);
+
+CREATE TABLE ref.EventType (
+    EventTypeID   INT           NOT NULL CONSTRAINT PK_EventType PRIMARY KEY,
+    EventType     NVARCHAR(100) NULL
+);
+
+CREATE TABLE ref.FacilityType (
+    FacilityTypeID INT           NOT NULL CONSTRAINT PK_FacilityType PRIMARY KEY,
+    FacilityType   NVARCHAR(255) NULL
+);
+
+CREATE TABLE ref.MailingList (
+    MailingListID INT           NOT NULL CONSTRAINT PK_MailingList PRIMARY KEY,
+    MailingList   NVARCHAR(25)  NULL
+);
+
+-- Legacy table has no PK and a space in the column name; 1,091 rows but
+-- only 106 distinct ZIPs, so the ZIP is NOT unique. A surrogate key is
+-- added and the legacy data is preserved verbatim.
+CREATE TABLE ref.ZipCode (
+    ZipCodeRowID  INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ZipCode PRIMARY KEY,
+    ZipCode       NVARCHAR(10)  NULL,     -- legacy column named [Zip Code]
+    RegionID      INT           NULL,
+    City          NVARCHAR(255) NULL,
+    County        NVARCHAR(255) NULL
+);
+CREATE INDEX IX_ZipCode_ZipCode ON ref.ZipCode(ZipCode);
+
+CREATE TABLE ref.Other (
+    OtherID       INT           NOT NULL CONSTRAINT PK_Other PRIMARY KEY,
+    OtherNickname NVARCHAR(50)  NULL,
+    Description   NVARCHAR(50)  NULL
+);
+
+CREATE TABLE ref.PaymentMethod (
+    PaymentMethodID INT          NOT NULL CONSTRAINT PK_PaymentMethod PRIMARY KEY,
+    PaymentMethod   NVARCHAR(50) NULL
+);
+
+CREATE TABLE ref.PreferredTime (
+    PreferredTimesID    INT           NOT NULL CONSTRAINT PK_PreferredTime PRIMARY KEY,
+    PreferredTimes      NVARCHAR(25)  NULL,
+    PreferredTimesNotes NVARCHAR(255) NULL
+);
+
+CREATE TABLE ref.ReferralType (
+    ReferralTypeID INT          NOT NULL CONSTRAINT PK_ReferralType PRIMARY KEY,
+    ReferralType   NVARCHAR(35) NULL,
+    ReferralAbrev  NVARCHAR(10) NULL
+);
+
+CREATE TABLE ref.Region (
+    RegionID      INT           NOT NULL CONSTRAINT PK_Region PRIMARY KEY,
+    Region        NVARCHAR(50)  NULL
+);
+
+CREATE TABLE ref.Salutation (
+    SalutationID  INT           NOT NULL CONSTRAINT PK_Salutation PRIMARY KEY,
+    Salutation    NVARCHAR(50)  NULL
+);
+
+CREATE TABLE ref.SchoolYear (
+    SchoolYearID  INT           NOT NULL CONSTRAINT PK_SchoolYear PRIMARY KEY,  -- legacy SYID
+    SchoolYear    NVARCHAR(50)  NULL,
+    IsPastYear    BIT           NOT NULL CONSTRAINT DF_SchoolYear_IsPastYear DEFAULT 0,
+    BeginDate     DATETIME2(0)  NULL,
+    EndDate       DATETIME2(0)  NULL
+);
+
+CREATE TABLE ref.State (
+    StateID       INT           NOT NULL CONSTRAINT PK_State PRIMARY KEY,
+    State         NVARCHAR(2)   NULL
+);
+
+CREATE TABLE ref.StreetType (
+    StreetTypeID     INT          NOT NULL CONSTRAINT PK_StreetType PRIMARY KEY,
+    StreetTypeName   NVARCHAR(15) NULL,
+    StreetTypeAbbrev NVARCHAR(8)  NULL
+);
+
+CREATE TABLE ref.SummaryCountType (
+    -- Legacy PK is named CountyTypeID; renamed per plan §B.1
+    SummaryCountTypeID INT          NOT NULL CONSTRAINT PK_SummaryCountType PRIMARY KEY,
+    CountType          NVARCHAR(25) NULL
+);
+GO
+
+-- =====================================================================
+--  core — operational tables (32)
+-- =====================================================================
+
+CREATE TABLE core.Agency (
+    AgencyID           INT            NOT NULL CONSTRAINT PK_Agency PRIMARY KEY,
+    WakeSitesFacilityID INT           NULL,
+    CountyID           INT            NULL REFERENCES ref.County(CountyID),
+    StreetTypeID       INT            NULL REFERENCES ref.StreetType(StreetTypeID),
+    CityID             INT            NULL REFERENCES ref.City(CityID),
+    StateID            INT            NULL REFERENCES ref.State(StateID),
+    AgencyTypeID       INT            NULL REFERENCES ref.AgencyType(AgencyTypeID),
+    FacilityTypeID     INT            NULL REFERENCES ref.FacilityType(FacilityTypeID),
+    AgencyName         NVARCHAR(250)  NULL,
+    AgencyShortName    NVARCHAR(255)  NULL,
+    AgencyAddress1     NVARCHAR(255)  NULL,
+    AgencyAddress2     NVARCHAR(50)   NULL,
+    AgencyZip          NVARCHAR(10)   NULL,
+    AgencyPhone        NVARCHAR(16)   NULL,
+    AgencyFax          NVARCHAR(16)   NULL,
+    AgencyEmail        NVARCHAR(50)   NULL,
+    AgencyWebsite      NVARCHAR(100)  NULL,
+    DirectorFirstName  NVARCHAR(50)   NULL,   -- legacy DirectorFName
+    DirectorLastName   NVARCHAR(50)   NULL,   -- legacy DirectorLName
+    AltContactFirstName NVARCHAR(30)  NULL,   -- legacy AltContactF
+    AltContactLastName NVARCHAR(30)   NULL,   -- legacy AltContactL
+    IsOutOfBusiness    BIT            NOT NULL CONSTRAINT DF_Agency_OutOfBusiness DEFAULT 0,
+    SchoolCode         NVARCHAR(255)  NULL,
+    Calendar           INT            NULL,
+    IsWorkshopSite     BIT            NOT NULL CONSTRAINT DF_Agency_WorkshopSite DEFAULT 0,
+    Notes              NVARCHAR(MAX)  NULL,   -- legacy AgencyNotes
+    CreatedAt          DATETIME2(0)   NULL,
+    UpdatedAt          DATETIME2(0)   NULL
+);
+CREATE INDEX IX_Agency_Name ON core.Agency(AgencyName);
+
+CREATE TABLE core.AgencyMailAddress (
+    AgencyID             INT           NOT NULL CONSTRAINT PK_AgencyMailAddress PRIMARY KEY,
+    StreetTypeID         INT           NULL REFERENCES ref.StreetType(StreetTypeID),
+    CityID               INT           NULL REFERENCES ref.City(CityID),
+    StateID              INT           NULL REFERENCES ref.State(StateID),
+    MailingAddressLine1  NVARCHAR(50)  NULL,
+    MailingAddressLine2  NVARCHAR(20)  NULL,
+    MailingZipCode       NVARCHAR(255) NULL
+);
+ALTER TABLE core.AgencyMailAddress
+    ADD CONSTRAINT FK_AgencyMailAddress_Agency FOREIGN KEY (AgencyID) REFERENCES core.Agency(AgencyID);
+
+CREATE TABLE core.BoardMember (
+    BoardID       INT           NOT NULL CONSTRAINT PK_BoardMember PRIMARY KEY,
+    AgencyID      INT           NULL,
+    CityID        INT           NULL,
+    StateID       INT           NULL,
+    BoardFirstName NVARCHAR(15) NULL,   -- legacy BoardFName
+    BoardLastName  NVARCHAR(20) NULL,   -- legacy BoardLName
+    BoardTitle     NVARCHAR(25) NULL,
+    BoardAddress1  NVARCHAR(100) NULL,
+    BoardAddress2  NVARCHAR(35) NULL,
+    BoardZip       NVARCHAR(10) NULL,
+    BoardPhone     NVARCHAR(14) NULL,
+    BoardEmail     NVARCHAR(255) NULL
+);
+ALTER TABLE core.BoardMember
+    ADD CONSTRAINT FK_BoardMember_Agency FOREIGN KEY (AgencyID) REFERENCES core.Agency(AgencyID);
+
+CREATE TABLE core.Participant (
+    ParticipantID      INT           NOT NULL CONSTRAINT PK_Participant PRIMARY KEY,
+    WebID              INT           NULL,
+    SalutationID       INT           NULL REFERENCES ref.Salutation(SalutationID),
+    AgencyID           INT           NULL REFERENCES core.Agency(AgencyID),  -- 5,353 NULLs are legitimate
+    StreetTypeID       INT           NULL REFERENCES ref.StreetType(StreetTypeID),
+    CityID             INT           NULL REFERENCES ref.City(CityID),
+    StateID            INT           NULL REFERENCES ref.State(StateID),
+    FirstName          NVARCHAR(30)  NULL,   -- legacy FName
+    LastName           NVARCHAR(30)  NULL,   -- legacy LName
+    MiddleName         NVARCHAR(20)  NULL,   -- legacy MName
+    HomePhone          NVARCHAR(15)  NULL,
+    HomeFax            NVARCHAR(15)  NULL,
+    WorkPhone          NVARCHAR(15)  NULL,   -- legacy WorkPhoneOpt
+    WorkPhoneExt       NVARCHAR(6)   NULL,
+    HomeAddress1       NVARCHAR(200) NULL,
+    HomeAddress2       NVARCHAR(50)  NULL,
+    HomeZip            NVARCHAR(10)  NULL,
+    Email              NVARCHAR(100) NULL,   -- legacy ParticipantEmail
+    Email2             NVARCHAR(100) NULL,
+    Email3             NVARCHAR(255) NULL,
+    Position           NVARCHAR(255) NULL,
+    GradeLevel         NVARCHAR(255) NULL,   -- legacy GradeLvl
+    IsParentMailingList   BIT NOT NULL CONSTRAINT DF_Participant_ParentList   DEFAULT 0, -- legacy [ParentMailingList?]
+    IsTeacherMailingList  BIT NOT NULL CONSTRAINT DF_Participant_TeacherList  DEFAULT 0, -- legacy [TeacherMailingList?]
+    IsDirectorMailingList BIT NOT NULL CONSTRAINT DF_Participant_DirectorList DEFAULT 0, -- legacy [DirectorMailingList?]
+    IsStaff            BIT NOT NULL CONSTRAINT DF_Participant_Staff      DEFAULT 0,      -- legacy [Staff?]
+    IsWcpss            BIT NOT NULL CONSTRAINT DF_Participant_Wcpss      DEFAULT 0,      -- legacy [WCPSS?]
+    HasCeuCertificate  BIT NOT NULL CONSTRAINT DF_Participant_CeuCert    DEFAULT 0,      -- legacy CEUCertificate
+    HasChcCertificate  BIT NOT NULL CONSTRAINT DF_Participant_ChcCert    DEFAULT 0,      -- legacy CHCCertificate
+    DateOfEntry        DATETIME2(0)  NULL,
+    UpdatedAt          DATETIME2(0)  NULL    -- legacy DateUpdated
+);
+CREATE INDEX IX_Participant_LastName ON core.Participant(LastName, FirstName);
+CREATE INDEX IX_Participant_Email    ON core.Participant(Email);   -- non-unique: 962 duplicate groups
+CREATE INDEX IX_Participant_Agency   ON core.Participant(AgencyID);
+
+CREATE TABLE core.Payee (
+    PayeeID  INT           NOT NULL CONSTRAINT PK_Payee PRIMARY KEY,
+    Payee    NVARCHAR(255) NULL,
+    IsDeleted BIT NOT NULL CONSTRAINT DF_Payee_Deleted DEFAULT 0   -- legacy [Delete]
+);
+
+CREATE TABLE core.Payment (
+    PaymentID       INT            NOT NULL CONSTRAINT PK_Payment PRIMARY KEY,
+    PaymentMethodID INT            NULL REFERENCES ref.PaymentMethod(PaymentMethodID),
+    PayeeID         INT            NULL REFERENCES core.Payee(PayeeID),
+    SchoolYearID    INT            NULL REFERENCES ref.SchoolYear(SchoolYearID),
+    CheckNumber     INT            NULL,
+    ReceiptNumber   INT            NULL,
+    PaymentTotal    DECIMAL(19,4)  NULL,
+    PaidDate        DATETIME2(0)   NULL,
+    Notes           NVARCHAR(255)  NULL    -- legacy PaymentNotes
+);
+CREATE INDEX IX_Payment_Payee ON core.Payment(PayeeID);
+
+CREATE TABLE core.WorkshopName (
+    WorkshopNameID    INT           NOT NULL CONSTRAINT PK_WorkshopName PRIMARY KEY,
+    AgesID            INT           NULL REFERENCES ref.Age(AgesID),
+    WorkshopName      NVARCHAR(255) NULL,
+    ShortName         NVARCHAR(100) NULL,   -- legacy WorkshopShortName
+    ECourseNum        INT           NULL,   -- legacy E_CourseNum
+    WLCourse          INT           NULL,
+    Prerequisites     NVARCHAR(255) NULL,
+    Description       NVARCHAR(MAX) NULL,
+    TopicNums         NVARCHAR(15)  NULL,
+    IsLiteracy        BIT NOT NULL CONSTRAINT DF_WorkshopName_Literacy DEFAULT 0  -- legacy Literacy
+);
+
+CREATE TABLE core.Workshop (
+    WorkshopID        INT            NOT NULL CONSTRAINT PK_Workshop PRIMARY KEY,
+    LegacyWorkshopID  INT            NULL,   -- legacy WorkshopID_Old (1,438 populated, unique)
+    WorkshopNameID    INT            NULL REFERENCES core.WorkshopName(WorkshopNameID),
+    EvalTypeID        INT            NULL REFERENCES ref.EvalType(EvalTypeID),
+    ComponentID       INT            NULL REFERENCES ref.Component(ComponentID),  -- legacy ComponenetID (typo)
+    CategoryID        INT            NULL REFERENCES ref.Category(CategoryID),
+    AgencyID          INT            NULL REFERENCES core.Agency(AgencyID),
+    SchoolYearID      INT            NULL REFERENCES ref.SchoolYear(SchoolYearID), -- legacy SYID
+    TorP              INT            NULL,
+    VorIP             INT            NULL,   -- legacy VorIP
+    WorkshopCode      NVARCHAR(10)   NULL,
+    ESessionNum       INT            NULL,   -- legacy E_SessionNum
+    WLSession         INT            NULL,
+    StartDate         DATETIME2(0)   NULL,
+    EndDate           DATETIME2(0)   NULL,
+    StartTime         TIME(0)        NULL,   -- legacy 1899-12-30 datetime
+    EndTime           TIME(0)        NULL,
+    DatesText         NVARCHAR(125)  NULL,   -- legacy [Dates]
+    TimesText         NVARCHAR(100)  NULL,   -- legacy [Times]
+    MaxEnrollment     INT            NULL,   -- legacy [Max]
+    MinEnrollment     INT            NULL,   -- legacy [Min]
+    ESchoolSeats      INT            NULL,
+    Room              SMALLINT       NULL,
+    IsBrochure        BIT NOT NULL CONSTRAINT DF_Workshop_Brochure   DEFAULT 0, -- legacy Brochure
+    IsFolder          BIT NOT NULL CONSTRAINT DF_Workshop_Folder     DEFAULT 0, -- legacy Folder
+    IsLabel           BIT NOT NULL CONSTRAINT DF_Workshop_Label      DEFAULT 0, -- legacy Label
+    IsClosed          BIT NOT NULL CONSTRAINT DF_Workshop_Closed     DEFAULT 0, -- legacy Closed
+    IsCancelled       BIT NOT NULL CONSTRAINT DF_Workshop_Cancelled  DEFAULT 0, -- legacy Cancelled
+    IsContracted      BIT NOT NULL CONSTRAINT DF_Workshop_Contracted DEFAULT 0, -- legacy Contracted
+    IsWcpc            BIT NOT NULL CONSTRAINT DF_Workshop_Wcpc       DEFAULT 0, -- legacy WCPC
+    IsStaffDev        BIT NOT NULL CONSTRAINT DF_Workshop_StaffDev   DEFAULT 0, -- legacy StaffDev
+    ConsultFee        DECIMAL(19,4)  NULL,
+    Cost1             DECIMAL(19,4)  NULL,
+    Cost2             DECIMAL(19,4)  NULL,
+    CreditPossible    NVARCHAR(50)   NULL,
+    SessionCount      INT            NULL,   -- legacy [Sessions]
+    SessionHours      DECIMAL(18,2)  NULL,   -- legacy SessionHrs (max 55.00); plan §B.1 said FLOAT
+    SessionCeus       REAL           NULL,   -- legacy SessionCEUs (Single)
+    ESchoolRegistered SMALLINT       NULL,
+    ESchoolAttended   INT            NULL,   -- legacy eSchoolAttend
+    ESchoolDropped    SMALLINT       NULL,
+    ESchoolLateDropped INT           NULL,
+    ESchoolNoShow     INT            NULL,
+    EvaluationCount   SMALLINT       NULL,   -- legacy Evaluations
+    NumPractices      SMALLINT       NULL,
+    -- Legacy Virtual/In-Person are INT with 12 and 17 distinct values (0..14).
+    -- They are NOT booleans in the data, so they are preserved as INT rather
+    -- than converted to BIT as the plan proposed. See completion note.
+    Virtual           INT            NULL,
+    IsInPerson        INT            NULL,   -- legacy [In-Person]
+    InternetYes       SMALLINT       NULL,
+    InternetNo        SMALLINT       NULL,
+    PublicRegistrations INT          NULL,
+    -- Legacy TotalRegistrations/TotalParticipants are stored DOUBLEs that drift.
+    -- Deliberately NOT migrated; replaced by core.vw_WorkshopCounts.
+    Notes             NVARCHAR(MAX)  NULL,   -- legacy WorkshopNotes
+    SpecialNotes      NVARCHAR(MAX)  NULL,
+    IsFullyCodified   BIT NOT NULL CONSTRAINT DF_Workshop_FullyCodified DEFAULT 0, -- legacy FullyCodified
+    CreatedAt         DATETIME2(0)   NULL,   -- legacy DateCreated
+    UpdatedAt         DATETIME2(0)   NULL    -- legacy DateUpdated
+);
+CREATE INDEX IX_Workshop_SchoolYear_Start ON core.Workshop(SchoolYearID, StartDate);
+CREATE INDEX IX_Workshop_Code             ON core.Workshop(WorkshopCode);
+CREATE INDEX IX_Workshop_WorkshopName     ON core.Workshop(WorkshopNameID);
+-- NOTE: CK_Workshop_Dates is intentionally NOT added yet — 9 legacy rows have
+-- StartDate > EndDate. Add it after those rows are corrected during ETL.
+GO
+
+CREATE TABLE core.WorkshopSession (
+    WorkshopSessionID INT           NOT NULL CONSTRAINT PK_WorkshopSession PRIMARY KEY,
+    WorkshopID        INT           NULL REFERENCES core.Workshop(WorkshopID),
+    StaffID           INT           NULL,
+    BackUpTimeID      INT           NULL REFERENCES ref.BackupTime(BackupTimeID),
+    SessionDate       DATETIME2(0)  NULL,
+    RegAttend         INT           NULL,
+    ESchoolAttend     INT           NULL
+);
+CREATE INDEX IX_WorkshopSession_Workshop ON core.WorkshopSession(WorkshopID);
+
+CREATE TABLE core.PresenterStaff (
+    PresenterStaffID   INT           NOT NULL CONSTRAINT PK_PresenterStaff PRIMARY KEY,
+    SalutationID       INT           NULL REFERENCES ref.Salutation(SalutationID),
+    AgencyID           INT           NULL REFERENCES core.Agency(AgencyID),
+    CityID             INT           NULL REFERENCES ref.City(CityID),
+    StateID            INT           NULL REFERENCES ref.State(StateID),
+    LastName           NVARCHAR(30)  NULL,   -- legacy StaffLName
+    FirstName          NVARCHAR(30)  NULL,   -- legacy StaffFName
+    MiddleName         NVARCHAR(20)  NULL,   -- legacy StaffMName
+    WorkPhone          NVARCHAR(14)  NULL,   -- legacy StaffWPhone
+    Extension          INT           NULL,   -- legacy StaffExtension
+    HomePhone          NVARCHAR(15)  NULL,   -- legacy StaffHPhone
+    CellPhone          NVARCHAR(14)  NULL,   -- legacy StaffCPhone
+    HomeEmail          NVARCHAR(50)  NULL,   -- legacy StaffHEmail
+    Address            NVARCHAR(200) NULL,   -- legacy StaffAddress
+    Zip                NVARCHAR(10)  NULL,   -- legacy StaffZip
+    IsRetired          BIT NOT NULL CONSTRAINT DF_PresenterStaff_Retired DEFAULT 0, -- legacy Retired
+    DateOfEntry        DATETIME2(0)  NULL,   -- legacy StaffDateOfEntry
+    UpdatedAt          DATETIME2(0)  NULL    -- legacy PresenterDateUpdated
+);
+
+CREATE TABLE core.WorkshopPresenter (
+    WorkshopPresenterID INT NOT NULL CONSTRAINT PK_WorkshopPresenter PRIMARY KEY,
+    PresenterID         INT NULL REFERENCES core.PresenterStaff(PresenterStaffID),
+    WorkshopID          INT NULL REFERENCES core.Workshop(WorkshopID)
+);
+CREATE INDEX IX_WorkshopPresenter_Workshop ON core.WorkshopPresenter(WorkshopID);
+
+CREATE TABLE core.Registration (
+    RegistrationID     INT            NOT NULL CONSTRAINT PK_Registration PRIMARY KEY,
+    ParticipantID      INT            NULL,   -- FK added after orphan quarantine
+    CreditTypeID       INT            NULL REFERENCES ref.CreditType(CreditTypeID),
+    WorkshopID         INT            NULL,   -- FK added after orphan quarantine
+    PaymentID          INT            NULL REFERENCES core.Payment(PaymentID),
+    PaymentMethodID    INT            NULL REFERENCES ref.PaymentMethod(PaymentMethodID),
+    PaidAmount         DECIMAL(19,4)  NULL,   -- legacy PaidAmt; 189 negative rows (refunds)
+    TicketCount        INT            NULL,   -- legacy Tickets
+    IsScholarship      BIT NOT NULL CONSTRAINT DF_Registration_Scholarship DEFAULT 0, -- legacy Scholarship
+    RegistrationDate   DATETIME2(0)   NULL,
+    IsCancelled        BIT NOT NULL CONSTRAINT DF_Registration_Cancelled   DEFAULT 0, -- legacy Cancellation
+    Notes              NVARCHAR(255)  NULL,   -- legacy RegistrationNotes
+    EmailConfirmation  BIT NOT NULL CONSTRAINT DF_Registration_EmailConf   DEFAULT 0,
+    PayeeID            INT            NULL REFERENCES core.Payee(PayeeID),
+    ReceiptNumber      INT            NULL,   -- legacy [Receipt#]
+    CheckNumber        INT            NULL,
+    CheckTotal         DECIMAL(19,4)  NULL,
+    PaidDate           DATETIME2(0)   NULL,
+    Attended           BIT NOT NULL CONSTRAINT DF_Registration_Attended    DEFAULT 0,
+    UpdatedAt          DATETIME2(0)   NULL,   -- legacy RegistrationUpdated
+    -- Provenance for the public registration form (see docs/features/public-registration.md)
+    Source             NVARCHAR(20)   NOT NULL CONSTRAINT DF_Registration_Source DEFAULT 'Manual',
+    RegistrationLinkID INT            NULL
+);
+CREATE INDEX IX_Registration_Workshop    ON core.Registration(WorkshopID);
+CREATE INDEX IX_Registration_Participant ON core.Registration(ParticipantID);
+CREATE INDEX IX_Registration_Payment     ON core.Registration(PaymentID);
+CREATE INDEX IX_Registration_Source      ON core.Registration(Source);
+
+CREATE TABLE core.SessionParticipant (
+    ParticipantID     INT NOT NULL,
+    WorkshopSessionID INT NOT NULL,
+    IsLate            BIT NOT NULL CONSTRAINT DF_SessionParticipant_Late DEFAULT 0, -- legacy Late
+    CONSTRAINT PK_SessionParticipant PRIMARY KEY (ParticipantID, WorkshopSessionID)
+);
+CREATE INDEX IX_SessionParticipant_Session ON core.SessionParticipant(WorkshopSessionID);
+
+CREATE TABLE core.CreditSlip (
+    CreditSlipID          INT           NOT NULL CONSTRAINT PK_CreditSlip PRIMARY KEY,
+    CreditSlipsCategoryID INT           NULL REFERENCES ref.CreditSlipCategory(CreditSlipsCategoryID),
+    ParticipantID         INT           NULL REFERENCES core.Participant(ParticipantID),
+    WorkshopID            INT           NULL REFERENCES core.Workshop(WorkshopID),
+    DateIssued            DATETIME2(0)  NULL,
+    DateUsed              DATETIME2(0)  NULL,
+    UsedWorkshopID        INT           NULL REFERENCES core.Workshop(WorkshopID),
+    UsedParticipantID     INT           NULL REFERENCES core.Participant(ParticipantID),
+    Amount                DECIMAL(19,4) NULL,
+    TrackingYear          INT           NULL,
+    Email                 BIT NOT NULL CONSTRAINT DF_CreditSlip_Email DEFAULT 0
+);
+
+CREATE TABLE core.EvalQuestion (
+    EvalQuestID       INT           NOT NULL CONSTRAINT PK_EvalQuestion PRIMARY KEY,
+    EvaluationTypeID  INT           NULL REFERENCES ref.EvalType(EvalTypeID),
+    EvalQuestTypeID   INT           NULL REFERENCES ref.EvalQuestionType(EvalQuestTypeID),
+    EvalQuestion      NVARCHAR(255) NULL,
+    EvalQuestNum      INT           NULL,
+    IsActive          BIT NOT NULL CONSTRAINT DF_EvalQuestion_Active DEFAULT 1
+);
+
+CREATE TABLE core.WorkshopEvalQuestion (
+    -- Legacy PK is named WorkshopEvaluations; renamed per plan §B.1.
+    -- It is genuinely unique (3,540/3,540), so it is a real surrogate key.
+    WorkshopEvaluationID INT NOT NULL CONSTRAINT PK_WorkshopEvalQuestion PRIMARY KEY,
+    WorkshopID           INT NULL REFERENCES core.Workshop(WorkshopID),
+    EvalQuestID          INT NULL REFERENCES core.EvalQuestion(EvalQuestID),
+    WorkshopEvalRating   INT NULL,
+    WorkshopEvalQty      INT NULL
+);
+CREATE INDEX IX_WorkshopEvalQuestion_Workshop ON core.WorkshopEvalQuestion(WorkshopID);
+
+CREATE TABLE core.WorkshopComment (
+    WorkshopCommentID INT           NOT NULL CONSTRAINT PK_WorkshopComment PRIMARY KEY,
+    WorkshopID        INT           NULL REFERENCES core.Workshop(WorkshopID),
+    Comment           NVARCHAR(MAX) NULL
+);
+
+CREATE TABLE core.WorkshopPresenterComment (
+    WorkshopPresenterCommentID INT           NOT NULL CONSTRAINT PK_WorkshopPresenterComment PRIMARY KEY,
+    WorkshopID                 INT           NULL REFERENCES core.Workshop(WorkshopID),
+    PresenterComment           NVARCHAR(255) NULL
+);
+
+CREATE TABLE core.WorkshopDesiredTopic (
+    WorkshopDesiredTopicsID INT           NOT NULL CONSTRAINT PK_WorkshopDesiredTopic PRIMARY KEY,
+    WorkshopID              INT           NULL REFERENCES core.Workshop(WorkshopID),
+    DesiredTopicCategoryID  INT           NULL REFERENCES ref.DesiredTopicCategory(DesiredTopicCategoryID),
+    WorkshopDesiredTopics   NVARCHAR(255) NULL
+);
+
+CREATE TABLE core.WorkshopPreferredTime (
+    WorkshopPreferredTime    INT NOT NULL CONSTRAINT PK_WorkshopPreferredTime PRIMARY KEY, -- legacy WorkshopPreferredTime
+    WorkshopID               INT NULL REFERENCES core.Workshop(WorkshopID),
+    PreferredTimeID          INT NULL REFERENCES ref.PreferredTime(PreferredTimesID),
+    WorkshopPreferredTimeQty INT NULL
+);
+
+CREATE TABLE core.WorkshopReferral (
+    WorkshopReferralID INT           NOT NULL CONSTRAINT PK_WorkshopReferral PRIMARY KEY,
+    WorkshopID         INT           NULL REFERENCES core.Workshop(WorkshopID),
+    ReferralTypeID     INT           NULL REFERENCES ref.ReferralType(ReferralTypeID),
+    ReferralNum        INT           NULL,
+    ReferralNotes      NVARCHAR(255) NULL
+);
+
+CREATE TABLE core.WorkshopLikedMost (
+    LikedMostID INT           NOT NULL CONSTRAINT PK_WorkshopLikedMost PRIMARY KEY,
+    WorkshopID  INT           NULL REFERENCES core.Workshop(WorkshopID),
+    LikedMost   NVARCHAR(255) NULL
+);
+
+CREATE TABLE core.WorkshopLikedLeast (
+    LikedLeastID INT           NOT NULL CONSTRAINT PK_WorkshopLikedLeast PRIMARY KEY,
+    WorkshopID   INT           NULL REFERENCES core.Workshop(WorkshopID),
+    LikedLeast   NVARCHAR(255) NULL
+);
+
+CREATE TABLE core.WorkshopPractice (
+    WorkshopsPracticesID INT           NOT NULL CONSTRAINT PK_WorkshopPractice PRIMARY KEY,
+    WorkshopID           INT           NULL REFERENCES core.Workshop(WorkshopID),
+    WorkshopPractice     NVARCHAR(255) NULL
+);
+
+CREATE TABLE core.WorkshopSummaryCount (
+    WorkshopSummaryCountsID INT NOT NULL CONSTRAINT PK_WorkshopSummaryCount PRIMARY KEY,
+    WorkshopID              INT NULL REFERENCES core.Workshop(WorkshopID),
+    CountTypeID             INT NULL REFERENCES ref.SummaryCountType(SummaryCountTypeID),
+    [Count]                 INT NULL,
+    CountSessionNum         SMALLINT NULL
+);
+
+CREATE TABLE core.OtherCount (
+    OtherCountID INT NOT NULL CONSTRAINT PK_OtherCount PRIMARY KEY,
+    OtherID      INT NULL REFERENCES ref.Other(OtherID),
+    WorkshopID   INT NULL REFERENCES core.Workshop(WorkshopID),
+    NumberParents INT NULL
+);
+
+CREATE TABLE core.CommunityEvent (
+    EventID         INT           NOT NULL CONSTRAINT PK_CommunityEvent PRIMARY KEY,
+    ComponentID     INT           NULL REFERENCES ref.Component(ComponentID),
+    EventTypeID     INT           NULL REFERENCES ref.EventType(EventTypeID),
+    EventTitle      NVARCHAR(255) NULL,
+    EventType       NVARCHAR(100) NULL,   -- denormalised text copy, retained
+    EventLocation   NVARCHAR(100) NULL,
+    EventDate       DATETIME2(0)  NULL,
+    EventTimes      NVARCHAR(25)  NULL,
+    EventAttendees  SMALLINT      NULL,
+    NumAdults       SMALLINT      NULL,
+    NumChildren     SMALLINT      NULL,
+    NumTeachers     SMALLINT      NULL,
+    EventDateEntered DATETIME2(0) NULL
+);
+
+CREATE TABLE core.CommunityEventStaff (
+    EventID  INT NOT NULL REFERENCES core.CommunityEvent(EventID),
+    StaffID  INT NOT NULL,
+    CONSTRAINT PK_CommunityEventStaff PRIMARY KEY (EventID, StaffID)  -- 620/620 unique
+);
+
+CREATE TABLE core.TrainingRequest (
+    TrainingRequestID INT            NOT NULL CONSTRAINT PK_TrainingRequest PRIMARY KEY,
+    AgencyID          INT            NULL REFERENCES core.Agency(AgencyID),
+    RequestDate       DATETIME2(0)   NULL,
+    RequestedBy       NVARCHAR(100)  NULL,
+    RequestPhone      NVARCHAR(14)   NULL,
+    RequestExt        INT            NULL,
+    RequestEmail      NVARCHAR(100)  NULL,
+    -- Legacy NumParticpants (typo) is NVARCHAR(255). Kept as text per plan §B.1
+    -- until the values are reviewed; rename applied, type not yet changed.
+    ParticipantCount  NVARCHAR(255)  NULL,
+    InvoiceNum        NVARCHAR(10)   NULL,
+    InvoiceDate       DATETIME2(0)   NULL,
+    DueDate           DATETIME2(0)   NULL,
+    AmtDue            DECIMAL(19,4)  NULL,
+    IsActive          BIT NOT NULL CONSTRAINT DF_TrainingRequest_Active DEFAULT 1
+);
+
+CREATE TABLE core.TrainingRequestContact (
+    TrainingRequestContactID INT           NOT NULL CONSTRAINT PK_TrainingRequestContact PRIMARY KEY,
+    TrainingRequestID        INT           NULL REFERENCES core.TrainingRequest(TrainingRequestID),
+    ContactDate              DATETIME2(0)  NULL,
+    Note                     NVARCHAR(MAX) NULL
+);
+
+CREATE TABLE core.TrainingRequestQuote (
+    TrainingRequestQuoteID INT           NOT NULL CONSTRAINT PK_TrainingRequestQuote PRIMARY KEY,
+    TrainingRequestID      INT           NULL REFERENCES core.TrainingRequest(TrainingRequestID),
+    WorkshopTypeID         INT           NULL REFERENCES ref.EvalType(EvalTypeID),
+    TopicRequested         NVARCHAR(255) NULL,
+    Location               NVARCHAR(255) NULL,
+    NumStudents            NVARCHAR(10)  NULL,
+    NumSessions            INT           NULL,
+    DatesRequested         NVARCHAR(25)  NULL,
+    TimesRequested         NVARCHAR(25)  NULL,
+    Duration               NVARCHAR(25)  NULL,
+    SpecialEquip           NVARCHAR(255) NULL,
+    RequestAmt             DECIMAL(19,4) NULL
+);
+
+CREATE TABLE core.TrainingRequestScheduled (
+    TrainingRequestID INT           NULL REFERENCES core.TrainingRequest(TrainingRequestID),
+    WorkshopID        INT           NULL REFERENCES core.Workshop(WorkshopID),
+    ScheduledOn       DATETIME2(0)  NULL
+);
+-- 84 rows / 81 distinct (TrainingRequestID, WorkshopID): 3 duplicates exist.
+-- No PK is declared; the ETL must resolve them first.
+
+CREATE TABLE core.TrainingRequestPayment (
+    TrainingRequestID INT NOT NULL REFERENCES core.TrainingRequest(TrainingRequestID),
+    PaymentID         INT NOT NULL REFERENCES core.Payment(PaymentID),
+    CONSTRAINT PK_TrainingRequestPayment PRIMARY KEY (TrainingRequestID, PaymentID)
+);
+
+-- Certificate template settings, staff-editable per school year.
+-- See plan §8.6. Versioned by year so reissued certificates keep the
+-- logo and signatories they were issued with.
+CREATE TABLE core.CertificateTemplate (
+    CertificateTemplateID  INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CertificateTemplate PRIMARY KEY,
+    SchoolYearID           INT           NOT NULL REFERENCES ref.SchoolYear(SchoolYearID),
+    CertificateType        NVARCHAR(10)  NOT NULL,   -- 'CEU' | 'CHC'
+    Title                  NVARCHAR(200) NULL,
+    Subtitle               NVARCHAR(500) NULL,
+    LogoPath               NVARCHAR(400) NULL,
+    ProgramDirectorName    NVARCHAR(100) NULL,
+    ProgramDirectorTitle   NVARCHAR(100) NULL,
+    ApprovingDirectorName  NVARCHAR(100) NULL,
+    ApprovingDirectorTitle NVARCHAR(100) NULL,
+    CreditUnitLabel        NVARCHAR(100) NULL,
+    FooterText             NVARCHAR(500) NULL,
+    VisibleFields          NVARCHAR(MAX) NULL,       -- JSON array of field keys
+    UpdatedBy              NVARCHAR(100) NULL,
+    UpdatedAt              DATETIME2(0)  NOT NULL CONSTRAINT DF_CertificateTemplate_UpdatedAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT UQ_CertificateTemplate UNIQUE (SchoolYearID, CertificateType),
+    CONSTRAINT CK_CertificateTemplate_Type CHECK (CertificateType IN ('CEU','CHC'))
+);
+GO
+
+-- =====================================================================
+--  audit — change tracking and public-form submissions
+-- =====================================================================
+
+CREATE TABLE audit.ChangeLog (
+    ChangeLogID  BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ChangeLog PRIMARY KEY,
+    SchemaName   NVARCHAR(128) NOT NULL,
+    TableName    NVARCHAR(128) NOT NULL,
+    RecordID     NVARCHAR(100) NULL,
+    Action       CHAR(1)       NOT NULL,   -- I / U / D
+    ChangedBy    NVARCHAR(128) NULL,
+    ChangedAt    DATETIME2(0)  NOT NULL CONSTRAINT DF_ChangeLog_ChangedAt DEFAULT SYSUTCDATETIME(),
+    OldValues    NVARCHAR(MAX) NULL,
+    NewValues    NVARCHAR(MAX) NULL
+);
+CREATE INDEX IX_ChangeLog_Table_Record ON audit.ChangeLog(TableName, RecordID);
+
+CREATE TABLE audit.PublicSubmission (
+    PublicSubmissionID BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_PublicSubmission PRIMARY KEY,
+    RegistrationLinkID INT           NULL,
+    SubmittedAt        DATETIME2(0)  NOT NULL CONSTRAINT DF_PublicSubmission_SubmittedAt DEFAULT SYSUTCDATETIME(),
+    IpHash             VARBINARY(32) NULL,   -- salted hash, never the raw IP
+    UserAgent          NVARCHAR(400) NULL,
+    Outcome            NVARCHAR(30)  NOT NULL, -- Accepted | Rejected | Duplicate | RateLimited | Honeypot
+    Reason             NVARCHAR(200) NULL,
+    PayloadHash        VARBINARY(32) NULL
+);
+CREATE INDEX IX_PublicSubmission_SubmittedAt ON audit.PublicSubmission(SubmittedAt);
+GO
+
+-- =====================================================================
+--  staging — raw landing zone for the Access extract
+--  Everything lands as text/JSON so nothing is lost or coerced.
+-- =====================================================================
+CREATE TABLE staging.RawRow (
+    RawRowID      BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RawRow PRIMARY KEY,
+    SourceTable   NVARCHAR(128) NOT NULL,
+    SourceRowID   NVARCHAR(100) NULL,
+    LoadedAt      DATETIME2(0)  NOT NULL CONSTRAINT DF_RawRow_LoadedAt DEFAULT SYSUTCDATETIME(),
+    RawJson       NVARCHAR(MAX) NULL
+);
+CREATE INDEX IX_RawRow_Source ON staging.RawRow(SourceTable);
+
+CREATE TABLE staging.Quarantine (
+    QuarantineID  BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Quarantine PRIMARY KEY,
+    SourceTable   NVARCHAR(128) NOT NULL,
+    SourceRowID   NVARCHAR(100) NULL,
+    Reason        NVARCHAR(400) NOT NULL,
+    QuarantinedAt DATETIME2(0)  NOT NULL CONSTRAINT DF_Quarantine_QuarantinedAt DEFAULT SYSUTCDATETIME(),
+    RawJson       NVARCHAR(MAX) NULL
+);
+CREATE INDEX IX_Quarantine_Table ON staging.Quarantine(SourceTable, Reason);
+GO
+
+-- =====================================================================
+--  Views — replace stored, drifting totals (plan §5.4)
+-- =====================================================================
+CREATE VIEW core.vw_WorkshopCounts
+AS
+SELECT w.WorkshopID,
+       COUNT(DISTINCT r.RegistrationID)                                   AS TotalRegistrations,
+       COUNT(DISTINCT r.ParticipantID)                                    AS TotalParticipants,
+       COUNT(DISTINCT CASE WHEN r.Attended = 1 THEN r.ParticipantID END)  AS TotalAttended
+FROM core.Workshop w
+LEFT JOIN core.Registration r
+       ON r.WorkshopID = w.WorkshopID
+      AND r.IsCancelled = 0
+GROUP BY w.WorkshopID;
+GO
+
+CREATE VIEW core.vw_ParticipantCertificate
+AS
+SELECT p.ParticipantID,
+       p.FirstName,
+       p.LastName,
+       p.MiddleName,
+       p.Email,
+       a.AgencyName,
+       p.HasCeuCertificate,
+       p.HasChcCertificate
+FROM core.Participant p
+LEFT JOIN core.Agency a ON a.AgencyID = p.AgencyID;
+GO
+
+PRINT 'Schema created: 4 schemas, 29 ref tables, 32 core tables, 2 audit tables, 2 staging tables, 2 views.';
+GO

@@ -1,0 +1,78 @@
+# =====================================================================
+#  Secrets and environment
+# =====================================================================
+# Real environment files never get committed. The .example templates DO
+# get committed — they document which variables are required.
+.env
+.env.*
+!.env.example
+!*.env.example
+database/.env
+database/.env.*
+# database/.env.example holds a live credential and is ignored explicitly.
+database/.env.example
+
+# =====================================================================
+#  Source database
+# =====================================================================
+# The Access database is 44 MB of real participant data. It should not be
+# published to a public repository.
+database/*.accdb
+database/*.laccdb
+database/*.mdb
+
+# =====================================================================
+#  Node / TypeScript
+# =====================================================================
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.npm/
+.pnpm-store/
+.vite/
+
+# =====================================================================
+#  Logs and temp output
+# =====================================================================
+*.log
+logs/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+tmp/
+temp/
+*.tmp
+
+# ETL output
+db/etl/*.log
+db/etl/output/
+
+# =====================================================================
+#  Editors and OS
+# =====================================================================
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =====================================================================
+#  Python (ETL helpers, if any)
+# =====================================================================
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# =====================================================================
+#  Generated documentation artifacts
+# =====================================================================
+# The HTML/PDF companions are build outputs of the markdown source.
+# Uncomment if they should not be tracked.
+# docs/plans/*.html
+# docs/plans/*.pdf

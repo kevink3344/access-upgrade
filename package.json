@@ -1,0 +1,22 @@
+{
+  "name": "project-enlightenment",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Project Enlightenment Training Database — Access to web migration",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@pe/api & npm run dev --workspace=@pe/web",
+    "dev:api": "npm run dev --workspace=@pe/api",
+    "dev:web": "npm run dev --workspace=@pe/web",
+    "build": "npm run build --workspace=@pe/shared && npm run build --workspace=@pe/api && npm run build --workspace=@pe/web",
+    "db:schema": "node scripts/run-sql.mjs db/schema.sql",
+    "db:transform": "node scripts/run-sql.mjs db/etl/transform.sql",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
