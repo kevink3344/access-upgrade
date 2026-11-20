@@ -530,18 +530,20 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
             />
           </div>
 
-          <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? 'Registering…' : 'Register'}
-          </button>
-
-          {link.redirectToPayment && link.paymentUrl ? (
+          {link.redirectToPayment && link.paymentUrl && (
             <p className="payment-notice">
               <strong>
                 After submitting your registration, you will be redirected to the website
                 for payment.
               </strong>
             </p>
-          ) : (
+          )}
+
+          <button type="submit" className="btn btn-primary" disabled={submitting}>
+            {submitting ? 'Registering…' : 'Register'}
+          </button>
+
+          {!(link.redirectToPayment && link.paymentUrl) && (
             <p className="field-hint" style={{ marginTop: 12, textAlign: 'center' }}>
               Payment is arranged separately — registering does not charge you.
             </p>

@@ -289,12 +289,13 @@
 }
 
 /* Tells the registrant up front that submitting leads to a payment page,
-   so the redirect is never a surprise. */
+   so the redirect is never a surprise. Sits above the button and uses a
+   warm background so it reads as an alert rather than body copy. */
 .payment-notice {
-  margin: 14px 0 0;
+  margin: 0 0 14px;
   padding: 12px 14px;
   border-radius: var(--radius);
-  background: hsl(var(--primary-color-hsl) / .07);
+  background: #fff8d6;
   border-left: 3px solid var(--primary-color);
   font-size: 13.5px;
   line-height: 1.5;
