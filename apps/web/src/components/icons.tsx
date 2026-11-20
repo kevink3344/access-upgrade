@@ -119,20 +119,6 @@ export const IconRequests = (p: Props) => (
   </svg>
 );
 
-export const IconEvents = (p: Props) => (
-  <svg {...base(p)}>
-    <path d="M3 10h18M5 6h14a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" />
-    <path d="M8 3v4M16 3v4" />
-  </svg>
-);
-
-export const IconESchools = (p: Props) => (
-  <svg {...base(p)}>
-    <path d="M12 3 2 8l10 5 10-5z" />
-    <path d="M6 10.5V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-5.5" />
-  </svg>
-);
-
 export const IconFolder = (p: Props) => (
   <svg {...base(p)}>
     <path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2z" />

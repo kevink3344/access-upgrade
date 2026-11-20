@@ -12,8 +12,6 @@ import {
   IconPayments,
   IconCreditSlips,
   IconRequests,
-  IconEvents,
-  IconESchools,
   IconFolder,
   IconApproval,
   IconReports,
@@ -59,8 +57,6 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/payments', label: 'Payments & receipts', icon: IconPayments },
       { to: '/credit-slips', label: 'Credit slips', icon: IconCreditSlips },
       { to: '/training-requests', label: 'Training requests', icon: IconRequests },
-      { to: '/community-events', label: 'Community events', icon: IconEvents },
-      { to: '/eschools', label: 'eSchools reconciliation', icon: IconESchools },
     ],
   },
   {

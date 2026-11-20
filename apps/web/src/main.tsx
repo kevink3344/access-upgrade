@@ -70,8 +70,6 @@ const ROUTES: Record<string, string> = {
   '/payments': 'Payments & receipts',
   '/credit-slips': 'Credit slips',
   '/training-requests': 'Training requests',
-  '/community-events': 'Community events',
-  '/eschools': 'eSchools reconciliation',
   '/folders': 'Folder builder',
   '/reports': 'Reports hub',
   '/mailing-lists': 'Mailing lists',
