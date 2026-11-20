@@ -288,6 +288,24 @@
   margin-top: 8px;
 }
 
+/* Tells the registrant up front that submitting leads to a payment page,
+   so the redirect is never a surprise. */
+.payment-notice {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: hsl(var(--primary-color-hsl) / .07);
+  border-left: 3px solid var(--primary-color);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-heading);
+  text-align: center;
+}
+
+.payment-notice strong {
+  font-weight: 700;
+}
+
 /* Honeypot â€” hidden from people, visible to bots. */
 .hp-field {
   position: absolute;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RegistrationLinkState } from '@pe/shared';
 import { api, HttpError } from '../api';
@@ -20,11 +20,19 @@ export function RegistrationLinkPanel({ workshopId }: { workshopId: number }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRotate, setConfirmRotate] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['registration-link', workshopId],
     queryFn: () => api.registrationLink.get(workshopId),
   });
+
+  // Seed the URL field from the server, and re-seed whenever the saved value
+  // changes (after a successful update) so the input never drifts.
+  const savedUrl = data?.link?.paymentUrl ?? '';
+  useEffect(() => {
+    setPaymentUrl(savedUrl);
+  }, [savedUrl]);
 
   function refresh() {
     void qc.invalidateQueries({ queryKey: ['registration-link', workshopId] });
@@ -40,9 +48,16 @@ export function RegistrationLinkPanel({ workshopId }: { workshopId: number }) {
   });
 
   const update = useMutation({
-    mutationFn: (body: { isActive?: boolean; webSeatCap?: number | null }) =>
-      api.registrationLink.update(workshopId, body),
-    onSuccess: refresh,
+    mutationFn: (body: {
+      isActive?: boolean;
+      webSeatCap?: number | null;
+      redirectToPayment?: boolean;
+      paymentUrl?: string | null;
+    }) => api.registrationLink.update(workshopId, body),
+    onSuccess: () => {
+      setError(null);
+      refresh();
+    },
     onError: (err) => setError(err instanceof HttpError ? err.message : 'Could not update the link.'),
   });
 
@@ -126,6 +141,68 @@ export function RegistrationLinkPanel({ workshopId }: { workshopId: number }) {
               </span>
             </label>
           </div>
+
+          {link.isActive && (
+            <div className="toggle-row" style={{ marginTop: 4 }}>
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={link.redirectToPayment}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    // Turning the redirect on requires a destination, so
+                    // refuse locally and point at the field instead of
+                    // letting the API reject it.
+                    if (on && !paymentUrl.trim()) {
+                      setError('Add a payment link before turning on the redirect.');
+                      return;
+                    }
+                    setError(null);
+                    update.mutate({
+                      redirectToPayment: on,
+                      ...(on ? { paymentUrl: paymentUrl.trim() } : {}),
+                    });
+                  }}
+                  disabled={update.isPending}
+                />
+                <span className="switch-track" aria-hidden="true" />
+                <span className="switch-label">
+                  Redirect to payment link after submission
+                  <span className="field-hint" style={{ marginTop: 0 }}>
+                    Sends the registrant to this page once they submit the form.
+                  </span>
+                </span>
+              </label>
+
+              <div className="field" style={{ marginTop: 12, marginBottom: 0 }}>
+                <label htmlFor="payment-url">Payment link</label>
+                <input
+                  id="payment-url"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://wcpss.schoolcashonline.com/..."
+                  value={paymentUrl}
+                  onChange={(e) => {
+                    setPaymentUrl(e.target.value);
+                    if (error) setError(null);
+                  }}
+                  onBlur={() => {
+                    const next = paymentUrl.trim();
+                    if (next === (link.paymentUrl ?? '')) return;
+                    if (next && !/^https?:\/\/\S+$/i.test(next)) {
+                      setError('Enter a full URL starting with http:// or https://');
+                      return;
+                    }
+                    update.mutate({ paymentUrl: next === '' ? null : next });
+                  }}
+                  aria-invalid={error ? 'true' : undefined}
+                />
+                <span className="field-hint">
+                  Saved when you leave the field. Must start with http:// or https://.
+                </span>
+              </div>
+            </div>
+          )}
 
           <div className="link-stats">
             <span>

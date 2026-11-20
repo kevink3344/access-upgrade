@@ -237,6 +237,22 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
               ? 'A confirmation email is on its way. Keep it for your records.'
               : 'All places for online registration have been taken. Please contact Project Enlightenment to be added to a waiting list.'}
           </p>
+          {done && link.redirectToPayment && link.paymentUrl && (
+            <>
+              <p style={{ marginTop: 4 }}>
+                Payment is handled separately. Continue to the payment page to complete
+                your registration.
+              </p>
+              <a
+                className="btn btn-primary"
+                href={link.paymentUrl}
+                rel="noopener noreferrer"
+                style={{ display: 'inline-block', marginTop: 8, textDecoration: 'none' }}
+              >
+                Continue to payment
+              </a>
+            </>
+          )}
         </div>
       </PublicChrome>
     );
@@ -518,9 +534,18 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
             {submitting ? 'Registering…' : 'Register'}
           </button>
 
-          <p className="field-hint" style={{ marginTop: 12, textAlign: 'center' }}>
-            Payment is arranged separately — registering does not charge you.
-          </p>
+          {link.redirectToPayment && link.paymentUrl ? (
+            <p className="payment-notice">
+              <strong>
+                After submitting your registration, you will be redirected to the website
+                for payment.
+              </strong>
+            </p>
+          ) : (
+            <p className="field-hint" style={{ marginTop: 12, textAlign: 'center' }}>
+              Payment is arranged separately — registering does not charge you.
+            </p>
+          )}
         </form>
       </div>
     </PublicChrome>

@@ -68,6 +68,8 @@ interface ResolvedLink {
   RevokedAt: Date | null;
   IsRegistrationOpen: boolean;
   IsCancelled: boolean;
+  RedirectToPayment: boolean;
+  PaymentUrl: string | null;
   WorkshopCode: string | null;
   WorkshopName: string | null;
   StartDate: Date | null;
@@ -85,6 +87,7 @@ interface ResolvedLink {
 async function resolveSlug(slug: string): Promise<ResolvedLink | null> {
   const r = await query<ResolvedLink>(
     `SELECT l.RegistrationLinkID, l.WorkshopID, l.IsActive, l.WebSeatCap, l.OpensAt, l.ClosesAt, l.RevokedAt,
+            l.RedirectToPayment, l.PaymentUrl,
             w.IsRegistrationOpen, w.IsCancelled,
             w.WorkshopCode, n.WorkshopName, w.StartDate, w.EndDate,
             CONVERT(NVARCHAR(5), w.StartTime, 108) AS StartTime,
@@ -218,6 +221,10 @@ publicRouter.get('/registration-links/:slug', async (req, res, next) => {
       state,
       availability: availability(link),
       opensAt: link.OpensAt?.toISOString() ?? null,
+      // Sent to the browser so the confirmation screen can forward the
+      // registrant to payment. Only exposed while the link is actually open.
+      redirectToPayment: link.RedirectToPayment,
+      paymentUrl: link.PaymentUrl,
       workshop: {
         title: link.WorkshopName,
         code: link.WorkshopCode,

@@ -408,6 +408,9 @@ export interface RegistrationLinkState {
     webSeatCap: number | null;
     opensAt: string | null;
     closesAt: string | null;
+    /** Send the registrant to PaymentUrl after a successful submission. */
+    redirectToPayment: boolean;
+    paymentUrl: string | null;
     webRegistrations: number;
     createdBy: string;
     createdAt: string;
@@ -418,6 +421,9 @@ export interface PublicLinkState {
   state: PublicLinkStatus;
   availability: Availability;
   opensAt: string | null;
+  /** True when staff configured a payment redirect for this link. */
+  redirectToPayment: boolean;
+  paymentUrl: string | null;
   workshop: {
     title: string | null;
     code: string | null;

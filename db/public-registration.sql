@@ -23,11 +23,15 @@ BEGIN
         WebSeatCap         INT           NULL,
         OpensAt            DATETIME2(0)  NULL,
         ClosesAt           DATETIME2(0)  NULL,
+        RedirectToPayment  BIT           NOT NULL CONSTRAINT DF_RegistrationLink_Redirect DEFAULT 0,
+        PaymentUrl         NVARCHAR(500) NULL,
         RevokedAt          DATETIME2(0)  NULL,
         RevokedBy          NVARCHAR(100) NULL,
         CreatedBy          NVARCHAR(100) NOT NULL,
         CreatedAt          DATETIME2(0)  NOT NULL CONSTRAINT DF_RegistrationLink_CreatedAt DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT UQ_RegistrationLink_Slug UNIQUE (Slug)
+        CONSTRAINT UQ_RegistrationLink_Slug UNIQUE (Slug),
+        CONSTRAINT CK_RegistrationLink_PaymentUrl
+            CHECK (RedirectToPayment = 0 OR PaymentUrl IS NOT NULL)
     );
     CREATE INDEX IX_RegistrationLink_Workshop ON core.WorkshopRegistrationLink(WorkshopID);
     PRINT 'core.WorkshopRegistrationLink created';

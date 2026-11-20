@@ -23,6 +23,17 @@ const updateSchema = z.object({
   webSeatCap: z.number().int().min(0).nullable().optional(),
   opensAt: z.string().datetime().nullable().optional(),
   closesAt: z.string().datetime().nullable().optional(),
+  redirectToPayment: z.boolean().optional(),
+  /** Must be an absolute http(s) URL, or null to clear. */
+  paymentUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .refine((v) => v === '' || /^https?:\/\/\S+$/i.test(v), {
+      message: 'Enter a full URL starting with http:// or https://',
+    })
+    .nullable()
+    .optional(),
 });
 
 async function loadWorkshop(workshopId: number) {
@@ -54,10 +65,13 @@ async function currentLink(workshopId: number) {
     WebSeatCap: number | null;
     OpensAt: Date | null;
     ClosesAt: Date | null;
+    RedirectToPayment: boolean;
+    PaymentUrl: string | null;
     CreatedBy: string;
     CreatedAt: Date;
   }>(
-    `SELECT TOP 1 RegistrationLinkID, Slug, IsActive, WebSeatCap, OpensAt, ClosesAt, CreatedBy, CreatedAt
+    `SELECT TOP 1 RegistrationLinkID, Slug, IsActive, WebSeatCap, OpensAt, ClosesAt,
+                  RedirectToPayment, PaymentUrl, CreatedBy, CreatedAt
        FROM core.WorkshopRegistrationLink
       WHERE WorkshopID = @id AND RevokedAt IS NULL
       ORDER BY RegistrationLinkID DESC`,
@@ -149,6 +163,8 @@ registrationLinkRouter.get('/', requireAuth, async (req, res, next) => {
             webSeatCap: link.WebSeatCap,
             opensAt: link.OpensAt?.toISOString() ?? null,
             closesAt: link.ClosesAt?.toISOString() ?? null,
+            redirectToPayment: link.RedirectToPayment,
+            paymentUrl: link.PaymentUrl,
             webRegistrations: web,
             createdBy: link.CreatedBy,
             createdAt: link.CreatedAt.toISOString(),
@@ -318,6 +334,33 @@ registrationLinkRouter.patch('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN
     if (d.closesAt !== undefined) {
       sets.push('ClosesAt = @closes');
       params.closes = { type: sql.DateTime2(0), value: d.closesAt };
+    }
+    if (d.redirectToPayment !== undefined) {
+      sets.push('RedirectToPayment = @redirect');
+      params.redirect = { type: sql.Bit, value: d.redirectToPayment ? 1 : 0 };
+    }
+    if (d.paymentUrl !== undefined) {
+      const url = d.paymentUrl && d.paymentUrl.trim() !== '' ? d.paymentUrl.trim() : null;
+      sets.push('PaymentUrl = @payUrl');
+      params.payUrl = { type: sql.NVarChar(500), value: url };
+    }
+
+    // A redirect with no destination would send the registrant nowhere, and
+    // the database check constraint would reject it anyway. Catch it here so
+    // the client gets a usable message instead of a 500.
+    const nextRedirect = d.redirectToPayment ?? link.RedirectToPayment;
+    const nextUrl =
+      d.paymentUrl !== undefined
+        ? (d.paymentUrl && d.paymentUrl.trim() !== '' ? d.paymentUrl.trim() : null)
+        : link.PaymentUrl;
+
+    if (nextRedirect && !nextUrl) {
+      res.status(422).json({
+        error: 'validation_failed',
+        message: 'Add a payment link before turning on the redirect.',
+        details: [{ path: 'paymentUrl', message: 'A payment link is required' }],
+      });
+      return;
     }
 
     if (sets.length === 0) {
