@@ -391,7 +391,6 @@ export interface AgencyListResponse {
 /* ------------------------------------------------------------------ */
 
 export type PublicLinkStatus = 'open' | 'closed' | 'not-yet-open' | 'revoked' | 'full';
-export type Availability = 'plenty' | 'limited' | 'full';
 
 export interface RegistrationLinkState {
   workshop: {
@@ -419,7 +418,8 @@ export interface RegistrationLinkState {
 
 export interface PublicLinkState {
   state: PublicLinkStatus;
-  availability: Availability;
+  /** Seats left, from the live roster. Null when the workshop is uncapped. */
+  seatsRemaining: number | null;
   opensAt: string | null;
   /** True when staff configured a payment redirect for this link. */
   redirectToPayment: boolean;

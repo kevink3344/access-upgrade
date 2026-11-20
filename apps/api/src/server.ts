@@ -198,7 +198,7 @@ app.use('/api/agencies', agenciesRouter);
 app.use('/api/registrations', registrationsRouter);
 app.use('/api/lookups', lookupsRouter);
 
-// Public surface â€” no auth. Must be mounted before the auth-guarded routes
+// Public surface — no auth. Must be mounted before the auth-guarded routes
 // would ever apply; it has its own rate limits and audit logging.
 app.use('/api/public', publicRouter);
 

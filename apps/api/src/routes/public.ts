@@ -81,6 +81,8 @@ interface ResolvedLink {
   CreditPossible: string | null;
   SessionCeus: number | null;
   AgencyName: string | null;
+  MaxEnrollment: number | null;
+  ActiveRegs: number;
   WebTaken: number;
 }
 
@@ -92,8 +94,10 @@ async function resolveSlug(slug: string): Promise<ResolvedLink | null> {
             w.WorkshopCode, n.WorkshopName, w.StartDate, w.EndDate,
             CONVERT(NVARCHAR(5), w.StartTime, 108) AS StartTime,
             CONVERT(NVARCHAR(5), w.EndTime, 108)   AS EndTime,
-            w.Room, w.Cost1, w.CreditPossible, w.SessionCeus,
+            w.Room, w.Cost1, w.CreditPossible, w.SessionCeus, w.MaxEnrollment,
             a.AgencyName,
+            (SELECT COUNT(*) FROM core.Registration r
+              WHERE r.WorkshopID = w.WorkshopID AND r.IsCancelled = 0) AS ActiveRegs,
             (SELECT COUNT(*) FROM core.Registration r
               WHERE r.WorkshopID = w.WorkshopID AND r.Source = 'Web' AND r.IsCancelled = 0) AS WebTaken
        FROM core.WorkshopRegistrationLink l
@@ -114,18 +118,34 @@ function linkState(l: ResolvedLink): LinkState {
   const now = new Date();
   if (l.OpensAt && now < l.OpensAt) return 'not-yet-open';
   if (l.ClosesAt && now > l.ClosesAt) return 'closed';
-  if (l.WebSeatCap !== null && l.WebTaken >= l.WebSeatCap) return 'full';
+
+  // Full means the workshop's own capacity is reached, not just the web cap.
+  const left = seatsRemaining(l);
+  if (left !== null && left <= 0) return 'full';
 
   return 'open';
 }
 
-/** Coarse availability band — exact counts invite gaming. */
-function availability(l: ResolvedLink): 'plenty' | 'limited' | 'full' {
-  if (l.WebSeatCap === null) return 'plenty';
-  const left = l.WebSeatCap - l.WebTaken;
-  if (left <= 0) return 'full';
-  if (left < 10) return 'limited';
-  return 'plenty';
+/**
+ * Seats left, from the real roster rather than a coarse band.
+ *
+ * Capacity is the workshop's own MaxEnrollment. The link's WebSeatCap, when
+ * set, caps only the online share, so the effective limit is the smaller of
+ * the two. A null MaxEnrollment means the workshop has no stated limit.
+ *
+ * Returns null when the workshop is uncapped, so the UI can omit the line
+ * rather than invent a number.
+ */
+function seatsRemaining(l: ResolvedLink): number | null {
+  // ActiveRegs already counts every non-cancelled registration, web included,
+  // so it must not be added to WebTaken.
+  const byWorkshop = l.MaxEnrollment === null ? null : l.MaxEnrollment - l.ActiveRegs;
+  const byWeb = l.WebSeatCap === null ? null : l.WebSeatCap - l.WebTaken;
+
+  if (byWorkshop === null && byWeb === null) return null;
+  if (byWorkshop === null) return Math.max(0, byWeb!);
+  if (byWeb === null) return Math.max(0, byWorkshop);
+  return Math.max(0, Math.min(byWorkshop, byWeb));
 }
 
 async function logSubmission(
@@ -181,9 +201,13 @@ async function logSubmission(
  *                 state:
  *                   type: string
  *                   enum: [open, closed, not-yet-open, revoked, full]
- *                 availability:
- *                   type: string
- *                   enum: [plenty, limited, full]
+ *                 seatsRemaining:
+ *                   type: integer
+ *                   nullable: true
+ *                   description: >
+ *                     Seats left for this workshop, from the live roster.
+ *                     Null when the workshop has no stated capacity.
+ *                   example: 7
  *                 workshop:
  *                   type: object
  *                   properties:
@@ -219,7 +243,7 @@ publicRouter.get('/registration-links/:slug', async (req, res, next) => {
 
     res.json({
       state,
-      availability: availability(link),
+      seatsRemaining: seatsRemaining(link),
       opensAt: link.OpensAt?.toISOString() ?? null,
       // Sent to the browser so the confirmation screen can forward the
       // registrant to payment. Only exposed while the link is actually open.

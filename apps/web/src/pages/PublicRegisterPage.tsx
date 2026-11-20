@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+﻿import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import type { PublicLinkState } from '@pe/shared';
@@ -8,9 +8,12 @@ const schema = z.object({
   registrantRole: z.enum(['Educator', 'Parent/caregiver'], {
     message: 'Select whether you are an educator or a parent/caregiver',
   }),
-  firstName: z.string().min(1, 'First name is required').max(30),
-  lastName: z.string().min(1, 'Last name is required').max(30),
-  email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
+  firstName: z.string({ required_error: 'First name is required' }).min(1, 'First name is required').max(30),
+  lastName: z.string({ required_error: 'Last name is required' }).min(1, 'Last name is required').max(30),
+  email: z
+    .string({ required_error: 'Email is required' })
+    .min(1, 'Email is required')
+    .email('Enter a valid email address'),
   phone: z.string().max(15).optional(),
   classAges: z.string().max(255).optional(),
   childrenAges: z.string().max(255).optional(),
@@ -19,6 +22,18 @@ const schema = z.object({
 });
 
 const ROLES = ['Educator', 'Parent/caregiver'] as const;
+
+/** Visible required marker. The asterisk is hidden from screen readers,
+ *  which get the requirement from the input's `required` attribute. */
+function Req() {
+  return (
+    <>
+      <span aria-hidden="true" style={{ color: 'var(--cc-fifth-color)' }}>*</span>
+      <span className="sr-only"> (required)</span>
+    </>
+  );
+}
+
 type Role = (typeof ROLES)[number];
 
 type Errors = Record<string, string>;
@@ -259,12 +274,17 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
   }
 
   const w = link.workshop;
+  const seats = link.seatsRemaining;
+
+  // Real counts from the live roster. Null means the workshop has no stated
+  // capacity, so the line is omitted rather than inventing a number.
   const availLabel =
-    link.availability === 'full'
-      ? 'Registration is full'
-      : link.availability === 'limited'
-        ? 'Fewer than 10 places remaining'
-        : '20 or more places remaining';
+    seats === null
+      ? null
+      : seats <= 0
+        ? 'Registration is full'
+        : `${seats} ${seats === 1 ? 'spot' : 'spots'} remaining`;
+  const availTone = seats === null ? null : seats <= 0 ? 'full' : seats <= 5 ? 'limited' : 'plenty';
 
   return (
     <PublicChrome>
@@ -309,7 +329,9 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
           )}
         </dl>
 
-        <span className={`avail avail-${link.availability}`}>{availLabel}</span>
+        {availLabel && (
+          <span className={`avail avail-${availTone}`}>{availLabel}</span>
+        )}
       </div>
 
       <div className="public-card">
@@ -323,7 +345,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
 
         <form className="public-form" onSubmit={onSubmit} noValidate>
           <fieldset className="role-choice">
-            <legend>I am registering as</legend>
+            <legend>I am registering as <Req /></legend>
             <div className="role-options">
               {ROLES.map((r) => (
                 <label
@@ -353,7 +375,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
           </fieldset>
 
           <div className="field">
-            <label htmlFor="r-first">First name</label>
+            <label htmlFor="r-first">First name <Req /></label>
             <input
               id="r-first"
               value={form.firstName ?? ''}
@@ -366,7 +388,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
           </div>
 
           <div className="field">
-            <label htmlFor="r-last">Last name</label>
+            <label htmlFor="r-last">Last name <Req /></label>
             <input
               id="r-last"
               value={form.lastName ?? ''}
@@ -379,7 +401,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
           </div>
 
           <div className="field">
-            <label htmlFor="r-email">Email</label>
+            <label htmlFor="r-email">Email <Req /></label>
             <input
               id="r-email"
               type="email"
@@ -422,7 +444,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
                       }}
                       aria-label="Clear school"
                     >
-                      ×
+                      Ã—
                     </button>
                   </div>
                 ) : (

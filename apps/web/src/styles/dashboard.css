@@ -313,7 +313,7 @@
   display: none;
 }
 
-/* Hide the default topbar â€” the app shell already provides navigation. */
+/* Hide the default topbar — the app shell already provides navigation. */
 .swagger-host .swagger-ui .topbar { display: none; }
 
 .swagger-host .swagger-ui .info { margin: 16px 0; }
