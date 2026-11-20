@@ -20,6 +20,7 @@ import { participantsRouter } from './routes/participants.js';
 import { agenciesRouter } from './routes/agencies.js';
 import { presentersRouter } from './routes/presenters.js';
 import { workshopNamesRouter } from './routes/workshop-names.js';
+import { paymentsRouter } from './routes/payments.js';
 import { registrationsRouter } from './routes/registrations.js';
 import { lookupsRouter } from './routes/lookups.js';
 import { registrationLinkRouter } from './routes/registration-link.js';
@@ -177,6 +178,7 @@ const openapiSpec = swaggerJsdoc({
       { name: 'Agencies', description: 'Schools and organisations' },
   { name: 'Presenters', description: 'Presenters and staff' },
   { name: 'Workshop catalog', description: 'Reusable workshop definitions' },
+  { name: 'Payments', description: 'Payments and receipts' },
       { name: 'Registrations', description: 'Enrolments and payments' },
       { name: 'Public registration', description: 'Shareable links and the public form' },
       { name: 'Lookups', description: 'Reference data' },
@@ -201,6 +203,7 @@ app.use('/api/participants', participantsRouter);
 app.use('/api/agencies', agenciesRouter);
 app.use('/api/presenters', presentersRouter);
 app.use('/api/workshop-names', workshopNamesRouter);
+app.use('/api/payments', paymentsRouter);
 app.use('/api/registrations', registrationsRouter);
 app.use('/api/lookups', lookupsRouter);
 

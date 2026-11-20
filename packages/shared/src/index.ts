@@ -561,6 +561,75 @@ export interface WorkshopNameWrite {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Payments and receipts                                              */
+/* ------------------------------------------------------------------ */
+
+export interface PaymentRow {
+  RegistrationID: number;
+  PaidAmount: number | null;
+  PaidDate: string | null;
+  ReceiptNumber: number | null;
+  CheckNumber: number | null;
+  CheckTotal: number | null;
+  IsCancelled: boolean;
+  IsScholarship: boolean;
+  PaymentMethod: string | null;
+  ParticipantID: number | null;
+  FirstName: string | null;
+  LastName: string | null;
+  WorkshopID: number | null;
+  WorkshopCode: string | null;
+  WorkshopName: string | null;
+  PaymentID: number | null;
+  PaymentRecordTotal: number | null;
+  Payee: string | null;
+}
+
+export interface PaymentListResponse {
+  data: PaymentRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  /** Totals for the whole filtered set, not just the page. */
+  totals: { total: number; paid: number; refunded: number };
+}
+
+export interface PaymentDetail extends PaymentRow {
+  PaymentMethodID: number | null;
+  PaymentCheckNumber: number | null;
+  PaymentReceiptNumber: number | null;
+  /** Participant's email. Named Email on core.Participant; HomeEmail is a
+   *  PresenterStaff column and does not exist here. */
+  Email: string | null;
+  StartDate: string | null;
+  SchoolYear: string | null;
+}
+
+export interface PaymentWrite {
+  paidAmount?: number | null;
+  paidDate?: string | null;
+  paymentMethodId?: number | null;
+  receiptNumber?: number | null;
+  checkNumber?: number | null;
+  payeeId?: number | null;
+}
+
+export interface PaymentSummary {
+  byYear: {
+    SchoolYearID: number;
+    SchoolYear: string | null;
+    Registrations: number;
+    Amount: number;
+  }[];
+  byMethod: {
+    PaymentMethodID: number;
+    PaymentMethod: string | null;
+    Registrations: number;
+    Amount: number;
+  }[];
+}
+
+/* ------------------------------------------------------------------ */
 /*  Public registration                                                */
 /* ------------------------------------------------------------------ */
 

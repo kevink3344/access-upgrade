@@ -328,6 +328,34 @@ export const api = {
     remove: (id: number) => request<void>(`/api/workshop-names/${id}`, { method: 'DELETE' }),
   },
 
+  payments: {
+    list: (params: {
+      page?: number;
+      pageSize?: number;
+      q?: string;
+      paymentMethodId?: number;
+      status?: 'all' | 'paid' | 'unpaid' | 'refunded';
+      from?: string;
+      to?: string;
+      includeCancelled?: boolean;
+    } = {}) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<import('@pe/shared').PaymentListResponse>(`/api/payments${suffix}`);
+    },
+    get: (registrationId: number) =>
+      request<import('@pe/shared').PaymentDetail>(`/api/payments/${registrationId}`),
+    summary: () => request<import('@pe/shared').PaymentSummary>('/api/payments/summary'),
+    update: (registrationId: number, body: Partial<import('@pe/shared').PaymentWrite>) =>
+      request<{ registrationId: number }>(`/api/payments/${registrationId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+  },
+
   lookups: {
     list: () => request<{ data: string[] }>('/api/lookups'),
     get: (name: string) =>
