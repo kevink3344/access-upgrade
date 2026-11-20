@@ -51,14 +51,22 @@ jobs:
         run: |
           set -euo pipefail
           OUT="$RUNNER_TEMP/package"
+          rm -rf "$OUT"
           mkdir -p "$OUT"
 
           # API: compiled output + manifest
           cp -r apps/api/dist "$OUT/dist"
           cp apps/api/package.json "$OUT/package.json"
 
-          # Web: built SPA, served by the API as static files
+          # Web: built SPA, served by the API as static files.
+          # The parent directory must exist first - `cp` does not create
+          # intermediate directories, and fails if $OUT/web is missing.
+          mkdir -p "$OUT/web"
           cp -r apps/web/dist "$OUT/web/dist"
+
+          # Fail loudly here rather than after a slow upload.
+          test -f "$OUT/dist/server.js"      || { echo "::error::missing dist/server.js"; exit 1; }
+          test -f "$OUT/web/dist/index.html" || { echo "::error::missing web/dist/index.html"; exit 1; }
 
           # Production dependencies only. The workspace protocol for
           # @pe/shared is types-only, so it is not needed at runtime.
