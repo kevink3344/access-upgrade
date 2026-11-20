@@ -205,8 +205,11 @@
 
 .public-form .role-option:hover { border-color: var(--primary-color); }
 
+/* Selected role gets a heavier bottom edge so the choice is obvious at a
+   glance, including on a phone where the full border is easy to miss. */
 .public-form .role-option.is-selected {
   border-color: var(--primary-color);
+  border-bottom-width: 4px;
   background: hsl(var(--primary-color-hsl) / 5%);
 }
 
@@ -340,5 +343,30 @@
 @media (max-width: 640px) {
   .public-card { padding: 20px 16px; }
   .public-main { padding: 16px 14px 48px; }
-  .public-card h1 { font-size: 21px; }
+
+  /* The form reads small on a phone, so the whole scale is raised ~25%.
+     Inputs stay at 16px or above - anything smaller makes iOS Safari zoom
+     the page on focus, which is worse than small text. */
+  .public-card h1 { font-size: 27px; }
+  .public-card h2 { font-size: 22px; }
+  .public-meta div { font-size: 17px; }
+  .public-meta dt { font-size: 13px; }
+  .avail { font-size: 15px; }
+  .public-terminal h1 { font-size: 27px; }
+  .public-terminal p { font-size: 18px; }
+
+  .public-form .role-choice legend { font-size: 16px; }
+  .role-option .role-label { font-size: 19px; }
+  .role-option .role-hint { font-size: 15.5px; }
+  .public-form label { font-size: 16px; }
+  .public-form input,
+  .public-form select,
+  .public-form textarea { font-size: 18px; }
+  .public-form .error { font-size: 15.5px; }
+  .public-form .btn-primary { font-size: 19px; }
+  .payment-notice { font-size: 17px; }
+
+  .public-header b { font-size: 19px; }
+  .public-header small { font-size: 14px; }
+  .public-foot { font-size: 14px; }
 }
