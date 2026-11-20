@@ -10,6 +10,7 @@
     "./tokens.css": "./src/tokens.css"
   },
   "scripts": {
+    "build": "echo \"@pe/shared is types and CSS only - nothing to build\"",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

@@ -126,6 +126,7 @@ it is safe to run against a populated database. To change an existing object, ad
 ## Documentation
 
 - [Migration plan](docs/plans/access-migration.md) — architecture, schema, phases, risks
+- [Deployment](docs/features/deployment.md) — Azure App Service, the pipeline, required settings
 - [Schema environments](docs/features/schema-environments.md) — production vs test, and the dual-change rule
 - [Public registration](docs/features/public-registration.md) — the two-audience split
 - [Responsive & mobile](docs/features/responsive-mobile.md) — the phone-first requirement

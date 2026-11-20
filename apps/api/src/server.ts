@@ -1,9 +1,12 @@
-import express from 'express';
+﻿import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { env, isProd } from './env.js';
 import { getPool, closePool } from './db.js';
@@ -195,9 +198,53 @@ app.use('/api/agencies', agenciesRouter);
 app.use('/api/registrations', registrationsRouter);
 app.use('/api/lookups', lookupsRouter);
 
-// Public surface — no auth. Must be mounted before the auth-guarded routes
+// Public surface â€” no auth. Must be mounted before the auth-guarded routes
 // would ever apply; it has its own rate limits and audit logging.
 app.use('/api/public', publicRouter);
+
+// ---- Static frontend -----------------------------------------------------
+// In production the built React app is served from the same origin as the
+// API, so staff use one URL and there is no CORS to configure. In
+// development Vite serves the app on its own port and this block is skipped.
+//
+// The package is ESM ("type": "module"), so __dirname does not exist.
+// The web build can sit in either of two places depending on how the app is
+// packaged, so both are probed rather than assuming one:
+//   deployed:   <root>/dist/server.js  +  <root>/web/dist
+//   in-repo:    apps/api/dist/server.js +  apps/web/dist
+const here = path.dirname(fileURLToPath(import.meta.url));
+const webDist = [
+  path.resolve(here, '../web/dist'),
+  path.resolve(here, '../../web/dist'),
+].find((p) => fs.existsSync(path.join(p, 'index.html')));
+
+if (isProd && webDist) {
+  app.use(
+    express.static(webDist, {
+      index: false,
+      setHeaders(res, filePath) {
+        // Hashed assets are immutable; index.html must never be cached or
+        // users keep a stale shell after a deploy. Vite hashes are base64url
+        // (letters, digits, - and _), not hex, so match that alphabet.
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache');
+        } else if (/[.-][A-Za-z0-9_-]{8,}\.(js|css|woff2?)$/.test(filePath)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    }),
+  );
+
+  // Client-side routing: any non-API GET returns index.html so deep links
+  // like /workshops/3023 work on refresh.
+  app.get(/^\/(?!api\/|swagger|openapi\.json|health).*/, (_req, res) => {
+    res.sendFile(path.join(webDist, 'index.html'));
+  });
+
+  console.log(`  Web      serving ${webDist}`);
+} else if (isProd) {
+  console.warn('  Web      no build found - serving the API only');
+}
 
 // ---- Errors --------------------------------------------------------------
 app.use((_req, res) => {
