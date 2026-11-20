@@ -1,5 +1,5 @@
-/* =====================================================================
-   Public registration — standalone surface.
+﻿/* =====================================================================
+   Public registration â€” standalone surface.
    No staff chrome: no sidebar, no header, no navigation.
    ===================================================================== */
 
@@ -31,7 +31,7 @@
   background: rgba(255, 255, 255, .16);
   display: grid;
   place-items: center;
-  font-family: var(--font-secondary);
+  font-family: var(--font-primary);
   font-weight: 700;
   font-size: 15px;
   flex-shrink: 0;
@@ -39,7 +39,7 @@
 
 .public-header b {
   display: block;
-  font-family: var(--font-secondary);
+  font-family: var(--font-primary);
   font-size: 16px;
   line-height: 1.2;
 }
@@ -166,7 +166,7 @@
 /* ---------- form ---------- */
 .public-form .field { margin-bottom: 16px; }
 
-/* Role branch — the first thing on the form, so it gets card-like emphasis. */
+/* Role branch â€” the first thing on the form, so it gets card-like emphasis. */
 .public-form .role-choice {
   border: 0;
   padding: 0;
@@ -288,7 +288,7 @@
   margin-top: 8px;
 }
 
-/* Honeypot — hidden from people, visible to bots. */
+/* Honeypot â€” hidden from people, visible to bots. */
 .hp-field {
   position: absolute;
   left: -9999px;

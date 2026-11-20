@@ -1,4 +1,4 @@
-/* =====================================================================
+﻿/* =====================================================================
    Dashboard
    ===================================================================== */
 
@@ -64,7 +64,7 @@
 }
 
 .stat-card .value {
-  font-family: var(--font-secondary);
+  font-family: var(--font-primary);
   font-size: 30px;
   font-weight: 700;
   color: var(--text-heading);
@@ -313,11 +313,11 @@
   display: none;
 }
 
-/* Hide the default topbar — the app shell already provides navigation. */
+/* Hide the default topbar â€” the app shell already provides navigation. */
 .swagger-host .swagger-ui .topbar { display: none; }
 
 .swagger-host .swagger-ui .info { margin: 16px 0; }
-.swagger-host .swagger-ui .info .title { font-family: var(--font-secondary); color: var(--text-heading); }
+.swagger-host .swagger-ui .info .title { font-family: var(--font-primary); color: var(--text-heading); }
 
 .swagger-host .swagger-ui .opblock-tag {
   font-family: var(--font-primary);

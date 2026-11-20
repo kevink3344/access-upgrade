@@ -47,8 +47,11 @@
   --status-paid: #BED600;
 
   /* ---- type ---- */
+  /* WCPSS uses Open Sans for everything, headings included. There is no
+     secondary typeface on wcpss.net, so --font-secondary is kept only as an
+     alias for code that still references it. */
   --font-primary: 'Open Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-secondary: 'Solway', Georgia, serif;
+  --font-secondary: 'Open Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
 
   --fs-body: 16.5px;
@@ -89,7 +92,7 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   color: var(--text-heading);
-  font-family: var(--font-secondary);
+  font-family: var(--font-primary);
   font-weight: 700;
   margin: 0 0 .5em;
   line-height: 1.25;
