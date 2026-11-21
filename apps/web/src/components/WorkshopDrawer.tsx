@@ -6,6 +6,7 @@ import { api, HttpError } from '../api';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { IconAlert } from './icons';
 import { RegistrationLinkPanel } from './RegistrationLinkPanel';
+import { WorkshopRegistrants } from './WorkshopRegistrants';
 
 const dateOrEmpty = z
   .string()
@@ -77,13 +78,17 @@ export function WorkshopDrawer({
   workshopId,
   canDelete,
   onClose,
+  onOpenRegistration,
 }: {
   workshopId: number | null;
   canDelete: boolean;
   onClose: () => void;
+  onOpenRegistration: (registrationId: number) => void;
 }) {
   const isEdit = workshopId !== null;
   const qc = useQueryClient();
+
+  const [tab, setTab] = useState<'details' | 'registrants'>('details');
 
   // Stop the page behind from scrolling while the drawer is open.
   useScrollLock();
@@ -254,14 +259,64 @@ export function WorkshopDrawer({
           <button type="button" className="drawer-close" onClick={onClose} aria-label="Close">×</button>
         </header>
 
+        {isEdit && (
+          <div className="drawer-tabs" role="tablist" aria-label="Workshop sections">
+            <button
+              type="button"
+              role="tab"
+              id="tab-details"
+              className="drawer-tab"
+              aria-selected={tab === 'details'}
+              aria-controls="panel-details"
+              onClick={() => setTab('details')}
+            >
+              Details
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-registrants"
+              className="drawer-tab"
+              aria-selected={tab === 'registrants'}
+              aria-controls="panel-registrants"
+              onClick={() => setTab('registrants')}
+            >
+              Registrants
+              {existing && existing.Registered > 0 && (
+                <span className="drawer-tab-count">{existing.Registered}</span>
+              )}
+            </button>
+          </div>
+        )}
+
         {isEdit && isLoading ? (
           <div className="drawer-body">
             {[0, 1, 2].map((i) => (
               <div key={i} className="skeleton" style={{ height: 44, marginBottom: 12 }} />
             ))}
           </div>
+        ) : isEdit && tab === 'registrants' ? (
+          <div
+            className="drawer-body"
+            role="tabpanel"
+            id="panel-registrants"
+            aria-labelledby="tab-registrants"
+          >
+            <WorkshopRegistrants
+              workshopId={workshopId}
+              capacity={existing?.MaxEnrollment ?? null}
+              onOpenRegistration={onOpenRegistration}
+            />
+          </div>
         ) : (
-          <form className="drawer-body" onSubmit={onSubmit} noValidate>
+          <form
+            className="drawer-body"
+            onSubmit={onSubmit}
+            noValidate
+            role={isEdit ? 'tabpanel' : undefined}
+            id={isEdit ? 'panel-details' : undefined}
+            aria-labelledby={isEdit ? 'tab-details' : undefined}
+          >
             {formError && (
               <div className="alert alert-error" role="alert">
                 <IconAlert width={18} height={18} />

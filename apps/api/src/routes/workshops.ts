@@ -242,6 +242,128 @@ workshopsRouter.get('/lookup-names', requireAuth, async (_req, res, next) => {
 
 /**
  * @openapi
+ * /api/workshops/{id}/registrants:
+ *   get:
+ *     tags: [Workshops]
+ *     summary: Registrants for a workshop
+ *     description: >
+ *       The roster shown on the Registrants tab. Counts are computed from the
+ *       same predicate as the rows, so the headline totals always match the
+ *       list. Defaults to active (non-cancelled) registrations.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *       - { in: query, name: status, schema: { type: string, enum: [active, cancelled, all], default: active } }
+ *       - { in: query, name: q, schema: { type: string } }
+ *       - { in: query, name: page, schema: { type: integer, default: 1 } }
+ *       - { in: query, name: pageSize, schema: { type: integer, default: 50 } }
+ *     responses:
+ *       200:
+ *         description: Registrant roster with reconciled counts
+ *       404: { description: Workshop not found }
+ */
+workshopsRouter.get('/:id/registrants', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+
+    const parsed = z
+      .object({
+        status: z.enum(['active', 'cancelled', 'all']).default('active'),
+        q: z.string().trim().optional(),
+        page: z.coerce.number().int().min(1).default(1),
+        pageSize: z.coerce.number().int().min(1).max(200).default(50),
+      })
+      .safeParse(req.query);
+
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'bad_request',
+        message: 'Invalid query parameters',
+        details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      });
+      return;
+    }
+
+    const { status, q, page, pageSize } = parsed.data;
+
+    const exists = await query<{ n: number }>(
+      'SELECT COUNT(*) AS n FROM core.Workshop WHERE WorkshopID = @id',
+      { id: { type: sql.Int, value: id } },
+    );
+    if ((exists.recordset[0]?.n ?? 0) === 0) {
+      res.status(404).json({ error: 'not_found', message: 'Workshop not found' });
+      return;
+    }
+
+    const where = ['r.WorkshopID = @wid'];
+    const params: Record<string, SqlParam> = { wid: { type: sql.Int, value: id } };
+
+    if (status === 'active') where.push('r.IsCancelled = 0');
+    if (status === 'cancelled') where.push('r.IsCancelled = 1');
+    if (q) {
+      where.push('(p.FirstName LIKE @q OR p.LastName LIKE @q OR p.Email LIKE @q)');
+      params.q = { type: sql.NVarChar(260), value: `%${q}%` };
+    }
+    const whereSql = `WHERE ${where.join(' AND ')}`;
+
+    const from = `
+      FROM core.Registration r
+      JOIN core.Participant p ON p.ParticipantID = r.ParticipantID
+      LEFT JOIN core.Agency a ON a.AgencyID = p.AgencyID`;
+
+    // Headline counts use the unfiltered workshop totals so the chips stay
+    // stable while the user types in the search box.
+    const counts = await query<{ Active: number; Cancelled: number; Attended: number }>(
+      `SELECT
+         SUM(CASE WHEN r.IsCancelled = 0 THEN 1 ELSE 0 END) AS Active,
+         SUM(CASE WHEN r.IsCancelled = 1 THEN 1 ELSE 0 END) AS Cancelled,
+         SUM(CASE WHEN r.Attended = 1 THEN 1 ELSE 0 END) AS Attended
+       FROM core.Registration r
+       WHERE r.WorkshopID = @wid`,
+      { wid: { type: sql.Int, value: id } },
+    );
+
+    const total = await query<{ n: number }>(`SELECT COUNT(*) AS n ${from} ${whereSql}`, params);
+
+    const rows = await query(
+      `SELECT r.RegistrationID, r.ParticipantID,
+              CONCAT(p.FirstName, ' ', p.LastName) AS ParticipantName,
+              p.Email, a.AgencyName,
+              r.RegistrationDate, r.PaidAmount, r.IsCancelled, r.Attended, r.Source
+       ${from} ${whereSql}
+       ORDER BY p.LastName, p.FirstName
+       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
+      {
+        ...params,
+        offset: { type: sql.Int, value: (page - 1) * pageSize },
+        limit: { type: sql.Int, value: pageSize },
+      },
+    );
+
+    const c = counts.recordset[0];
+    res.json({
+      data: rows.recordset,
+      page,
+      pageSize,
+      total: total.recordset[0]?.n ?? 0,
+      counts: {
+        active: c?.Active ?? 0,
+        cancelled: c?.Cancelled ?? 0,
+        attended: c?.Attended ?? 0,
+        all: (c?.Active ?? 0) + (c?.Cancelled ?? 0),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
  * /api/workshops/{id}:
  *   get:
  *     tags: [Workshops]
@@ -269,7 +391,13 @@ workshopsRouter.get('/:id', requireAuth, async (req, res, next) => {
       `SELECT w.*, n.WorkshopName, n.ShortName, sy.SchoolYear, c.CategoryCode,
               a.AgencyName,
               (SELECT COUNT(*) FROM core.Registration r
-                WHERE r.WorkshopID = w.WorkshopID AND r.IsCancelled = 0) AS Registered
+                WHERE r.WorkshopID = w.WorkshopID AND r.IsCancelled = 0) AS Registered,
+              (SELECT COUNT(*) FROM core.Registration r
+                WHERE r.WorkshopID = w.WorkshopID AND r.IsCancelled = 1) AS CancelledCount,
+              (SELECT COUNT(*) FROM core.Registration r
+                WHERE r.WorkshopID = w.WorkshopID) AS RegistrationCount,
+              (SELECT COUNT(*) FROM core.Registration r
+                WHERE r.WorkshopID = w.WorkshopID AND r.Attended = 1) AS AttendedCount
          FROM core.Workshop w
          LEFT JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
          LEFT JOIN ref.SchoolYear sy ON sy.SchoolYearID = w.SchoolYearID
@@ -333,6 +461,8 @@ workshopsRouter.get('/:id/sessions', requireAuth, async (req, res, next) => {
  *   get:
  *     tags: [Workshops]
  *     summary: Registrations for a workshop
+ *     deprecated: true
+ *     description: Superseded by /api/workshops/{id}/registrants.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: integer } }

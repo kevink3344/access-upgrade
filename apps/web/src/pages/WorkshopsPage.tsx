@@ -139,6 +139,15 @@ export function WorkshopsPage() {
       }
   }
 
+  /**
+   * The roster is read-only, so a row hands off to the Registrations screen
+   * with that record open rather than editing in place.
+   */
+  function openRegistration(registrationId: number) {
+    window.history.pushState({}, '', `/registrations?edit=${registrationId}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }
+
   return (
     <AppShell currentPath="/workshops" title="Workshops">
       <div className="page-head">
@@ -363,6 +372,7 @@ export function WorkshopsPage() {
           workshopId={editingId}
           canDelete={!!canDelete}
           onClose={() => setDrawerOpen(false)}
+          onOpenRegistration={openRegistration}
         />
       )}
     </AppShell>

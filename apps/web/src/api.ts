@@ -15,12 +15,20 @@ export class HttpError extends Error {
 }
 
 export function getToken(): string | null {
-  return sessionStorage.getItem(TOKEN_KEY);
+  // "Remember me" stores in localStorage so the session survives a browser
+  // restart; otherwise sessionStorage keeps it to the current tab.
+  return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY);
 }
 
-export function setToken(token: string | null): void {
-  if (token) sessionStorage.setItem(TOKEN_KEY, token);
-  else sessionStorage.removeItem(TOKEN_KEY);
+export function setToken(token: string | null, remember = false): void {
+  // Always clear both stores so switching modes can't leave a stale token
+  // behind in the other one.
+  localStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+
+  if (!token) return;
+  if (remember) localStorage.setItem(TOKEN_KEY, token);
+  else sessionStorage.setItem(TOKEN_KEY, token);
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -55,10 +63,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  login: (email: string, password: string) =>
+  login: (email: string, password: string, rememberMe = false) =>
     request<LoginResponse>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, rememberMe }),
     }),
 
   me: () => request<AuthUser>('/api/auth/me'),
@@ -140,6 +148,26 @@ export const api = {
 
     sessions: (id: number) =>
       request<{ data: import('@pe/shared').WorkshopSessionRow[] }>(`/api/workshops/${id}/sessions`),
+
+    /** Registrant roster for the Registrants tab. */
+    registrants: (
+      id: number,
+      params: {
+        status?: 'active' | 'cancelled' | 'all';
+        q?: string;
+        page?: number;
+        pageSize?: number;
+      } = {},
+    ) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<import('@pe/shared').WorkshopRegistrantsResponse>(
+        `/api/workshops/${id}/registrants${suffix}`,
+      );
+    },
 
     /** Workshop catalog titles for the picker. */
     lookupNames: () =>
@@ -296,7 +324,13 @@ export const api = {
   },
 
   workshopNames: {
-    list: (params: { page?: number; pageSize?: number; q?: string; includeUnused?: boolean } = {}) => {
+    list: (params: {
+      page?: number;
+      pageSize?: number;
+      q?: string;
+      includeUnused?: boolean;
+      sort?: 'newest' | 'title';
+    } = {}) => {
       const qs = new URLSearchParams();
       for (const [k, v] of Object.entries(params)) {
         if (v !== undefined && v !== '') qs.set(k, String(v));

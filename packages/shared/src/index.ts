@@ -23,6 +23,8 @@ export interface LoginResponse {
   token: string;
   expiresAt: string;
   user: AuthUser;
+  /** True when the user asked to stay signed in across browser restarts. */
+  rememberMe: boolean;
 }
 
 /** Dashboard summary — real counts from the migrated database. */
@@ -103,6 +105,34 @@ export interface WorkshopListResponse {
   total: number;
 }
 
+/** A single row on the workshop Registrants tab. */
+export interface WorkshopRegistrant {
+  RegistrationID: number;
+  ParticipantID: number;
+  ParticipantName: string | null;
+  Email: string | null;
+  AgencyName: string | null;
+  RegistrationDate: string | null;
+  PaidAmount: number | null;
+  IsCancelled: boolean;
+  Attended: boolean;
+  Source: string;
+}
+
+export interface WorkshopRegistrantsResponse {
+  data: WorkshopRegistrant[];
+  page: number;
+  pageSize: number;
+  total: number;
+  /** Workshop-wide totals, independent of the current search filter. */
+  counts: {
+    active: number;
+    cancelled: number;
+    attended: number;
+    all: number;
+  };
+}
+
 /** Raw detail row — column names as returned by SQL. */
 export interface WorkshopDetail {
   WorkshopID: number;
@@ -143,6 +173,11 @@ export interface WorkshopDetail {
   CategoryCode: string | null;
   AgencyName: string | null;
   Registered: number;
+  /** Cancelled registrations, excluded from `Registered`. */
+  CancelledCount: number;
+  /** `Registered + CancelledCount` — every registration on the workshop. */
+  RegistrationCount: number;
+  AttendedCount: number;
 }
 
 /** Writable fields — camelCase, matches the API contract. */
