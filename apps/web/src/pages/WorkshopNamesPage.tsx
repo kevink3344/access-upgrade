@@ -15,6 +15,7 @@ export function WorkshopNamesPage() {
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [showUnused, setShowUnused] = useState(true);
+  const [sort, setSort] = useState<'newest' | 'title'>('newest');
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
@@ -40,13 +41,14 @@ export function WorkshopNamesPage() {
   }, [search]);
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['workshop-names', { page, q: debounced, showUnused }],
+    queryKey: ['workshop-names', { page, q: debounced, showUnused, sort }],
     queryFn: () =>
       api.workshopNames.list({
         page,
         pageSize,
         q: debounced || undefined,
         includeUnused: showUnused,
+        sort,
       }),
   });
 
@@ -101,6 +103,19 @@ export function WorkshopNamesPage() {
           />
           <span>Show unused</span>
         </label>
+
+        <select
+          className="toolbar-select"
+          aria-label="Sort order"
+          value={sort}
+          onChange={(e) => {
+            setSort(e.target.value as 'newest' | 'title');
+            setPage(1);
+          }}
+        >
+          <option value="newest">Newest first</option>
+          <option value="title">Title A–Z</option>
+        </select>
 
         <span className="toolbar-count">{total.toLocaleString()} entries</span>
       </div>

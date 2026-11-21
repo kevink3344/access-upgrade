@@ -129,6 +129,7 @@ it is safe to run against a populated database. To change an existing object, ad
 - [Email setup](docs/features/email-setup.md) — Microsoft Graph configuration for sending mail
 - [Deployment](docs/features/deployment.md) — Azure App Service, the pipeline, required settings
 - [Schema environments](docs/features/schema-environments.md) — production vs test, and the dual-change rule
+- [SQL password rotation](docs/features/sql-password-rotation.md) — where the credential lives and how to change it
 - [Public registration](docs/features/public-registration.md) — the two-audience split
 - [Responsive & mobile](docs/features/responsive-mobile.md) — the phone-first requirement
 - [School Cash Online integration](docs/plans/schoolcash-integration.md) — payment data plan

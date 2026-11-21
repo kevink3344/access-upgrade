@@ -11,6 +11,7 @@ const listQuery = z.object({
   pageSize: z.coerce.number().int().min(1).max(200).default(25),
   q: z.string().trim().optional(),
   includeUnused: queryBoolean(true),
+  sort: z.enum(['newest', 'title']).default('newest'),
 });
 
 /**
@@ -29,6 +30,14 @@ const listQuery = z.object({
  *       - { in: query, name: pageSize, schema: { type: integer, default: 25, maximum: 200 } }
  *       - { in: query, name: q, schema: { type: string } }
  *       - { in: query, name: includeUnused, schema: { type: boolean, default: true } }
+ *       - in: query
+ *         name: sort
+ *         schema: { type: string, enum: [newest, title], default: newest }
+ *         description: >
+ *           `newest` orders by WorkshopNameID descending. The catalog has no
+ *           created-date column, but the ID is assigned sequentially on insert
+ *           and the highest IDs are the most recently added titles, so it is a
+ *           faithful stand-in for creation order.
  *     responses:
  *       200:
  *         description: Paginated catalog
@@ -55,7 +64,7 @@ workshopNamesRouter.get('/', requireAuth, async (req, res, next) => {
       return;
     }
 
-    const { page, pageSize, q, includeUnused } = parsed.data;
+    const { page, pageSize, q, includeUnused, sort } = parsed.data;
 
     const where: string[] = [];
     const params: Record<string, SqlParam> = {};
@@ -69,6 +78,10 @@ workshopNamesRouter.get('/', requireAuth, async (req, res, next) => {
     }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const orderSql =
+      sort === 'title'
+        ? 'ORDER BY n.WorkshopName'
+        : 'ORDER BY n.WorkshopNameID DESC';
 
     const count = await query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM core.WorkshopName n ${whereSql}`,
@@ -84,7 +97,7 @@ workshopNamesRouter.get('/', requireAuth, async (req, res, next) => {
          FROM core.WorkshopName n
          LEFT JOIN ref.Age a ON a.AgesID = n.AgesID
          ${whereSql}
-        ORDER BY n.WorkshopName
+        ${orderSql}
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
       {
         ...params,
