@@ -165,6 +165,57 @@ export const api = {
     sessions: (id: number) =>
       request<{ data: import('@pe/shared').WorkshopSessionRow[] }>(`/api/workshops/${id}/sessions`),
 
+    addSession: (id: number, body: { sessionDate: string; staffId?: number | null }) =>
+      request<{ workshopSessionId: number }>(`/api/workshops/${id}/sessions`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    updateSession: (
+      id: number,
+      sessionId: number,
+      body: { sessionDate?: string; staffId?: number | null },
+    ) =>
+      request<void>(`/api/workshops/${id}/sessions/${sessionId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+
+    removeSession: (id: number, sessionId: number) =>
+      request<void>(`/api/workshops/${id}/sessions/${sessionId}`, { method: 'DELETE' }),
+
+    /** Attendance checklist for one session. */
+    attendance: (id: number, sessionId: number) =>
+      request<{ data: import('@pe/shared').AttendanceRow[] }>(
+        `/api/workshops/${id}/sessions/${sessionId}/attendance`,
+      ),
+
+    setAttendance: (
+      id: number,
+      sessionId: number,
+      participantId: number,
+      body: { attended: boolean; isLate?: boolean },
+    ) =>
+      request<void>(`/api/workshops/${id}/sessions/${sessionId}/attendance/${participantId}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+
+    /** Presenters assigned to a workshop. */
+    presenters: (id: number) =>
+      request<{ data: import('@pe/shared').WorkshopPresenterRow[] }>(
+        `/api/workshops/${id}/presenters`,
+      ),
+
+    addPresenter: (id: number, presenterStaffId: number) =>
+      request<{ workshopPresenterId: number }>(`/api/workshops/${id}/presenters`, {
+        method: 'POST',
+        body: JSON.stringify({ presenterStaffId }),
+      }),
+
+    removePresenter: (id: number, presenterRowId: number) =>
+      request<void>(`/api/workshops/${id}/presenters/${presenterRowId}`, { method: 'DELETE' }),
+
     /** Capacity notification settings for the Notifications tab. */
     notificationSettings: (id: number) =>
       request<import('@pe/shared').WorkshopNotificationSettings>(

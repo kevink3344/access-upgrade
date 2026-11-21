@@ -7,6 +7,9 @@ import { useScrollLock } from '../hooks/useScrollLock';
 import { IconAlert } from './icons';
 import { RegistrationLinkPanel } from './RegistrationLinkPanel';
 import { WorkshopRegistrants } from './WorkshopRegistrants';
+import { WorkshopPresenters } from './WorkshopPresenters';
+import { WorkshopSessions } from './WorkshopSessions';
+import { WorkshopAttendance } from './WorkshopAttendance';
 import { WorkshopNotifications } from './WorkshopNotifications';
 import { DrawerResizeHandle } from './DrawerResizeHandle';
 import { useResizableDrawer } from '../hooks/useResizableDrawer';
@@ -105,7 +108,9 @@ export function WorkshopDrawer({
   const isEdit = workshopId !== null;
   const qc = useQueryClient();
 
-  const [tab, setTab] = useState<'details' | 'registrants' | 'notifications'>('details');
+  const [tab, setTab] = useState<
+    'details' | 'registrants' | 'presenters' | 'sessions' | 'attendance' | 'notifications'
+  >('details');
   const resize = useResizableDrawer('pe.drawerWidth.workshop');
 
   // Stop the page behind from scrolling while the drawer is open.
@@ -308,6 +313,39 @@ export function WorkshopDrawer({
             <button
               type="button"
               role="tab"
+              id="tab-presenters"
+              className="drawer-tab"
+              aria-selected={tab === 'presenters'}
+              aria-controls="panel-presenters"
+              onClick={() => setTab('presenters')}
+            >
+              Presenters
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-sessions"
+              className="drawer-tab"
+              aria-selected={tab === 'sessions'}
+              aria-controls="panel-sessions"
+              onClick={() => setTab('sessions')}
+            >
+              Sessions
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-attendance"
+              className="drawer-tab"
+              aria-selected={tab === 'attendance'}
+              aria-controls="panel-attendance"
+              onClick={() => setTab('attendance')}
+            >
+              Attendance
+            </button>
+            <button
+              type="button"
+              role="tab"
               id="tab-notifications"
               className="drawer-tab"
               aria-selected={tab === 'notifications'}
@@ -337,6 +375,33 @@ export function WorkshopDrawer({
               capacity={existing?.MaxEnrollment ?? null}
               onOpenRegistration={onOpenRegistration}
             />
+          </div>
+        ) : isEdit && tab === 'presenters' ? (
+          <div
+            className="drawer-body"
+            role="tabpanel"
+            id="panel-presenters"
+            aria-labelledby="tab-presenters"
+          >
+            <WorkshopPresenters workshopId={workshopId} canEdit={!!canEdit} />
+          </div>
+        ) : isEdit && tab === 'sessions' ? (
+          <div
+            className="drawer-body"
+            role="tabpanel"
+            id="panel-sessions"
+            aria-labelledby="tab-sessions"
+          >
+            <WorkshopSessions workshopId={workshopId} canEdit={!!canEdit} />
+          </div>
+        ) : isEdit && tab === 'attendance' ? (
+          <div
+            className="drawer-body"
+            role="tabpanel"
+            id="panel-attendance"
+            aria-labelledby="tab-attendance"
+          >
+            <WorkshopAttendance workshopId={workshopId} canEdit={!!canEdit} />
           </div>
         ) : isEdit && tab === 'notifications' ? (
           <div

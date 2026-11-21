@@ -972,6 +972,105 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
   .cal-day-item { min-height: 56px; }
 }
 
+/* ---------- workshop drawer: presenters / sessions / attendance ---------- */
+.tab-section { display: flex; flex-direction: column; gap: 12px; }
+
+.tab-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tab-summary {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.tab-summary strong { color: var(--text-heading); }
+
+.tab-empty {
+  margin: 0;
+  padding: 24px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.tab-add {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+
+.tab-add .field { flex: 1 1 180px; }
+
+.tab-add .input { min-height: 38px; padding: 7px 10px; font-size: 13.5px; }
+
+.tab-table { font-size: 13px; }
+
+.presenter-list { list-style: none; margin: 0; padding: 0; }
+
+.presenter-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.presenter-list li + li { border-top: 1px solid var(--border-subtle); }
+
+.presenter-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.presenter-name { font-size: 13.5px; font-weight: 600; color: var(--text-heading); }
+
+.presenter-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.att-list { list-style: none; margin: 0; padding: 0; }
+
+.att-list li + li { border-top: 1px solid var(--border-subtle); }
+
+.att-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  cursor: pointer;
+  min-height: 48px;
+}
+
+.att-row input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+.att-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+
+.att-name { font-size: 13.5px; font-weight: 600; color: var(--text-heading); }
+
+.att-meta { font-size: 12px; color: var(--text-muted); }
+
+.att-list li.is-present .att-name { color: var(--primary-dark); }
+
+.att-list li.is-present { background: hsl(var(--primary-color-hsl) / 4%); }
+
 /* ---------- reports hub ---------- */
 .reports-layout {
   display: grid;
@@ -1249,7 +1348,14 @@ body.drawer-resizing {
   border-bottom: 1px solid var(--surface-neutral);
   flex-shrink: 0;
   background: var(--surface-card);
+  /* Six tabs no longer fit a phone. Without this the last one is clipped and
+     unreachable, because the strip is not a scroll container. */
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
+
+.drawer-tab { flex: 0 0 auto; }
 
 .drawer-tab {
   position: relative;

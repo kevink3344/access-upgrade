@@ -745,6 +745,542 @@ workshopsRouter.get('/:id/sessions', requireAuth, async (req, res, next) => {
 
 /**
  * @openapi
+ * /api/workshops/{id}/presenters:
+ *   get:
+ *     tags: [Workshops]
+ *     summary: Presenters assigned to a workshop
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *     responses:
+ *       200: { description: Presenters }
+ */
+workshopsRouter.get('/:id/presenters', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+
+    const result = await query<{
+      WorkshopPresenterID: number;
+      PresenterStaffID: number;
+      FirstName: string | null;
+      LastName: string | null;
+      AgencyName: string | null;
+      IsRetired: boolean;
+    }>(
+      `SELECT wp.WorkshopPresenterID, p.PresenterStaffID, p.FirstName, p.LastName,
+              a.AgencyName, p.IsRetired
+         FROM core.WorkshopPresenter wp
+         JOIN core.PresenterStaff p ON p.PresenterStaffID = wp.PresenterID
+         LEFT JOIN core.Agency a ON a.AgencyID = p.AgencyID
+        WHERE wp.WorkshopID = @id
+        ORDER BY p.LastName, p.FirstName`,
+      { id: { type: sql.Int, value: id } },
+    );
+
+    res.json({
+      data: result.recordset.map((r) => ({
+        workshopPresenterId: r.WorkshopPresenterID,
+        presenterStaffId: r.PresenterStaffID,
+        name: [r.FirstName, r.LastName].filter(Boolean).join(' ') || 'Unnamed presenter',
+        agencyName: r.AgencyName,
+        isRetired: r.IsRetired,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/workshops/{id}/presenters:
+ *   post:
+ *     tags: [Workshops]
+ *     summary: Assign a presenter to a workshop
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [presenterStaffId]
+ *             properties:
+ *               presenterStaffId: { type: integer }
+ *     responses:
+ *       201: { description: Created }
+ *       409: { description: Already assigned }
+ */
+workshopsRouter.post(
+  '/:id/presenters',
+  requireAuth,
+  requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EDITOR'),
+  async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      const parsed = z
+        .object({ presenterStaffId: z.number().int().positive() })
+        .safeParse(req.body);
+
+      if (!Number.isInteger(id)) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+        return;
+      }
+      if (!parsed.success) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: 'A presenter is required',
+          details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+        });
+        return;
+      }
+
+      const dup = await query(
+        `SELECT 1 AS x FROM core.WorkshopPresenter
+          WHERE WorkshopID = @w AND PresenterID = @p`,
+        {
+          w: { type: sql.Int, value: id },
+          p: { type: sql.Int, value: parsed.data.presenterStaffId },
+        },
+      );
+      if (dup.recordset.length > 0) {
+        res.status(409).json({
+          error: 'conflict',
+          message: 'That presenter is already assigned to this workshop.',
+        });
+        return;
+      }
+
+      // WorkshopPresenterID is not IDENTITY (legacy key preserved by the ETL).
+      const created = await query<{ id: number }>(
+        `INSERT INTO core.WorkshopPresenter (WorkshopPresenterID, PresenterID, WorkshopID)
+         OUTPUT INSERTED.WorkshopPresenterID AS id
+         VALUES ((SELECT ISNULL(MAX(WorkshopPresenterID), 0) + 1 FROM core.WorkshopPresenter), @p, @w)`,
+        {
+          w: { type: sql.Int, value: id },
+          p: { type: sql.Int, value: parsed.data.presenterStaffId },
+        },
+      );
+
+      res.status(201).json({ workshopPresenterId: created.recordset[0]!.id });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/workshops/{id}/presenters/{presenterRowId}:
+ *   delete:
+ *     tags: [Workshops]
+ *     summary: Unassign a presenter from a workshop
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *       - { in: path, name: presenterRowId, required: true, schema: { type: integer } }
+ *     responses:
+ *       204: { description: Removed }
+ */
+workshopsRouter.delete(
+  '/:id/presenters/:presenterRowId',
+  requireAuth,
+  requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EDITOR'),
+  async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      const rowId = Number(req.params.presenterRowId);
+      if (!Number.isInteger(id) || !Number.isInteger(rowId)) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+        return;
+      }
+
+      const r = await query(
+        `DELETE FROM core.WorkshopPresenter
+          WHERE WorkshopPresenterID = @row AND WorkshopID = @w`,
+        {
+          row: { type: sql.Int, value: rowId },
+          w: { type: sql.Int, value: id },
+        },
+      );
+
+      if ((r.rowsAffected[0] ?? 0) === 0) {
+        res.status(404).json({ error: 'not_found', message: 'Presenter not found on this workshop' });
+        return;
+      }
+
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/workshops/{id}/sessions:
+ *   post:
+ *     tags: [Workshops]
+ *     summary: Add a session to a workshop
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               sessionDate: { type: string, format: date }
+ *               staffId: { type: integer, nullable: true }
+ *     responses:
+ *       201: { description: Created }
+ */
+workshopsRouter.post(
+  '/:id/sessions',
+  requireAuth,
+  requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EDITOR'),
+  async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      const parsed = z
+        .object({
+          sessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+          staffId: z.number().int().nullable().optional(),
+        })
+        .safeParse(req.body);
+
+      if (!Number.isInteger(id)) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+        return;
+      }
+      if (!parsed.success) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: 'A valid session date is required',
+          details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+        });
+        return;
+      }
+
+      // WorkshopSessionID is not IDENTITY (legacy key preserved by the ETL).
+      const created = await query<{ id: number }>(
+        `INSERT INTO core.WorkshopSession (WorkshopSessionID, WorkshopID, StaffID, SessionDate)
+         OUTPUT INSERTED.WorkshopSessionID AS id
+         VALUES ((SELECT ISNULL(MAX(WorkshopSessionID), 0) + 1 FROM core.WorkshopSession),
+                 @w, @staff, @date)`,
+        {
+          w: { type: sql.Int, value: id },
+          staff: { type: sql.Int, value: parsed.data.staffId ?? null },
+          date: { type: sql.Date, value: parsed.data.sessionDate },
+        },
+      );
+
+      res.status(201).json({ workshopSessionId: created.recordset[0]!.id });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/workshops/{id}/sessions/{sessionId}:
+ *   patch:
+ *     tags: [Workshops]
+ *     summary: Update a session's date or presenter
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *       - { in: path, name: sessionId, required: true, schema: { type: integer } }
+ *     responses:
+ *       204: { description: Updated }
+ */
+workshopsRouter.patch(
+  '/:id/sessions/:sessionId',
+  requireAuth,
+  requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EDITOR'),
+  async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      const sessionId = Number(req.params.sessionId);
+      const parsed = z
+        .object({
+          sessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+          staffId: z.number().int().nullable().optional(),
+        })
+        .safeParse(req.body);
+
+      if (!Number.isInteger(id) || !Number.isInteger(sessionId)) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+        return;
+      }
+      if (!parsed.success) {
+        res.status(422).json({ error: 'validation_failed', message: 'Invalid session' });
+        return;
+      }
+
+      const sets: string[] = [];
+      const params: Record<string, SqlParam> = {
+        sid: { type: sql.Int, value: sessionId },
+        w: { type: sql.Int, value: id },
+      };
+      if (parsed.data.sessionDate !== undefined) {
+        sets.push('SessionDate = @date');
+        params.date = { type: sql.Date, value: parsed.data.sessionDate };
+      }
+      if (parsed.data.staffId !== undefined) {
+        sets.push('StaffID = @staff');
+        params.staff = { type: sql.Int, value: parsed.data.staffId };
+      }
+      if (sets.length === 0) {
+        res.status(422).json({ error: 'validation_failed', message: 'No fields supplied' });
+        return;
+      }
+
+      const r = await query(
+        `UPDATE core.WorkshopSession SET ${sets.join(', ')}
+          WHERE WorkshopSessionID = @sid AND WorkshopID = @w`,
+        params,
+      );
+
+      if ((r.rowsAffected[0] ?? 0) === 0) {
+        res.status(404).json({ error: 'not_found', message: 'Session not found' });
+        return;
+      }
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/workshops/{id}/sessions/{sessionId}:
+ *   delete:
+ *     tags: [Workshops]
+ *     summary: Delete a session
+ *     description: Refuses when attendance has been recorded, so a checklist is never silently lost.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *       - { in: path, name: sessionId, required: true, schema: { type: integer } }
+ *     responses:
+ *       204: { description: Deleted }
+ *       409: { description: Attendance recorded }
+ */
+workshopsRouter.delete(
+  '/:id/sessions/:sessionId',
+  requireAuth,
+  requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EDITOR'),
+  async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      const sessionId = Number(req.params.sessionId);
+      if (!Number.isInteger(id) || !Number.isInteger(sessionId)) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+        return;
+      }
+
+      const marked = await query<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM core.SessionParticipant WHERE WorkshopSessionID = @sid`,
+        { sid: { type: sql.Int, value: sessionId } },
+      );
+      if ((marked.recordset[0]?.n ?? 0) > 0) {
+        res.status(409).json({
+          error: 'conflict',
+          message: `This session has ${marked.recordset[0]!.n} attendance record(s). Clear the attendance first.`,
+        });
+        return;
+      }
+
+      const r = await query(
+        `DELETE FROM core.WorkshopSession
+          WHERE WorkshopSessionID = @sid AND WorkshopID = @w`,
+        {
+          sid: { type: sql.Int, value: sessionId },
+          w: { type: sql.Int, value: id },
+        },
+      );
+
+      if ((r.rowsAffected[0] ?? 0) === 0) {
+        res.status(404).json({ error: 'not_found', message: 'Session not found' });
+        return;
+      }
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/workshops/{id}/sessions/{sessionId}/attendance:
+ *   get:
+ *     tags: [Workshops]
+ *     summary: Attendance checklist for one session
+ *     description: >
+ *       Every active registrant, with `attended` and `isLate` from
+ *       SessionParticipant. Registrants with no row are unmarked rather than
+ *       absent, so a fresh checklist is not mistaken for a session where
+ *       nobody turned up.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *       - { in: path, name: sessionId, required: true, schema: { type: integer } }
+ *     responses:
+ *       200: { description: Roster with attendance state }
+ */
+workshopsRouter.get('/:id/sessions/:sessionId/attendance', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const sessionId = Number(req.params.sessionId);
+    if (!Number.isInteger(id) || !Number.isInteger(sessionId)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+
+    const result = await query<{
+      ParticipantID: number;
+      ParticipantName: string | null;
+      Email: string | null;
+      AgencyName: string | null;
+      Attended: boolean | null;
+      IsLate: boolean | null;
+    }>(
+      `SELECT r.ParticipantID,
+              CONCAT(p.FirstName, ' ', p.LastName) AS ParticipantName,
+              p.Email, a.AgencyName,
+              CASE WHEN sp.ParticipantID IS NULL THEN NULL ELSE CAST(1 AS bit) END AS Attended,
+              sp.IsLate
+         FROM core.Registration r
+         JOIN core.Participant p ON p.ParticipantID = r.ParticipantID
+         LEFT JOIN core.Agency a ON a.AgencyID = p.AgencyID
+         LEFT JOIN core.SessionParticipant sp
+                ON sp.ParticipantID = r.ParticipantID
+               AND sp.WorkshopSessionID = @sid
+        WHERE r.WorkshopID = @w AND r.IsCancelled = 0
+        ORDER BY p.LastName, p.FirstName`,
+      {
+        w: { type: sql.Int, value: id },
+        sid: { type: sql.Int, value: sessionId },
+      },
+    );
+
+    res.json({
+      data: result.recordset.map((r) => ({
+        participantId: r.ParticipantID,
+        name: r.ParticipantName,
+        email: r.Email,
+        agencyName: r.AgencyName,
+        attended: r.Attended === null ? null : r.Attended,
+        isLate: r.IsLate === true,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/workshops/{id}/sessions/{sessionId}/attendance/{participantId}:
+ *   put:
+ *     tags: [Workshops]
+ *     summary: Mark or clear one participant's attendance
+ *     description: >
+ *       `attended: true` inserts the SessionParticipant row, `false` deletes
+ *       it. Clearing rather than storing a false keeps "unmarked" and
+ *       "absent" distinguishable.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *       - { in: path, name: sessionId, required: true, schema: { type: integer } }
+ *       - { in: path, name: participantId, required: true, schema: { type: integer } }
+ *     responses:
+ *       204: { description: Saved }
+ */
+workshopsRouter.put(
+  '/:id/sessions/:sessionId/attendance/:participantId',
+  requireAuth,
+  requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EDITOR'),
+  async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      const sessionId = Number(req.params.sessionId);
+      const participantId = Number(req.params.participantId);
+      const parsed = z
+        .object({ attended: z.boolean(), isLate: z.boolean().optional() })
+        .safeParse(req.body);
+
+      if (!Number.isInteger(id) || !Number.isInteger(sessionId) || !Number.isInteger(participantId)) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+        return;
+      }
+      if (!parsed.success) {
+        res.status(422).json({ error: 'validation_failed', message: '`attended` is required' });
+        return;
+      }
+
+      // The session must belong to this workshop, or a stray id could touch
+      // another workshop's roster.
+      const owns = await query(
+        `SELECT 1 AS x FROM core.WorkshopSession
+          WHERE WorkshopSessionID = @sid AND WorkshopID = @w`,
+        {
+          sid: { type: sql.Int, value: sessionId },
+          w: { type: sql.Int, value: id },
+        },
+      );
+      if (owns.recordset.length === 0) {
+        res.status(404).json({ error: 'not_found', message: 'Session not found' });
+        return;
+      }
+
+      if (parsed.data.attended) {
+        await query(
+          `IF NOT EXISTS (SELECT 1 FROM core.SessionParticipant
+                           WHERE WorkshopSessionID = @sid AND ParticipantID = @pid)
+             INSERT INTO core.SessionParticipant (ParticipantID, WorkshopSessionID, IsLate)
+             VALUES (@pid, @sid, @late)
+           ELSE
+             UPDATE core.SessionParticipant SET IsLate = @late
+              WHERE WorkshopSessionID = @sid AND ParticipantID = @pid`,
+          {
+            sid: { type: sql.Int, value: sessionId },
+            pid: { type: sql.Int, value: participantId },
+            late: { type: sql.Bit, value: parsed.data.isLate ? 1 : 0 },
+          },
+        );
+      } else {
+        await query(
+          `DELETE FROM core.SessionParticipant
+            WHERE WorkshopSessionID = @sid AND ParticipantID = @pid`,
+          {
+            sid: { type: sql.Int, value: sessionId },
+            pid: { type: sql.Int, value: participantId },
+          },
+        );
+      }
+
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
  * /api/workshops/{id}/registrations:
  *   get:
  *     tags: [Workshops]

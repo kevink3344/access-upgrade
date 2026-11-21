@@ -125,6 +125,36 @@ export interface WorkshopCalendarResponse {
   undated: number;
 }
 
+/** A presenter assigned to a workshop (Presenters tab). */
+export interface WorkshopPresenterRow {
+  workshopPresenterId: number;
+  presenterStaffId: number;
+  name: string;
+  agencyName: string | null;
+  isRetired: boolean;
+}
+
+/** A session on a workshop (Sessions tab). */
+export interface WorkshopSessionRow {
+  WorkshopSessionID: number;
+  SessionDate: string | null;
+  RegAttend: number | null;
+  ESchoolAttend: number | null;
+  StaffID: number | null;
+  PresenterName: string | null;
+}
+
+/** One person on a session's attendance checklist. */
+export interface AttendanceRow {
+  participantId: number;
+  name: string | null;
+  email: string | null;
+  agencyName: string | null;
+  /** null means unmarked — distinct from false, which is never stored. */
+  attended: boolean | null;
+  isLate: boolean;
+}
+
 /** A single row on the workshop Registrants tab. */
 export interface WorkshopRegistrant {
   RegistrationID: number;
