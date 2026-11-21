@@ -4,6 +4,8 @@ import { z } from 'zod';
 import type { ParticipantWrite, DuplicateMatch } from '@pe/shared';
 import { api, HttpError } from '../api';
 import { useScrollLock } from '../hooks/useScrollLock';
+import { useResizableDrawer } from '../hooks/useResizableDrawer';
+import { DrawerResizeHandle } from './DrawerResizeHandle';
 import { IconAlert } from './icons';
 
 const schema = z
@@ -111,6 +113,7 @@ export function ParticipantDrawer({
   const isEdit = participantId !== null;
   const qc = useQueryClient();
   useScrollLock();
+  const resize = useResizableDrawer('pe.drawerWidth.participant');
 
   const [form, setForm] = useState<Record<string, string>>({});
   const [flags, setFlags] = useState({
@@ -299,7 +302,8 @@ export function ParticipantDrawer({
 
   return (
     <div className="drawer-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="drawer drawer-wide" role="dialog" aria-modal="true" aria-labelledby="p-title">
+      <aside className="drawer drawer-wide" role="dialog" aria-modal="true" aria-labelledby="p-title" ref={resize.drawerRef} style={resize.drawerStyle}>
+        <DrawerResizeHandle dragging={resize.dragging} handleProps={resize.handleProps} />
         <header className="drawer-head">
           <h2 id="p-title">{isEdit ? fullName : 'Add participant'}</h2>
           <button type="button" className="drawer-close" onClick={onClose} aria-label="Close">×</button>

@@ -7,6 +7,8 @@ import { useScrollLock } from '../hooks/useScrollLock';
 import { IconAlert } from './icons';
 import { RegistrationLinkPanel } from './RegistrationLinkPanel';
 import { WorkshopRegistrants } from './WorkshopRegistrants';
+import { DrawerResizeHandle } from './DrawerResizeHandle';
+import { useResizableDrawer } from '../hooks/useResizableDrawer';
 
 const dateOrEmpty = z
   .string()
@@ -89,6 +91,7 @@ export function WorkshopDrawer({
   const qc = useQueryClient();
 
   const [tab, setTab] = useState<'details' | 'registrants'>('details');
+  const resize = useResizableDrawer('pe.drawerWidth.workshop');
 
   // Stop the page behind from scrolling while the drawer is open.
   useScrollLock();
@@ -253,7 +256,8 @@ export function WorkshopDrawer({
 
   return (
     <div className="drawer-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="drawer drawer-wide" role="dialog" aria-modal="true" aria-labelledby="ws-title">
+      <aside className="drawer drawer-wide" role="dialog" aria-modal="true" aria-labelledby="ws-title" ref={resize.drawerRef} style={resize.drawerStyle}>
+        <DrawerResizeHandle dragging={resize.dragging} handleProps={resize.handleProps} />
         <header className="drawer-head">
           <h2 id="ws-title">{isEdit ? 'Edit workshop' : 'Add workshop'}</h2>
           <button type="button" className="drawer-close" onClick={onClose} aria-label="Close">×</button>

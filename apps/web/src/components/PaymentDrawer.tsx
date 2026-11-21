@@ -4,6 +4,8 @@ import { z } from 'zod';
 import type { PaymentWrite } from '@pe/shared';
 import { api, HttpError } from '../api';
 import { useScrollLock } from '../hooks/useScrollLock';
+import { useResizableDrawer } from '../hooks/useResizableDrawer';
+import { DrawerResizeHandle } from './DrawerResizeHandle';
 import { IconAlert } from './icons';
 
 const schema = z.object({
@@ -58,6 +60,7 @@ export function PaymentDrawer({
   const qc = useQueryClient();
 
   useScrollLock();
+  const resize = useResizableDrawer('pe.drawerWidth.payment');
 
   const [form, setForm] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Errors>({});
@@ -142,7 +145,8 @@ export function PaymentDrawer({
 
   return (
     <div className="drawer-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="pay-title">
+      <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="pay-title" ref={resize.drawerRef} style={resize.drawerStyle}>
+        <DrawerResizeHandle dragging={resize.dragging} handleProps={resize.handleProps} />
         <header className="drawer-head">
           <h2 id="pay-title">{participant}</h2>
           <button type="button" className="drawer-close" onClick={onClose} aria-label="Close">×</button>

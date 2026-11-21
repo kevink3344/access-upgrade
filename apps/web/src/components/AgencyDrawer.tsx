@@ -4,6 +4,8 @@ import { z } from 'zod';
 import type { AgencyWrite } from '@pe/shared';
 import { api, HttpError } from '../api';
 import { useScrollLock } from '../hooks/useScrollLock';
+import { useResizableDrawer } from '../hooks/useResizableDrawer';
+import { DrawerResizeHandle } from './DrawerResizeHandle';
 import { IconAlert } from './icons';
 
 const schema = z.object({
@@ -60,6 +62,7 @@ export function AgencyDrawer({
   const qc = useQueryClient();
 
   useScrollLock();
+  const resize = useResizableDrawer('pe.drawerWidth.agency');
 
   const [form, setForm] = useState<Record<string, string>>({});
   const [flags, setFlags] = useState({ isOutOfBusiness: false, isWorkshopSite: false });
@@ -207,7 +210,8 @@ export function AgencyDrawer({
 
   return (
     <div className="drawer-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="drawer drawer-wide" role="dialog" aria-modal="true" aria-labelledby="ag-title">
+      <aside className="drawer drawer-wide" role="dialog" aria-modal="true" aria-labelledby="ag-title" ref={resize.drawerRef} style={resize.drawerStyle}>
+        <DrawerResizeHandle dragging={resize.dragging} handleProps={resize.handleProps} />
         <header className="drawer-head">
           <h2 id="ag-title">{title}</h2>
           <button type="button" className="drawer-close" onClick={onClose} aria-label="Close">×</button>

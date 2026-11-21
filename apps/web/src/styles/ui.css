@@ -197,6 +197,7 @@ body.scroll-locked .sidebar {
 }
 
 .drawer {
+  position: relative;
   width: min(460px, 100%);
   background: var(--surface-card);
   height: 100%;
@@ -204,6 +205,165 @@ body.scroll-locked .sidebar {
   flex-direction: column;
   box-shadow: -8px 0 32px rgba(20, 30, 40, .18);
   animation: slide-in .2s ease;
+}
+
+/* ---------- certificates ---------- */
+.cert-template-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .cert-template-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+.cert-preview-column {
+  position: sticky;
+  top: 16px;
+}
+
+.cert-preview-label {
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+/*
+ * The certificate is 8.5x11in. The iframe is scaled down to fit the column
+ * with CSS transform rather than reflowing the document — the whole point is
+ * that preview and print are identical.
+ */
+.cert-preview-frame {
+  width: 8.5in;
+  height: 11in;
+  border: 1px solid var(--border-color);
+  background: #fff;
+  transform: scale(0.62);
+  transform-origin: top left;
+  box-shadow: var(--shadow-card);
+}
+
+.cert-preview-column {
+  /* Reserve the scaled height so the sticky column does not jump. */
+  min-height: calc(11in * 0.62 + 40px);
+  overflow: hidden;
+}
+
+.cert-preview-empty {
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius);
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.cert-logo-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.cert-logo-preview {
+  width: 140px;
+  height: 70px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-zebra);
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow: hidden;
+}
+
+.cert-logo-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* ---------- drawer resize handle ---------- */
+/*
+ * The visible edge is 1px, but the hit area is 11px wide and sits entirely
+ * INSIDE the drawer. An earlier version overhung the left edge, which let the
+ * scrim win the hit test and close the drawer on mousedown.
+ */
+.drawer-resize {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 11px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  background: transparent;
+}
+
+.drawer-resize::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: var(--surface-neutral);
+  transition: background .12s ease, width .12s ease;
+}
+
+.drawer-resize:hover::before,
+.drawer-resize.is-dragging::before {
+  width: 2px;
+  background: var(--primary-color);
+}
+
+.drawer-resize:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.drawer-resize-grip {
+  position: relative;
+  width: 3px;
+  height: 34px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--text-faint) 0 2px,
+    transparent 2px 5px
+  );
+  opacity: 0;
+  transition: opacity .12s ease;
+  /* Nudge the grip clear of the 1px edge line so both stay legible. */
+  margin-left: 4px;
+}
+
+.drawer-resize:hover .drawer-resize-grip,
+.drawer-resize.is-dragging .drawer-resize-grip {
+  opacity: .75;
+}
+
+/* While dragging, stop text selection and let the cursor persist across
+   the whole page rather than flickering as it leaves the handle. */
+body.drawer-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+@media (max-width: 640px) {
+  /* A phone has no room to drag; the drawer is already full width. */
+  .drawer-resize { display: none; }
 }
 
 @keyframes slide-in {
