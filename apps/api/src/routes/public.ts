@@ -261,7 +261,7 @@ publicRouter.get('/registration-links/:slug', async (req, res, next) => {
         location: link.AgencyName,
         cost: link.Cost1,
         credit: link.CreditPossible,
-        ceus: link.SessionCeus,
+        ceus: link.SessionCeus === null ? null : Math.round(link.SessionCeus * 100) / 100,
       },
     });
   } catch (err) {

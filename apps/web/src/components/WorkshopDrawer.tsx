@@ -56,6 +56,18 @@ function num(v: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Two-decimal string for a numeric field.
+ *
+ * `SessionCeus` is a SQL `real` (4-byte float), so a stored 0.2 comes back as
+ * 0.20000000298023224. Rounding on read keeps that float noise out of the
+ * input without changing the stored value.
+ */
+function round2(v: number | null | undefined): string {
+  if (v === null || v === undefined) return '';
+  return String(Math.round(v * 100) / 100);
+}
+
 function str(v: string | undefined): string | null {
   return v && v.trim() !== '' ? v.trim() : null;
 }
@@ -157,7 +169,7 @@ export function WorkshopDrawer({
       creditPossible: existing.CreditPossible ?? '',
       sessionCount: existing.SessionCount?.toString() ?? '',
       sessionHours: existing.SessionHours?.toString() ?? '',
-      sessionCeus: existing.SessionCeus?.toString() ?? '',
+      sessionCeus: round2(existing.SessionCeus),
       notes: existing.Notes ?? '',
       specialNotes: existing.SpecialNotes ?? '',
     });
@@ -561,9 +573,17 @@ export function WorkshopDrawer({
                     id="w-ceus"
                     type="number"
                     inputMode="decimal"
-                    step="0.1"
+                    step="0.01"
+                    min="0"
                     value={form.sessionCeus ?? ''}
                     onChange={(e) => set('sessionCeus', e.target.value)}
+                    onBlur={(e) => {
+                      // Normalise to at most two decimals on the way out.
+                      const v = e.target.value.trim();
+                      if (v === '') return;
+                      const n = Number(v);
+                      if (Number.isFinite(n)) set('sessionCeus', String(Math.round(n * 100) / 100));
+                    }}
                   />
                 </div>
               </div>

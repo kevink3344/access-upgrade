@@ -45,6 +45,36 @@
 }
 
 /* ---------- form controls ---------- */
+/* `.input` is the standalone form control — for inputs that sit outside a
+   `.field` wrapper (toolbar-adjacent searches, inline filters). It mirrors
+   `.field input` so a stray input never falls back to browser defaults. */
+.input {
+  width: 100%;
+  padding: 11px 13px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--text-heading);
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  transition: border-color .15s ease, box-shadow .15s ease;
+  min-height: 44px;
+}
+
+.input:hover { border-color: #a9b6c0; }
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px hsl(var(--primary-color-hsl) / .15);
+}
+
+.input:disabled {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
 .field select {
   width: 100%;
   padding: 11px 13px;

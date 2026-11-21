@@ -809,7 +809,7 @@ function paramType(column: string) {
   if (column === 'Room') return sql.SmallInt;
   if (column === 'MaxEnrollment' || column === 'MinEnrollment' || column === 'SessionCount') return sql.Int;
   if (column === 'SessionHours') return sql.Decimal(18, 2);
-  if (column === 'SessionCeus') return sql.Real;
+  if (column === 'SessionCeus') return sql.Decimal(6, 2);
   if (column === 'Cost1' || column === 'Cost2' || column === 'ConsultFee') return sql.Decimal(19, 4);
   if (column === 'Notes' || column === 'SpecialNotes') return sql.NVarChar(sql.MAX);
   if (column === 'CreditPossible') return sql.NVarChar(50);

@@ -497,7 +497,7 @@ CREATE TABLE core.Workshop (
     CreditPossible    NVARCHAR(50)   NULL,
     SessionCount      INT            NULL,   -- legacy [Sessions]
     SessionHours      DECIMAL(18,2)  NULL,   -- legacy SessionHrs (max 55.00); plan §B.1 said FLOAT
-    SessionCeus       REAL           NULL,   -- legacy SessionCEUs (Single)
+    SessionCeus       DECIMAL(6,2)   NULL,   -- legacy SessionCEUs (Single); migration 007 widened from REAL
     ESchoolRegistered SMALLINT       NULL,
     ESchoolAttended   INT            NULL,   -- legacy eSchoolAttend
     ESchoolDropped    SMALLINT       NULL,
