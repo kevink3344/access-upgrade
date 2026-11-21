@@ -17,6 +17,7 @@ export interface NotificationRow {
   WorkshopID: number | null;
   CreatedAt: Date;
   IsRead: boolean;
+  IsArchived: boolean;
 }
 
 /** Roles that receive operational notifications. */
@@ -159,20 +160,55 @@ export async function unreadCount(userId: number): Promise<number> {
   return r.recordset[0]?.n ?? 0;
 }
 
+/**
+ * Which slice of a user's notifications to return.
+ *
+ * `archived` is the inverse of the other two: archiving is the only state
+ * that hides a row from both the bell and the default list, and it is
+ * reversible, so it gets its own view rather than a separate endpoint.
+ */
+export type NotificationView = 'all' | 'unread' | 'archived';
+
+const VIEW_FILTER: Record<NotificationView, string> = {
+  all: 'nr.DismissedAt IS NULL',
+  unread: 'nr.DismissedAt IS NULL AND nr.ReadAt IS NULL',
+  archived: 'nr.DismissedAt IS NOT NULL',
+};
+
 /** Most recent notifications for one user. */
-export async function listForUser(userId: number, limit = 20): Promise<NotificationRow[]> {
+export async function listForUser(
+  userId: number,
+  limit = 20,
+  opts: { offset?: number; view?: NotificationView } = {},
+): Promise<NotificationRow[]> {
   const r = await query<NotificationRow>(
-    `SELECT TOP (@limit)
-            n.NotificationID, n.Kind, n.Title, n.Body, n.LinkPath, n.WorkshopID, n.CreatedAt,
-            CASE WHEN nr.ReadAt IS NULL THEN 0 ELSE 1 END AS IsRead
+    `SELECT n.NotificationID, n.Kind, n.Title, n.Body, n.LinkPath, n.WorkshopID, n.CreatedAt,
+            CASE WHEN nr.ReadAt IS NULL THEN 0 ELSE 1 END AS IsRead,
+            CASE WHEN nr.DismissedAt IS NULL THEN 0 ELSE 1 END AS IsArchived
        FROM core.NotificationRecipient nr
        JOIN core.Notification n ON n.NotificationID = nr.NotificationID
-      WHERE nr.UserID = @uid AND nr.DismissedAt IS NULL
-      ORDER BY n.CreatedAt DESC`,
+      WHERE nr.UserID = @uid AND ${VIEW_FILTER[opts.view ?? 'all']}
+      ORDER BY n.CreatedAt DESC, n.NotificationID DESC
+     OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
     {
       uid: { type: sql.Int, value: userId },
       limit: { type: sql.Int, value: limit },
+      offset: { type: sql.Int, value: opts.offset ?? 0 },
     },
   );
   return r.recordset;
+}
+
+/** Total notifications for one user in a view, for the "view all" page's pager. */
+export async function countForUser(
+  userId: number,
+  view: NotificationView = 'all',
+): Promise<number> {
+  const r = await query<{ n: number }>(
+    `SELECT COUNT(*) AS n
+       FROM core.NotificationRecipient nr
+      WHERE nr.UserID = @uid AND ${VIEW_FILTER[view]}`,
+    { uid: { type: sql.Int, value: userId } },
+  );
+  return r.recordset[0]?.n ?? 0;
 }

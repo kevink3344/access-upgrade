@@ -432,12 +432,22 @@ export const api = {
   },
 
   notifications: {
-    list: (limit = 20) =>
-      request<import('@pe/shared').NotificationListResponse>(`/api/notifications?limit=${limit}`),
+    list: (limit = 20, opts: { offset?: number; view?: import('@pe/shared').NotificationView } = {}) => {
+      const qs = new URLSearchParams({ limit: String(limit) });
+      if (opts.offset) qs.set('offset', String(opts.offset));
+      if (opts.view && opts.view !== 'all') qs.set('view', opts.view);
+      return request<import('@pe/shared').NotificationListResponse>(`/api/notifications?${qs}`);
+    },
     markRead: (id: number) =>
       request<void>(`/api/notifications/${id}/read`, { method: 'POST' }),
     markAllRead: () =>
       request<{ updated: number }>('/api/notifications/read-all', { method: 'POST' }),
+    archive: (id: number) =>
+      request<void>(`/api/notifications/${id}/archive`, { method: 'POST' }),
+    unarchive: (id: number) =>
+      request<void>(`/api/notifications/${id}/unarchive`, { method: 'POST' }),
+    archiveAll: () =>
+      request<{ updated: number }>('/api/notifications/archive-all', { method: 'POST' }),
   },
 
   reports: {    catalogue: () =>

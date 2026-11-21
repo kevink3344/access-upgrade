@@ -47,6 +47,11 @@ export function NotificationBell() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
 
+  const archiveOne = useMutation({
+    mutationFn: (id: number) => api.notifications.archive(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+
   // Close on outside click and Escape.
   useEffect(() => {
     if (!open) return;
@@ -109,23 +114,46 @@ export function NotificationBell() {
             <ul className="notif-list">
               {items.map((n) => (
                 <li key={n.NotificationID} className={n.IsRead ? 'is-read' : ''}>
-                  <a
-                    className="notif-item"
-                    href={n.LinkPath ?? '#'}
-                    onClick={(e) => {
-                      if (!n.IsRead) markOne.mutate(n.NotificationID);
-                      if (!n.LinkPath) e.preventDefault();
-                      setOpen(false);
-                    }}
-                  >
-                    <span className="notif-title">{n.Title}</span>
-                    {n.Body && <span className="notif-body">{n.Body}</span>}
-                    <span className="notif-time">{relative(n.CreatedAt)}</span>
-                  </a>
+                  <div className="notif-row">
+                    <a
+                      className="notif-item"
+                      href={n.LinkPath ?? '#'}
+                      onClick={(e) => {
+                        if (!n.IsRead) markOne.mutate(n.NotificationID);
+                        if (!n.LinkPath) e.preventDefault();
+                        setOpen(false);
+                      }}
+                    >
+                      <span className="notif-title">{n.Title}</span>
+                      {n.Body && <span className="notif-body">{n.Body}</span>}
+                      <span className="notif-time">{relative(n.CreatedAt)}</span>
+                    </a>
+                    <button
+                      type="button"
+                      className="notif-archive"
+                      title="Archive"
+                      aria-label={`Archive: ${n.Title}`}
+                      onClick={() => archiveOne.mutate(n.NotificationID)}
+                      disabled={archiveOne.isPending}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="4" rx="1" />
+                        <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
+                        <path d="M10 12h4" />
+                      </svg>
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
+
+          <a className="notif-viewall" href="/notifications" onClick={() => setOpen(false)}>
+            View all notifications
+            {typeof data?.total === 'number' && data.total > items.length && (
+              <span className="notif-viewall-count">{data.total}</span>
+            )}
+          </a>
         </div>
       )}
     </div>

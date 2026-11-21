@@ -23,6 +23,7 @@ import { PaymentsPage } from './pages/PaymentsPage';
 import { CertificatesPage } from './pages/CertificatesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { WebhooksPage } from './pages/WebhooksPage';
+import { NotificationsPage } from './pages/NotificationsPage';
 import { ApiDocsPage } from './pages/ApiDocsPage';
 import { PublicRegisterPage } from './pages/PublicRegisterPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
@@ -85,6 +86,7 @@ const ROUTES: Record<string, string> = {
   '/admin/utilities': 'Utilities',
   '/api-docs': 'API documentation',
   '/admin/webhooks': 'Webhooks',
+  '/notifications': 'Notifications',
 };
 
 function Router() {
@@ -125,6 +127,8 @@ function Router() {
   if (path === '/payments') return <PaymentsPage />;
   if (path === '/certificates') return <CertificatesPage />;
   if (path === '/reports') return <ReportsPage />;
+
+  if (path === '/notifications') return <NotificationsPage />;
 
   if (path === '/admin/users') {
     if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {

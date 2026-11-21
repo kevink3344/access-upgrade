@@ -916,11 +916,21 @@ export interface NotificationRow {
   WorkshopID: number | null;
   CreatedAt: string;
   IsRead: boolean;
+  IsArchived: boolean;
 }
+
+/** Which slice of a user's notifications a list request returns. */
+export type NotificationView = 'all' | 'unread' | 'archived';
 
 export interface NotificationListResponse {
   data: NotificationRow[];
   unread: number;
+  /** Rows matching the view, ignoring paging — drives the "view all" pager. */
+  total: number;
+  /** Archived rows, so the filter can show a count without a second request. */
+  archived: number;
+  limit: number;
+  offset: number;
 }
 
 export interface WorkshopNotificationSettings {
