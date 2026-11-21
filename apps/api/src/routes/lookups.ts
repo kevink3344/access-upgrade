@@ -11,7 +11,14 @@ export const lookupsRouter = Router();
  */
 const LOOKUPS: Record<
   string,
-  { table: string; idColumn: string; labelColumn: string; orderBy?: string }
+  {
+    table: string;
+    idColumn: string;
+    labelColumn: string;
+    orderBy?: string;
+    /** Extra columns appended to the id/label pair, aliased to these names. */
+    extraColumns?: Record<string, string>;
+  }
 > = {
   'agency-types': { table: 'ref.AgencyType', idColumn: 'AgencyTypeID', labelColumn: 'TypeName' },
   ages: { table: 'ref.Age', idColumn: 'AgesID', labelColumn: 'Ages' },
@@ -71,6 +78,13 @@ const LOOKUPS: Record<
     // Most recent school year first — staff almost always want the current
     // or last year, not 2006-07.
     orderBy: 'SchoolYearID DESC',
+    // The calendar needs to know which year is current and where it starts
+    // and ends, so it can open on something meaningful.
+    extraColumns: {
+      isPastYear: 'IsPastYear',
+      beginDate: 'BeginDate',
+      endDate: 'EndDate',
+    },
   },
   states: { table: 'ref.State', idColumn: 'StateID', labelColumn: 'State' },
   'street-types': {
@@ -146,8 +160,11 @@ lookupsRouter.get('/:name', requireAuth, async (req, res, next) => {
 
     // Table and column names come from the whitelist above, never from input.
     const orderBy = def.orderBy ?? def.labelColumn;
+    const extras = Object.entries(def.extraColumns ?? {})
+      .map(([alias, col]) => `, ${col} AS ${alias}`)
+      .join('');
     const result = await query(
-      `SELECT ${def.idColumn} AS id, ${def.labelColumn} AS label
+      `SELECT ${def.idColumn} AS id, ${def.labelColumn} AS label${extras}
          FROM ${def.table}
         ORDER BY ${orderBy}`,
     );

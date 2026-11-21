@@ -18,6 +18,24 @@ const listQuery = z.object({
 });
 
 /**
+ * Calendar range. Bounded on purpose: an unbounded range would let a single
+ * request pull 2,599 workshops, and the UI never needs more than a few months.
+ */
+const calendarQuery = z
+  .object({
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+    q: z.string().trim().optional(),
+    schoolYear: z.coerce.number().int().optional(),
+    status: z.enum(['open', 'closed', 'cancelled', 'all']).default('all'),
+  })
+  .refine((v) => v.from <= v.to, { message: '`from` must not be after `to`', path: ['from'] })
+  .refine(
+    (v) => (new Date(v.to).getTime() - new Date(v.from).getTime()) / 86_400_000 <= 400,
+    { message: 'Range must be 400 days or fewer', path: ['to'] },
+  );
+
+/**
  * Writable workshop fields. Deliberately excludes:
  *  - WorkshopID (identity, preserved from Access)
  *  - LegacyWorkshopID (migration artefact)
@@ -65,6 +83,126 @@ const SORT_COLUMNS: Record<string, string> = {
   name: 'n.WorkshopName',
   registered: 'Registered',
 };
+
+/**
+ * @openapi
+ * /api/workshops/calendar:
+ *   get:
+ *     tags: [Workshops]
+ *     summary: Workshops in a date range, for the calendar view
+ *     description: >
+ *       Keyed on `Workshop.StartDate` — one entry per workshop, on the day it
+ *       starts. Multi-session workshops appear once, not once per session.
+ *       Workshops with no StartDate cannot be placed on a calendar and are
+ *       reported in `undated` rather than silently dropped.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: from, required: true, schema: { type: string, format: date } }
+ *       - { in: query, name: to, required: true, schema: { type: string, format: date } }
+ *       - { in: query, name: q, schema: { type: string } }
+ *       - { in: query, name: schoolYear, schema: { type: integer } }
+ *       - { in: query, name: status, schema: { type: string, enum: [open, closed, cancelled, all] } }
+ *     responses:
+ *       200:
+ *         description: Calendar entries plus the count of undated workshops
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data: { type: array, items: { $ref: '#/components/schemas/WorkshopCalendarEntry' } }
+ *                 undated: { type: integer, description: Matching workshops with no StartDate }
+ *       422: { description: Invalid range }
+ */
+workshopsRouter.get('/calendar', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = calendarQuery.safeParse(req.query);
+
+    if (!parsed.success) {
+      res.status(422).json({
+        error: 'validation_failed',
+        message: 'Invalid query parameters',
+        details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      });
+      return;
+    }
+
+    const { from, to, q, schoolYear, status } = parsed.data;
+
+    const filters: string[] = [];
+    const params: Record<string, SqlParam> = {
+      from: { type: sql.Date, value: from },
+      to: { type: sql.Date, value: to },
+    };
+
+    if (q) {
+      filters.push('(n.WorkshopName LIKE @q OR w.WorkshopCode LIKE @q)');
+      params.q = { type: sql.NVarChar(260), value: `%${q}%` };
+    }
+    if (schoolYear) {
+      filters.push('w.SchoolYearID = @sy');
+      params.sy = { type: sql.Int, value: schoolYear };
+    }
+    if (status === 'open') filters.push('w.IsClosed = 0 AND w.IsCancelled = 0');
+    if (status === 'closed') filters.push('w.IsClosed = 1 AND w.IsCancelled = 0');
+    if (status === 'cancelled') filters.push('w.IsCancelled = 1');
+
+    const filterSql = filters.length ? `AND ${filters.join(' AND ')}` : '';
+
+    const base = `
+      FROM core.Workshop w
+      LEFT JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
+      WHERE w.StartDate IS NOT NULL ${filterSql}`;
+
+    const rows = await query<{
+      WorkshopID: number;
+      WorkshopCode: string | null;
+      WorkshopName: string | null;
+      StartDate: Date;
+      EndDate: Date | null;
+      Registered: number;
+      Capacity: number | null;
+      IsClosed: boolean;
+      IsCancelled: boolean;
+    }>(
+      `SELECT w.WorkshopID, w.WorkshopCode, n.WorkshopName, w.StartDate, w.EndDate,
+              (SELECT COUNT(*) FROM core.Registration r
+                WHERE r.WorkshopID = w.WorkshopID AND r.IsCancelled = 0) AS Registered,
+              w.MaxEnrollment AS Capacity,
+              w.IsClosed, w.IsCancelled
+       ${base}
+         AND w.StartDate >= @from AND w.StartDate <= @to
+       ORDER BY w.StartDate, n.WorkshopName`,
+      params,
+    );
+
+    // Same filters, but counting what the calendar cannot show.
+    const undated = await query<{ n: number }>(
+      `SELECT COUNT(*) AS n
+         FROM core.Workshop w
+         LEFT JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
+        WHERE w.StartDate IS NULL ${filterSql}`,
+      params,
+    );
+
+    res.json({
+      data: rows.recordset.map((r) => ({
+        workshopId: r.WorkshopID,
+        workshopCode: r.WorkshopCode,
+        workshopName: r.WorkshopName,
+        date: r.StartDate.toISOString().slice(0, 10),
+        endDate: r.EndDate ? r.EndDate.toISOString().slice(0, 10) : null,
+        registered: r.Registered,
+        capacity: r.Capacity,
+        isClosed: r.IsClosed,
+        isCancelled: r.IsCancelled,
+      })),
+      undated: undated.recordset[0]?.n ?? 0,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * @openapi

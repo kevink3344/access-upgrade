@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { WorkshopRow } from '@pe/shared';
 import { api } from '../api';
@@ -6,7 +6,21 @@ import { useAuth } from '../auth';
 import { AppShell } from '../components/AppShell';
 import { IconWorkshops } from '../components/icons';
 import { WorkshopDrawer } from '../components/WorkshopDrawer';
+import { WorkshopCalendar, monthLabel, ymd } from '../components/WorkshopCalendar';
+import { CalendarDayPanel } from '../components/CalendarDayPanel';
 import { useRecentVisits, relativeTime } from '../hooks/useRecentVisits';
+
+type View = 'table' | 'calendar';
+
+const VIEW_KEY = 'pe.workshops.view';
+
+function readView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'calendar' ? 'calendar' : 'table';
+  } catch {
+    return 'table';
+  }
+}
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -55,6 +69,15 @@ export function WorkshopsPage() {
   const [sort, setSort] = useState<'startDate' | 'code' | 'name' | 'registered'>('startDate');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
 
+  const [view, setView] = useState<View>(readView);
+  // Calendar cursor. Seeded from the current school year once that loads.
+  const [cursor, setCursor] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const [cursorSeeded, setCursorSeeded] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const recent = useRecentVisits('pe.recentWorkshops');
@@ -82,8 +105,48 @@ export function WorkshopsPage() {
 
   const { data: years } = useQuery({
     queryKey: ['lookup', 'school-years'],
-    queryFn: () => api.lookups.get('school-years'),
+    queryFn: () => api.lookups.schoolYears(),
     staleTime: 10 * 60_000,
+  });
+
+  // The calendar opens on the current school year, not on today: the data
+  // spans 2001-2027, so "today" alone would show an almost empty month.
+  const currentYear = years?.data.find((y) => !y.isPastYear) ?? years?.data[0];
+
+  useEffect(() => {
+    if (cursorSeeded || !currentYear?.beginDate) return;
+    const begin = new Date(`${currentYear.beginDate.slice(0, 10)}T00:00:00`);
+    const now = new Date();
+    // Land on the current month if it falls inside the school year,
+    // otherwise on the year's opening month (July).
+    const inYear = now >= begin && now <= new Date(`${currentYear.endDate?.slice(0, 10)}T00:00:00`);
+    const target = inYear ? now : begin;
+    setCursor({ year: target.getFullYear(), month: target.getMonth() });
+    setCursorSeeded(true);
+  }, [currentYear, cursorSeeded]);
+
+  // The month grid shows 6 weeks, so the range reaches into the neighbouring
+  // months — otherwise the leading/trailing cells would look empty.
+  const range = useMemo(() => {
+    const first = new Date(cursor.year, cursor.month, 1);
+    const from = new Date(first);
+    from.setDate(1 - first.getDay());
+    const to = new Date(from);
+    to.setDate(from.getDate() + 41);
+    return { from: ymd(from), to: ymd(to) };
+  }, [cursor]);
+
+  const calendar = useQuery({
+    queryKey: ['workshops', 'calendar', range.from, range.to, debounced, status, schoolYear],
+    queryFn: () =>
+      api.workshops.calendar({
+        from: range.from,
+        to: range.to,
+        q: debounced || undefined,
+        status,
+        schoolYear: schoolYear ? Number(schoolYear) : undefined,
+      }),
+    enabled: view === 'calendar',
   });
 
   const { data, isLoading, isError, error } = useQuery({
@@ -98,11 +161,28 @@ export function WorkshopsPage() {
         sort,
         dir,
       }),
+    enabled: view === 'table',
   });
 
   const rows = data?.data ?? [];
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
+
+  function changeView(next: View) {
+    setView(next);
+    try {
+      localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      /* storage is a convenience; the toggle still works without it */
+    }
+  }
+
+  function shiftMonth(delta: number) {
+    setCursor((c) => {
+      const d = new Date(c.year, c.month + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+  }
 
   function toggleSort(col: typeof sort) {
     if (sort === col) setDir(dir === 'asc' ? 'desc' : 'asc');
@@ -208,7 +288,30 @@ export function WorkshopsPage() {
           </select>
         </div>
 
-        <span className="toolbar-count">{total.toLocaleString()} workshops</span>
+        <div className="segmented" role="group" aria-label="View">
+          <button
+            type="button"
+            className={view === 'table' ? 'is-active' : ''}
+            aria-pressed={view === 'table'}
+            onClick={() => changeView('table')}
+          >
+            Table
+          </button>
+          <button
+            type="button"
+            className={view === 'calendar' ? 'is-active' : ''}
+            aria-pressed={view === 'calendar'}
+            onClick={() => changeView('calendar')}
+          >
+            Calendar
+          </button>
+        </div>
+
+        <span className="toolbar-count">
+          {view === 'calendar'
+            ? `${(calendar.data?.data.length ?? 0).toLocaleString()} this month`
+            : `${total.toLocaleString()} workshops`}
+        </span>
       </div>
 
       {recent.items.length > 0 && (
@@ -253,6 +356,82 @@ export function WorkshopsPage() {
         </div>
       )}
 
+      {view === 'calendar' ? (
+        <div className="panel">
+          <div className="cal-head">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => shiftMonth(-1)}
+              aria-label="Previous month"
+            >
+              ◀
+            </button>
+            <h3 className="cal-title">{monthLabel(cursor.year, cursor.month)}</h3>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => shiftMonth(1)}
+              aria-label="Next month"
+            >
+              ▶
+            </button>
+            <span className="cal-spacer" />
+            {currentYear && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  const now = new Date();
+                  setCursor({ year: now.getFullYear(), month: now.getMonth() });
+                }}
+              >
+                Today
+              </button>
+            )}
+          </div>
+
+          <div className="panel-body">
+            {calendar.isLoading ? (
+              <div style={{ padding: 18 }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="skeleton" style={{ height: 72, marginBottom: 8 }} />
+                ))}
+              </div>
+            ) : calendar.isError ? (
+              <div className="alert alert-error" role="alert">
+                <span>
+                  Could not load the calendar.
+                  {calendar.error instanceof Error ? ` ${calendar.error.message}` : ''}
+                </span>
+              </div>
+            ) : (
+              <WorkshopCalendar
+                year={cursor.year}
+                month={cursor.month}
+                entries={calendar.data?.data ?? []}
+                selectedDate={selectedDay}
+                onOpen={openEdit}
+                onPickDay={(date) => {
+                  setSelectedDay((cur) => (cur === date ? null : date));
+                  const d = new Date(`${date}T00:00:00`);
+                  if (d.getMonth() !== cursor.month || d.getFullYear() !== cursor.year) {
+                    setCursor({ year: d.getFullYear(), month: d.getMonth() });
+                  }
+                }}
+              />
+            )}
+
+            {!!calendar.data?.undated && (
+              <p className="cal-note">
+                {calendar.data.undated} matching workshop
+                {calendar.data.undated === 1 ? '' : 's'} have no start date and cannot be shown
+                on the calendar.
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
       <div className="panel">
         <div className="panel-body">
           {isLoading ? (
@@ -366,6 +545,19 @@ export function WorkshopsPage() {
           </div>
         )}
       </div>
+      )}
+
+      {view === 'calendar' && selectedDay && (
+        <CalendarDayPanel
+          date={selectedDay}
+          entries={(calendar.data?.data ?? []).filter((e) => e.date === selectedDay)}
+          onOpen={(id) => {
+            setSelectedDay(null);
+            openEdit(id);
+          }}
+          onClose={() => setSelectedDay(null)}
+        />
+      )}
 
       {drawerOpen && (
         <WorkshopDrawer

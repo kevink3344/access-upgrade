@@ -129,6 +129,22 @@ export const api = {
       return request<import('@pe/shared').WorkshopListResponse>(`/api/workshops${suffix}`);
     },
 
+    calendar: (params: {
+      from: string;
+      to: string;
+      q?: string;
+      schoolYear?: number;
+      status?: 'open' | 'closed' | 'cancelled' | 'all';
+    }) => {
+      const qs = new URLSearchParams({ from: params.from, to: params.to });
+      if (params.q) qs.set('q', params.q);
+      if (params.schoolYear) qs.set('schoolYear', String(params.schoolYear));
+      if (params.status && params.status !== 'all') qs.set('status', params.status);
+      return request<import('@pe/shared').WorkshopCalendarResponse>(
+        `/api/workshops/calendar?${qs}`,
+      );
+    },
+
     get: (id: number) =>
       request<import('@pe/shared').WorkshopDetail>(`/api/workshops/${id}`),
 
@@ -406,6 +422,8 @@ export const api = {
     list: () => request<{ data: string[] }>('/api/lookups'),
     get: (name: string) =>
       request<{ data: { id: number; label: string }[] }>(`/api/lookups/${name}`),
+    schoolYears: () =>
+      request<{ data: import('@pe/shared').SchoolYearOption[] }>('/api/lookups/school-years'),
   },
 
   webhooks: {

@@ -105,6 +105,26 @@ export interface WorkshopListResponse {
   total: number;
 }
 
+/** One workshop placed on the calendar, keyed on its StartDate. */
+export interface WorkshopCalendarEntry {
+  workshopId: number;
+  workshopCode: string | null;
+  workshopName: string | null;
+  /** YYYY-MM-DD — the workshop's StartDate. */
+  date: string;
+  endDate: string | null;
+  registered: number;
+  capacity: number | null;
+  isClosed: boolean;
+  isCancelled: boolean;
+}
+
+export interface WorkshopCalendarResponse {
+  data: WorkshopCalendarEntry[];
+  /** Matching workshops with no StartDate — they cannot be placed on a calendar. */
+  undated: number;
+}
+
 /** A single row on the workshop Registrants tab. */
 export interface WorkshopRegistrant {
   RegistrationID: number;
@@ -227,6 +247,13 @@ export interface WorkshopSessionRow {
 export interface LookupOption {
   id: number;
   label: string;
+}
+
+/** School years carry their bounds so the calendar can open on the current one. */
+export interface SchoolYearOption extends LookupOption {
+  isPastYear: boolean;
+  beginDate: string | null;
+  endDate: string | null;
 }
 
 /* ------------------------------------------------------------------ */
