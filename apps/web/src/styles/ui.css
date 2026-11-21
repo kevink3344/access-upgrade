@@ -759,7 +759,7 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
 .cal-chip-code { font-weight: 700; flex: 0 0 auto; }
 .cal-chip-name { overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); }
 
-.cal-chip.is-open    { background: var(--badge-green-bg, #eef7ee); border-color: var(--badge-green-border, #cfe6cf); color: var(--text-heading); }
+.cal-chip.is-open    { background: var(--badge-yellow-bg); border-color: var(--badge-yellow-border); color: var(--text-heading); }
 .cal-chip.is-warn    { background: var(--badge-amber-bg, #fdf5e6); border-color: var(--badge-amber-border, #f0dcae); color: var(--text-heading); }
 .cal-chip.is-full    { background: var(--badge-rose-bg, #fdeeee); border-color: var(--badge-rose-border, #f0c9c9); color: var(--text-heading); }
 .cal-chip.is-cancelled {
@@ -817,6 +817,7 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
     border-radius: 999px;
     background: var(--primary-color);
   }
+  .cal-dots i.is-open { background: var(--badge-yellow-border); }
   .cal-dots i.is-full { background: var(--badge-rose-text); }
   .cal-dots i.is-warn { background: var(--badge-amber-text, #b8860b); }
   .cal-dots i.is-cancelled { background: var(--text-faint); }

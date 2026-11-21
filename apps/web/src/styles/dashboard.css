@@ -198,9 +198,9 @@
 }
 
 .pill-open {
-  background: var(--badge-green-bg);
-  border-color: var(--badge-green-border);
-  color: var(--badge-green-text);
+  background: var(--badge-yellow-bg);
+  border-color: var(--badge-yellow-border);
+  color: var(--badge-yellow-text);
 }
 
 .pill-closed {

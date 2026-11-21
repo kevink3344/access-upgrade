@@ -56,6 +56,12 @@
   --badge-green-border: #cfdf94;
   --badge-green-text: #33400a;
 
+  /* Pastel yellow. Used by the "Open" status pill — a warmer, softer tone
+     than amber so Open still reads differently from Full at a glance. */
+  --badge-yellow-bg: #fdf6c9;
+  --badge-yellow-border: #e8d98a;
+  --badge-yellow-text: #5c4a06;
+
   --badge-blue-bg: #dbeafe;
   --badge-blue-border: #a9c9f5;
   --badge-blue-text: #1e3a5f;
