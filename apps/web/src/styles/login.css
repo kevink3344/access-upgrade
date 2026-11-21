@@ -47,6 +47,10 @@
   margin-bottom: 20px;
 }
 
+/* Both badges sit on the dark blue brand panel, so they use translucent
+   pastels rather than the solid --badge-* fills used on white surfaces.
+   A small radius keeps the 1px border reading as a crisp edge rather than
+   a pill, which at this size looks like a heavy curve. */
 .login-kicker {
   display: inline-flex;
   align-items: center;
@@ -56,9 +60,11 @@
   text-transform: uppercase;
   font-weight: 700;
   line-height: 1;
-  background: rgba(255, 255, 255, .14);
+  background: rgba(219, 234, 254, .16);
+  border: 1px solid rgba(219, 234, 254, .38);
+  color: #eaf2fe;
   padding: 5px 12px;
-  border-radius: 999px;
+  border-radius: var(--badge-radius);
 }
 
 /* Deployment badge - only rendered when MODE is set (e.g. "TEST SITE").
@@ -73,11 +79,11 @@
   text-transform: uppercase;
   font-weight: 800;
   line-height: 1;
-  background: var(--cc-fourth-color);
-  color: #3d3200;
+  background: #fdf3c4;
+  border: 1px solid #e8cf6a;
+  color: #4a3a00;
   padding: 5px 12px;
-  border-radius: 999px;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, .18);
+  border-radius: var(--badge-radius);
 }
 
 .login-brand h1 {
@@ -186,6 +192,19 @@
   color: var(--cc-fifth-color);
   margin-top: 6px;
   font-weight: 600;
+}
+
+/* ---------- remember me ---------- */
+.remember-row {
+  display: flex;
+  align-items: center;
+  margin: 2px 0 18px;
+}
+
+.remember-label {
+  font-size: 13.5px;
+  color: var(--text-body);
+  user-select: none;
 }
 
 /* ---------- buttons ---------- */

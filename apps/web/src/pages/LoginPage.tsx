@@ -16,6 +16,7 @@ export function LoginPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -55,7 +56,7 @@ export function LoginPage() {
     setSubmitting(true);
 
     try {
-      await signIn(parsed.data.email, parsed.data.password);
+      await signIn(parsed.data.email, parsed.data.password, rememberMe);
     } catch (err) {
       if (err instanceof HttpError) {
         setFormError(
@@ -156,6 +157,20 @@ export function LoginPage() {
                   {errors.password}
                 </span>
               )}
+            </div>
+
+            <div className="remember-row">
+              <label className="checkbox remember-label" htmlFor="remember-me">
+                <input
+                  id="remember-me"
+                  name="rememberMe"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  disabled={submitting}
+                />
+                <span>Remember me</span>
+              </label>
             </div>
 
             <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>

@@ -5,7 +5,7 @@ import { api, getToken, setToken } from './api';
 interface AuthState {
   user: AuthUser | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -15,8 +15,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Restore the session on reload: the access token lives in sessionStorage,
-  // so a refresh keeps the user signed in but closing the tab ends it.
+  // Restore the session on reload. The token lives in sessionStorage by
+  // default, or localStorage when the user chose "remember me" — so a
+  // refresh always keeps them signed in, but only "remember me" survives
+  // closing the browser.
   useEffect(() => {
     const token = getToken();
     if (!token) {
@@ -31,9 +33,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  async function signIn(email: string, password: string) {
-    const res = await api.login(email, password);
-    setToken(res.token);
+  async function signIn(email: string, password: string, rememberMe = false) {
+    const res = await api.login(email, password, rememberMe);
+    setToken(res.token, rememberMe);
     setUser(res.user);
   }
 

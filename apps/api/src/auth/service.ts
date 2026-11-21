@@ -40,7 +40,10 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
   return bcrypt.compare(plain, hash);
 }
 
-export function signAccessToken(user: AuthUser): { token: string; expiresAt: string } {
+export function signAccessToken(
+  user: AuthUser,
+  rememberMe = false,
+): { token: string; expiresAt: string } {
   const token = jwt.sign(
     {
       sub: String(user.userId),
@@ -49,7 +52,11 @@ export function signAccessToken(user: AuthUser): { token: string; expiresAt: str
       role: user.role,
     },
     env.JWT_SECRET,
-    { expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] },
+    {
+      expiresIn: (rememberMe
+        ? `${env.REFRESH_TOKEN_DAYS}d`
+        : env.JWT_EXPIRES_IN) as jwt.SignOptions['expiresIn'],
+    },
   );
 
   const decoded = jwt.decode(token) as { exp: number };
@@ -133,6 +140,7 @@ export async function storeRefreshToken(
   hash: Buffer,
   userAgent: string | null,
   ip: string | null,
+  days: number = env.REFRESH_TOKEN_DAYS,
 ): Promise<void> {
   await query(
     `INSERT INTO core.RefreshToken (UserID, TokenHash, ExpiresAt, UserAgent, IpHash)
@@ -140,7 +148,7 @@ export async function storeRefreshToken(
     {
       uid: { type: sql.Int, value: userId },
       hash: { type: sql.VarBinary(32), value: hash },
-      days: { type: sql.Int, value: env.REFRESH_TOKEN_DAYS },
+      days: { type: sql.Int, value: days },
       ua: { type: sql.NVarChar(400), value: userAgent },
       ip: { type: sql.VarBinary(32), value: ip ? hashIp(ip) : null },
     },

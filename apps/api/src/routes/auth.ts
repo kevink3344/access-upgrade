@@ -12,6 +12,7 @@ import {
   touchLastLogin,
 } from '../auth/service.js';
 import { requireAuth } from '../auth/middleware.js';
+import { env } from '../env.js';
 import type { LoginResponse } from '@pe/shared';
 
 export const authRouter = Router();
@@ -21,6 +22,7 @@ const MAX_FAILED_ATTEMPTS = 10;
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  rememberMe: z.boolean().optional().default(false),
 });
 
 /**
@@ -39,6 +41,13 @@ const loginSchema = z.object({
  *             properties:
  *               email:    { type: string, format: email }
  *               password: { type: string, format: password }
+ *               rememberMe:
+ *                 type: boolean
+ *                 default: false
+ *                 description: >
+ *                   Keep the session alive across browser restarts. Issues a
+ *                   long-lived access token and a persistent refresh cookie
+ *                   instead of a session cookie.
  *     responses:
  *       200:
  *         description: Authenticated
@@ -112,24 +121,31 @@ authRouter.post('/login', async (req, res, next) => {
     }
 
     const authUser = toAuthUser(user);
-    const { token, expiresAt } = signAccessToken(authUser);
+    const rememberMe = parsed.data.rememberMe === true;
+
+    // "Remember me" trades a long-lived access token for convenience. Without
+    // it the access token keeps its short default life and the refresh cookie
+    // is a session cookie, so closing the browser ends the session.
+    const { token, expiresAt } = signAccessToken(authUser, rememberMe);
 
     // Refresh token in an httpOnly cookie — the access token stays in memory.
     const refresh = createRefreshToken();
-    await storeRefreshToken(user.UserID, refresh.hash, req.get('user-agent') ?? null, ip);
+    const refreshDays = rememberMe ? env.REFRESH_TOKEN_DAYS : 1;
+    await storeRefreshToken(user.UserID, refresh.hash, req.get('user-agent') ?? null, ip, refreshDays);
 
     res.cookie('pe_refresh', refresh.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       path: '/api/auth',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      // Omitting maxAge makes this a session cookie: it dies with the browser.
+      ...(rememberMe ? { maxAge: refreshDays * 24 * 60 * 60 * 1000 } : {}),
     });
 
     await touchLastLogin(user.UserID);
     await recordLoginAttempt(email, true, null, ip);
 
-    const body: LoginResponse = { token, expiresAt, user: authUser };
+    const body: LoginResponse = { token, expiresAt, user: authUser, rememberMe };
     res.json(body);
   } catch (err) {
     next(err);
