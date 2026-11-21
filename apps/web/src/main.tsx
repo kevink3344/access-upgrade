@@ -21,6 +21,7 @@ import { PresentersPage } from './pages/PresentersPage';
 import { WorkshopNamesPage } from './pages/WorkshopNamesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { CertificatesPage } from './pages/CertificatesPage';
+import { ReportsPage } from './pages/ReportsPage';
 import { ApiDocsPage } from './pages/ApiDocsPage';
 import { PublicRegisterPage } from './pages/PublicRegisterPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
@@ -121,6 +122,7 @@ function Router() {
 
   if (path === '/payments') return <PaymentsPage />;
   if (path === '/certificates') return <CertificatesPage />;
+  if (path === '/reports') return <ReportsPage />;
 
   if (path === '/admin/users') {
     if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
