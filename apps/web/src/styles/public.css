@@ -13,28 +13,35 @@
 .public-header {
   background: linear-gradient(135deg, #165788 0%, #12466e 55%, #0e3a5c 100%);
   color: #fff;
-  padding: 20px 20px 18px;
+  padding: 20px 0 18px;
 }
 
+/* Same box as .public-main: a 720px column centred with a 20px gutter, so the
+   logo and the cards below it share one left edge at every width. */
 .public-header-inner {
   max-width: 720px;
   margin: 0 auto;
+  padding: 0 20px;
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
+/* The sunburst mark is solid orange on transparency. Against the dark header
+   gradient it only reaches 2.57:1, so it sits on a white chip to clear the
+   3:1 WCAG minimum for non-text graphics without recolouring the brand.
+   The negative margin cancels the chip's padding so the visible white edge,
+   not the padded box, aligns with the card edge. */
 .public-mark {
   width: 36px;
-  height: 36px;
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, .16);
-  display: grid;
-  place-items: center;
-  font-family: var(--font-primary);
-  font-weight: 700;
-  font-size: 15px;
+  height: 32px;
+  object-fit: contain;
   flex-shrink: 0;
+  box-sizing: content-box;
+  padding: 4px;
+  margin-left: -4px;
+  background: #fff;
+  border-radius: var(--radius);
 }
 
 .public-header b {
@@ -220,11 +227,13 @@
 
 .public-form .role-option:hover { border-color: var(--primary-color); }
 
-/* Selected role gets a heavier bottom edge so the choice is obvious at a
-   glance, including on a phone where the full border is easy to miss. */
+/* Selected role gets a full outline rather than only a heavier bottom edge,
+   so the choice reads as one complete shape. The border is drawn with an
+   inset shadow instead of a wider border: a 2px border would make the
+   selected card 2px taller than its neighbour and the list would jump. */
 .public-form .role-option.is-selected {
   border-color: var(--primary-color);
-  border-bottom-width: 4px;
+  box-shadow: inset 0 0 0 1px var(--primary-color);
   background: hsl(var(--primary-color-hsl) / 5%);
 }
 
@@ -407,6 +416,9 @@
 @media (max-width: 640px) {
   .public-card { padding: 20px 16px; }
   .public-main { padding: 16px 14px 48px; }
+
+  /* Keep the header content on the same gutter as the cards below it. */
+  .public-header-inner { padding: 0 14px; }
 
   /* The form reads small on a phone, so the whole scale is raised ~25%.
      Inputs stay at 16px or above - anything smaller makes iOS Safari zoom

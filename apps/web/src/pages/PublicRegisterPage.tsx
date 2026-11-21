@@ -61,7 +61,14 @@ function PublicChrome({ children }: { children: React.ReactNode }) {
     <div className="public-page">
       <header className="public-header">
         <div className="public-header-inner">
-          <span className="public-mark" aria-hidden="true">PE</span>
+          <img
+            className="public-mark"
+            src="/images/sunburst-logo.png"
+            alt=""
+            aria-hidden="true"
+            width={36}
+            height={32}
+          />
           <span>
             <b>Project Enlightenment</b>
             <small>Workshop registration</small>
