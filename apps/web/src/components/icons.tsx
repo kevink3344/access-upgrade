@@ -62,6 +62,15 @@ export const IconCertificate = (p: Props) => (
   </svg>
 );
 
+/** Outbound hook — used for the Webhooks screen. */
+export const IconWebhook = (p: Props) => (
+  <svg {...base(p)}>
+    <path d="M8.5 14.5a3.5 3.5 0 1 1 5 3.2" />
+    <path d="M12 8.5a3.5 3.5 0 1 1 3.2 5" />
+    <path d="M15.5 9.5a3.5 3.5 0 1 1-3.2 5" />
+  </svg>
+);
+
 export const IconAdmin = (p: Props) => (
   <svg {...base(p)}>
     <path d="M12 2 4 6v6c0 5 3.4 9.3 8 10 4.6-.7 8-5 8-10V6z" />

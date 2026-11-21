@@ -407,6 +407,30 @@ export const api = {
       request<{ data: { id: number; label: string }[] }>(`/api/lookups/${name}`),
   },
 
+  webhooks: {
+    list: () => request<{ data: import('@pe/shared').WebhookRow[] }>('/api/webhooks'),
+    get: (id: number) => request<import('@pe/shared').WebhookRow>(`/api/webhooks/${id}`),
+    create: (body: import('@pe/shared').WebhookWrite) =>
+      request<{ webhookId: number }>('/api/webhooks', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    update: (id: number, body: Partial<import('@pe/shared').WebhookWrite>) =>
+      request<{ webhookId: number }>(`/api/webhooks/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    remove: (id: number) => request<void>(`/api/webhooks/${id}`, { method: 'DELETE' }),
+    test: (id: number) =>
+      request<import('@pe/shared').WebhookTestResult>(`/api/webhooks/${id}/test`, {
+        method: 'POST',
+      }),
+    deliveries: (id: number) =>
+      request<{ data: import('@pe/shared').WebhookDeliveryRow[] }>(
+        `/api/webhooks/${id}/deliveries`,
+      ),
+  },
+
   notifications: {
     list: (limit = 20) =>
       request<import('@pe/shared').NotificationListResponse>(`/api/notifications?limit=${limit}`),

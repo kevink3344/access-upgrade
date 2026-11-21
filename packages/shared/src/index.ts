@@ -931,3 +931,52 @@ export interface WorkshopNotificationSettings {
   notifyPercentFull: number | null;
   lastNotifiedAt: string | null;
 }
+/* ------------------------------------------------------------------ */
+/*  Webhooks                                                           */
+/* ------------------------------------------------------------------ */
+
+export interface WebhookRow {
+  WebhookID: number;
+  Title: string;
+  Description: string | null;
+  Url: string;
+  JsonSchema: string | null;
+  /** 'json' sends the schema shape; 'slack' wraps it for Slack's webhook format. */
+  PayloadFormat: 'json' | 'slack';
+  IsActive: boolean;
+  CreatedBy: string | null;
+  CreatedAt: string;
+  UpdatedBy: string | null;
+  UpdatedAt: string;
+  DeliveryCount: number;
+  LastSucceeded: boolean | null;
+  LastAttemptAt: string | null;
+}
+
+export interface WebhookWrite {
+  title: string;
+  description?: string | null;
+  url: string;
+  jsonSchema?: string | null;
+  payloadFormat?: 'json' | 'slack';
+  isActive?: boolean;
+  secret?: string | null;
+}
+
+export interface WebhookTestResult {
+  succeeded: boolean;
+  statusCode: number | null;
+  error: string | null;
+  durationMs: number;
+  payload: Record<string, unknown>;
+}
+
+export interface WebhookDeliveryRow {
+  WebhookDeliveryID: number;
+  EventKind: string;
+  StatusCode: number | null;
+  Succeeded: boolean;
+  Error: string | null;
+  DurationMs: number | null;
+  AttemptedAt: string;
+}

@@ -1233,3 +1233,44 @@ GO
 IF COL_LENGTH('core.Workshop', 'NotifyFiredAt') IS NULL
     ALTER TABLE core.Workshop ADD NotifyFiredAt DATETIME2(0) NULL;
 GO
+
+-- =====================================================================
+--  Webhooks - see db/migrations/006-webhooks.sql
+-- =====================================================================
+IF OBJECT_ID('core.Webhook', 'U') IS NULL
+BEGIN
+CREATE TABLE core.Webhook (
+    WebhookID     INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Webhook PRIMARY KEY,
+    Title         NVARCHAR(200)  NOT NULL,
+    Description   NVARCHAR(1000) NULL,
+    Url           NVARCHAR(2000) NOT NULL,
+    JsonSchema    NVARCHAR(MAX)  NULL,
+    PayloadFormat NVARCHAR(20)   NOT NULL CONSTRAINT DF_Webhook_PayloadFormat DEFAULT 'json',
+    IsActive      BIT            NOT NULL CONSTRAINT DF_Webhook_IsActive DEFAULT 1,
+    Secret        NVARCHAR(200)  NULL,
+    CreatedBy     NVARCHAR(200)  NULL,
+    CreatedAt     DATETIME2(0)   NOT NULL CONSTRAINT DF_Webhook_CreatedAt DEFAULT SYSUTCDATETIME(),
+    UpdatedBy     NVARCHAR(200)  NULL,
+    UpdatedAt     DATETIME2(0)   NOT NULL CONSTRAINT DF_Webhook_UpdatedAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT CK_Webhook_PayloadFormat CHECK (PayloadFormat IN ('json','slack'))
+);
+END
+GO
+
+IF OBJECT_ID('core.WebhookDelivery', 'U') IS NULL
+BEGIN
+CREATE TABLE core.WebhookDelivery (
+    WebhookDeliveryID INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_WebhookDelivery PRIMARY KEY,
+    WebhookID     INT NOT NULL CONSTRAINT FK_WebhookDelivery_Webhook
+        REFERENCES core.Webhook(WebhookID) ON DELETE CASCADE,
+    EventKind     NVARCHAR(40)  NOT NULL,
+    Payload       NVARCHAR(MAX) NULL,
+    StatusCode    INT           NULL,
+    Succeeded     BIT           NOT NULL,
+    Error         NVARCHAR(1000) NULL,
+    DurationMs    INT           NULL,
+    AttemptedAt   DATETIME2(0)  NOT NULL CONSTRAINT DF_WebhookDelivery_AttemptedAt DEFAULT SYSUTCDATETIME()
+);
+CREATE INDEX IX_WebhookDelivery_Webhook ON core.WebhookDelivery (WebhookID, AttemptedAt DESC);
+END
+GO

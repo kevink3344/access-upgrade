@@ -21,6 +21,7 @@ import {
   IconApi,
   IconAdmin,
   IconCertificate,
+  IconWebhook,
   IconLogout,
 } from './icons';
 import { NotificationBell } from './NotificationBell';
@@ -83,6 +84,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'Developer',
     items: [
       { to: '/api-docs', label: 'API documentation', icon: IconApi, roles: ['SUPER_ADMIN', 'ADMIN'] },
+      { to: '/admin/webhooks', label: 'Webhooks', icon: IconWebhook, roles: ['SUPER_ADMIN', 'ADMIN'] },
     ],
   },
 ];

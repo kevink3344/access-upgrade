@@ -310,8 +310,27 @@ body.scroll-locked .sidebar {
   object-fit: contain;
 }
 
-/* ---------- notification bell ---------- */
-.notif-wrap { position: relative; }
+/* A button that reads as a link — used where a table cell opens a drawer. */
+.linklike {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--primary-color);
+  cursor: pointer;
+  text-align: left;
+}
+
+.linklike:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+.linklike:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ---------- notification bell ---------- */.notif-wrap { position: relative; }
 
 .notif-bell {
   position: relative;
