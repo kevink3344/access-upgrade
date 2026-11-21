@@ -13,8 +13,8 @@ const listQuery = z.object({
   schoolYear: z.coerce.number().int().optional(),
   category: z.coerce.number().int().optional(),
   status: z.enum(['open', 'closed', 'cancelled', 'all']).default('all'),
-  sort: z.enum(['startDate', 'code', 'name', 'registered']).default('startDate'),
-  dir: z.enum(['asc', 'desc']).default('desc'),
+  sort: z.enum(['upcoming', 'startDate', 'code', 'name', 'registered']).default('upcoming'),
+  dir: z.enum(['asc', 'desc']).default('asc'),
 });
 
 /**
@@ -218,8 +218,8 @@ workshopsRouter.get('/calendar', requireAuth, async (req, res, next) => {
  *       - { in: query, name: schoolYear, schema: { type: integer } }
  *       - { in: query, name: category, schema: { type: integer } }
  *       - { in: query, name: status, schema: { type: string, enum: [open, closed, cancelled, all] } }
- *       - { in: query, name: sort, schema: { type: string, enum: [startDate, code, name, registered] } }
- *       - { in: query, name: dir, schema: { type: string, enum: [asc, desc] } }
+ *       - { in: query, name: sort, schema: { type: string, enum: [upcoming, startDate, code, name, registered], default: upcoming }, description: 'upcoming puts the soonest workshops first, then past ones newest-first' }
+ *       - { in: query, name: dir, schema: { type: string, enum: [asc, desc], default: asc } }
  *     responses:
  *       200:
  *         description: Paginated workshops
@@ -271,6 +271,29 @@ workshopsRouter.get('/', requireAuth, async (req, res, next) => {
     const orderCol = SORT_COLUMNS[sort] ?? 'w.StartDate';
     const orderDir = dir === 'asc' ? 'ASC' : 'DESC';
 
+    /**
+     * "Upcoming" is not a plain direction. The table holds 2,534 past workshops
+     * against 44 upcoming ones, so ASC would open on 2001 and DESC on the
+     * furthest-future date — neither shows what staff mean by "next".
+     *
+     * This orders in two buckets: upcoming first (soonest to latest), then past
+     * (most recent to oldest), with undated rows last. The CASE is the bucket
+     * key; the inner ordering flips per bucket so both read naturally.
+     */
+    const orderBy =
+      sort === 'upcoming'
+        ? `CASE
+             WHEN w.StartDate IS NULL THEN 2
+             WHEN w.StartDate >= CAST(SYSUTCDATETIME() AS date) THEN 0
+             ELSE 1
+           END ASC,
+           CASE WHEN w.StartDate >= CAST(SYSUTCDATETIME() AS date)
+                THEN w.StartDate END ASC,
+           CASE WHEN w.StartDate < CAST(SYSUTCDATETIME() AS date)
+                THEN w.StartDate END DESC,
+           n.WorkshopName ASC`
+        : `${orderCol} ${orderDir}`;
+
     // Join order matters: joins must precede WHERE.
     const base = `
       FROM core.Workshop w
@@ -310,7 +333,7 @@ workshopsRouter.get('/', requireAuth, async (req, res, next) => {
               w.IsClosed,
               w.IsCancelled
        ${base}
-       ORDER BY ${orderCol} ${orderDir}
+       ORDER BY ${orderBy}
        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
       {
         ...params,

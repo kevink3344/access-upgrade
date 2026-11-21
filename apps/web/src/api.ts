@@ -118,7 +118,7 @@ export const api = {
       schoolYear?: number;
       category?: number;
       status?: 'open' | 'closed' | 'cancelled' | 'all';
-      sort?: 'startDate' | 'code' | 'name' | 'registered';
+      sort?: 'upcoming' | 'startDate' | 'code' | 'name' | 'registered';
       dir?: 'asc' | 'desc';
     } = {}) => {
       const qs = new URLSearchParams();

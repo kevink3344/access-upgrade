@@ -66,8 +66,8 @@ export function WorkshopsPage() {
   const [status, setStatus] = useState<'all' | 'open' | 'closed' | 'cancelled'>('all');
   const [schoolYear, setSchoolYear] = useState('');
   const [page, setPage] = useState(1);
-  const [sort, setSort] = useState<'startDate' | 'code' | 'name' | 'registered'>('startDate');
-  const [dir, setDir] = useState<'asc' | 'desc'>('desc');
+  const [sort, setSort] = useState<'upcoming' | 'startDate' | 'code' | 'name' | 'registered'>('upcoming');
+  const [dir, setDir] = useState<'asc' | 'desc'>('asc');
 
   const [view, setView] = useState<View>(readView);
   // Calendar cursor. Seeded from the current school year once that loads.
@@ -188,7 +188,9 @@ export function WorkshopsPage() {
     if (sort === col) setDir(dir === 'asc' ? 'desc' : 'asc');
     else {
       setSort(col);
-      setDir(col === 'name' || col === 'code' ? 'asc' : 'desc');
+      // Dates open on the soonest first; text columns read A-Z; counts open
+      // on the largest, which is the interesting end of a capacity column.
+      setDir(col === 'name' || col === 'code' || col === 'upcoming' ? 'asc' : 'desc');
     }
     setPage(1);
   }
@@ -464,8 +466,13 @@ export function WorkshopsPage() {
                     </button>
                   </th>
                   <th scope="col">
-                    <button type="button" className="th-sort" onClick={() => toggleSort('startDate')}>
-                      Date{sortIndicator('startDate')}
+                    <button
+                      type="button"
+                      className="th-sort"
+                      onClick={() => toggleSort('upcoming')}
+                      title="Soonest first, then past workshops newest-first"
+                    >
+                      Date{sortIndicator('upcoming')}
                     </button>
                   </th>
                   <th scope="col">School year</th>
