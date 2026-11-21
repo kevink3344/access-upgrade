@@ -7,6 +7,7 @@ import { useScrollLock } from '../hooks/useScrollLock';
 import { IconAlert } from './icons';
 import { RegistrationLinkPanel } from './RegistrationLinkPanel';
 import { WorkshopRegistrants } from './WorkshopRegistrants';
+import { WorkshopNotifications } from './WorkshopNotifications';
 import { DrawerResizeHandle } from './DrawerResizeHandle';
 import { useResizableDrawer } from '../hooks/useResizableDrawer';
 
@@ -78,11 +79,13 @@ function dateValue(v: string | null | undefined): string {
 
 export function WorkshopDrawer({
   workshopId,
+  canEdit,
   canDelete,
   onClose,
   onOpenRegistration,
 }: {
   workshopId: number | null;
+  canEdit: boolean;
   canDelete: boolean;
   onClose: () => void;
   onOpenRegistration: (registrationId: number) => void;
@@ -90,7 +93,7 @@ export function WorkshopDrawer({
   const isEdit = workshopId !== null;
   const qc = useQueryClient();
 
-  const [tab, setTab] = useState<'details' | 'registrants'>('details');
+  const [tab, setTab] = useState<'details' | 'registrants' | 'notifications'>('details');
   const resize = useResizableDrawer('pe.drawerWidth.workshop');
 
   // Stop the page behind from scrolling while the drawer is open.
@@ -290,6 +293,17 @@ export function WorkshopDrawer({
                 <span className="drawer-tab-count">{existing.Registered}</span>
               )}
             </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-notifications"
+              className="drawer-tab"
+              aria-selected={tab === 'notifications'}
+              aria-controls="panel-notifications"
+              onClick={() => setTab('notifications')}
+            >
+              Notifications
+            </button>
           </div>
         )}
 
@@ -311,6 +325,15 @@ export function WorkshopDrawer({
               capacity={existing?.MaxEnrollment ?? null}
               onOpenRegistration={onOpenRegistration}
             />
+          </div>
+        ) : isEdit && tab === 'notifications' ? (
+          <div
+            className="drawer-body"
+            role="tabpanel"
+            id="panel-notifications"
+            aria-labelledby="tab-notifications"
+          >
+            <WorkshopNotifications workshopId={workshopId} canEdit={canEdit} />
           </div>
         ) : (
           <form

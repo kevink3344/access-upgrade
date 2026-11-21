@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import { query, sql, type SqlParam } from '../db.js';
 import { env } from '../env.js';
+import { checkWorkshopCapacity } from '../services/notifications.js';
 
 /**
  * Public registration endpoints. Mounted at /api/public.
@@ -542,6 +543,11 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
       );
       registrationId = created.recordset[0]!.RegistrationID;
       await logSubmission(link.RegistrationLinkID, ip, ua, 'Accepted', null);
+
+      // Raise the capacity alert if this registration crossed the threshold.
+      // Safe to call on a duplicate submission too: the fired flag makes it
+      // a no-op once the alert has gone out.
+      await checkWorkshopCapacity(link.WorkshopID);
     }
 
     // Identical response for new and duplicate submissions — the form must

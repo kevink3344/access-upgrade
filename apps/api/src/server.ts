@@ -27,6 +27,7 @@ import { registrationLinkRouter } from './routes/registration-link.js';
 import { publicRouter } from './routes/public.js';
 import { certificatesRouter } from './routes/certificates.js';
 import { reportsRouter } from './routes/reports.js';
+import { notificationsRouter } from './routes/notifications.js';
 
 const app = express();
 
@@ -213,6 +214,7 @@ app.use('/api/registrations', registrationsRouter);
 app.use('/api/lookups', lookupsRouter);
 app.use('/api/certificates', certificatesRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/notifications', notificationsRouter);
 
 // Public surface — no auth. Must be mounted before the auth-guarded routes
 // would ever apply; it has its own rate limits and audit logging.

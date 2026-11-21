@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { query, sql, type SqlParam } from '../db.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
+import { checkWorkshopCapacity } from '../services/notifications.js';
 
 export const registrationsRouter = Router();
 
@@ -439,6 +440,12 @@ registrationsRouter.post('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', '
       params,
     );
 
+    // A manual registration counts toward capacity just like a web one, so
+    // staff see the alert whichever way the place was taken.
+    if (workshopId !== null && workshopId !== undefined) {
+      await checkWorkshopCapacity(workshopId);
+    }
+
     res.status(201).json({ registrationId: created.recordset[0]!.RegistrationID });
   } catch (err) {
     next(err);
@@ -510,6 +517,17 @@ registrationsRouter.patch('/:id', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN
     if (updated.recordset.length === 0) {
       res.status(404).json({ error: 'not_found', message: 'Registration not found' });
       return;
+    }
+
+    // The workshop this registration belongs to, so a cancellation can clear
+    // the fired flag and a re-activation can re-alert.
+    const owner = await query<{ WorkshopID: number | null }>(
+      'SELECT WorkshopID FROM core.Registration WHERE RegistrationID = @id',
+      { id: { type: sql.Int, value: id } },
+    );
+    const wid = owner.recordset[0]?.WorkshopID;
+    if (wid !== null && wid !== undefined) {
+      await checkWorkshopCapacity(wid);
     }
 
     res.json({ registrationId: id });

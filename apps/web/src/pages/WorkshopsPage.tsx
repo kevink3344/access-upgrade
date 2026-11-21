@@ -370,6 +370,7 @@ export function WorkshopsPage() {
       {drawerOpen && (
         <WorkshopDrawer
           workshopId={editingId}
+          canEdit={!!canEdit}
           canDelete={!!canDelete}
           onClose={() => setDrawerOpen(false)}
           onOpenRegistration={openRegistration}

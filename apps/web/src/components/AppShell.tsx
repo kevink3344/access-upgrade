@@ -23,6 +23,7 @@ import {
   IconCertificate,
   IconLogout,
 } from './icons';
+import { NotificationBell } from './NotificationBell';
 
 interface NavItem {
   to: string;
@@ -180,6 +181,7 @@ export function AppShell({
         <header className="topbar">
           <h1>{title}</h1>
           <div className="topbar-actions">
+            {user && <NotificationBell />}
             {user && (
               <div className="user-chip topbar-user">
                 <span className="avatar" aria-hidden="true">{initials(user.displayName)}</span>

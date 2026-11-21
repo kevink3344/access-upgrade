@@ -903,3 +903,31 @@ export interface ReportRunResponse {
   total: number;
   truncated: boolean;
 }
+/* ------------------------------------------------------------------ */
+/*  Notifications                                                      */
+/* ------------------------------------------------------------------ */
+
+export interface NotificationRow {
+  NotificationID: number;
+  Kind: string;
+  Title: string;
+  Body: string | null;
+  LinkPath: string | null;
+  WorkshopID: number | null;
+  CreatedAt: string;
+  IsRead: boolean;
+}
+
+export interface NotificationListResponse {
+  data: NotificationRow[];
+  unread: number;
+}
+
+export interface WorkshopNotificationSettings {
+  workshopId: number;
+  capacity: number | null;
+  registered: number;
+  percentFull: number | null;
+  notifyPercentFull: number | null;
+  lastNotifiedAt: string | null;
+}

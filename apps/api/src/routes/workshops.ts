@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { query, sql, type SqlParam } from '../db.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
+import { checkWorkshopCapacity } from '../services/notifications.js';
 
 export const workshopsRouter = Router();
 
@@ -361,6 +362,132 @@ workshopsRouter.get('/:id/registrants', requireAuth, async (req, res, next) => {
     next(err);
   }
 });
+
+/**
+ * @openapi
+ * /api/workshops/{id}/notification-settings:
+ *   get:
+ *     tags: [Workshops]
+ *     summary: Capacity notification settings for a workshop
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Settings plus current fill }
+ */
+workshopsRouter.get('/:id/notification-settings', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+
+    const r = await query<{
+      WorkshopID: number;
+      MaxEnrollment: number | null;
+      NotifyPercentFull: number | null;
+      NotifyFiredAt: Date | null;
+      Registered: number;
+    }>(
+      `SELECT w.WorkshopID, w.MaxEnrollment, w.NotifyPercentFull, w.NotifyFiredAt,
+              (SELECT COUNT(*) FROM core.Registration r
+                WHERE r.WorkshopID = w.WorkshopID AND r.IsCancelled = 0) AS Registered
+         FROM core.Workshop w
+        WHERE w.WorkshopID = @id`,
+      { id: { type: sql.Int, value: id } },
+    );
+
+    const row = r.recordset[0];
+    if (!row) {
+      res.status(404).json({ error: 'not_found', message: 'Workshop not found' });
+      return;
+    }
+
+    const capacity = row.MaxEnrollment ?? null;
+    res.json({
+      workshopId: row.WorkshopID,
+      capacity,
+      registered: row.Registered,
+      percentFull: capacity && capacity > 0 ? Math.round((row.Registered / capacity) * 100) : null,
+      notifyPercentFull: row.NotifyPercentFull,
+      lastNotifiedAt: row.NotifyFiredAt ? row.NotifyFiredAt.toISOString() : null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/workshops/{id}/notification-settings:
+ *   patch:
+ *     tags: [Workshops]
+ *     summary: Set the capacity notification threshold
+ *     description: >
+ *       `notifyPercentFull` is 1-100, or null to turn the alert off for this
+ *       workshop. Changing the threshold clears the fired flag so the new
+ *       threshold can alert immediately if it is already crossed.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Updated }
+ */
+workshopsRouter.patch(
+  '/:id/notification-settings',
+  requireAuth,
+  requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'),
+  async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+        return;
+      }
+
+      const parsed = z
+        .object({ notifyPercentFull: z.number().int().min(1).max(100).nullable() })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: 'Threshold must be between 1 and 100, or null to turn it off',
+          details: parsed.error.issues.map((i) => ({
+            path: i.path.join('.'),
+            message: i.message,
+          })),
+        });
+        return;
+      }
+
+      const updated = await query<{ WorkshopID: number }>(
+        `UPDATE core.Workshop
+            SET NotifyPercentFull = @pct,
+                -- A new threshold should be evaluated afresh.
+                NotifyFiredAt = NULL
+          OUTPUT INSERTED.WorkshopID
+          WHERE WorkshopID = @id`,
+        {
+          pct: { type: sql.Int, value: parsed.data.notifyPercentFull },
+          id: { type: sql.Int, value: id },
+        },
+      );
+
+      if (updated.recordset.length === 0) {
+        res.status(404).json({ error: 'not_found', message: 'Workshop not found' });
+        return;
+      }
+
+      // If the new threshold is already crossed, alert now rather than
+      // waiting for the next registration.
+      if (parsed.data.notifyPercentFull !== null) {
+        await checkWorkshopCapacity(id);
+      }
+
+      res.json({ workshopId: id, notifyPercentFull: parsed.data.notifyPercentFull });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /**
  * @openapi

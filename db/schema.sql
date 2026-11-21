@@ -1183,3 +1183,53 @@ GO
 
 PRINT 'Schema created: 4 schemas, 29 ref tables, 32 core tables, 2 audit tables, 2 staging tables, 3 views.';
 GO
+
+-- =====================================================================
+--  Notifications - see db/migrations/005-notifications.sql
+--  In-app only; email is blocked on Microsoft Graph credentials.
+-- =====================================================================
+IF OBJECT_ID('core.Notification', 'U') IS NULL
+BEGIN
+CREATE TABLE core.Notification (
+    NotificationID  INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Notification PRIMARY KEY,
+    Kind            NVARCHAR(40)  NOT NULL,
+    Title           NVARCHAR(200) NOT NULL,
+    Body            NVARCHAR(1000) NULL,
+    LinkPath        NVARCHAR(400) NULL,
+    WorkshopID      INT           NULL REFERENCES core.Workshop(WorkshopID),
+    CreatedAt       DATETIME2(0)  NOT NULL CONSTRAINT DF_Notification_CreatedAt DEFAULT SYSUTCDATETIME()
+);
+CREATE INDEX IX_Notification_CreatedAt ON core.Notification (CreatedAt DESC);
+END
+GO
+
+IF OBJECT_ID('core.NotificationRecipient', 'U') IS NULL
+BEGIN
+CREATE TABLE core.NotificationRecipient (
+    NotificationRecipientID INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_NotificationRecipient PRIMARY KEY,
+    NotificationID  INT           NOT NULL REFERENCES core.Notification(NotificationID) ON DELETE CASCADE,
+    UserID          INT           NOT NULL REFERENCES core.AppUser(UserID),
+    ReadAt          DATETIME2(0)  NULL,
+    DismissedAt     DATETIME2(0)  NULL,
+    CONSTRAINT UQ_NotificationRecipient UNIQUE (NotificationID, UserID)
+);
+CREATE INDEX IX_NotificationRecipient_User ON core.NotificationRecipient (UserID, ReadAt);
+END
+GO
+
+IF COL_LENGTH('core.Workshop', 'NotifyPercentFull') IS NULL
+    ALTER TABLE core.Workshop
+        ADD NotifyPercentFull INT NULL CONSTRAINT DF_Workshop_NotifyPercentFull DEFAULT 80;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints
+                WHERE name = 'CK_Workshop_NotifyPercentFull'
+                  AND parent_object_id = OBJECT_ID('core.Workshop'))
+    ALTER TABLE core.Workshop
+        ADD CONSTRAINT CK_Workshop_NotifyPercentFull
+        CHECK (NotifyPercentFull IS NULL OR (NotifyPercentFull >= 1 AND NotifyPercentFull <= 100));
+GO
+
+IF COL_LENGTH('core.Workshop', 'NotifyFiredAt') IS NULL
+    ALTER TABLE core.Workshop ADD NotifyFiredAt DATETIME2(0) NULL;
+GO

@@ -149,8 +149,19 @@ export const api = {
     sessions: (id: number) =>
       request<{ data: import('@pe/shared').WorkshopSessionRow[] }>(`/api/workshops/${id}/sessions`),
 
-    /** Registrant roster for the Registrants tab. */
-    registrants: (
+    /** Capacity notification settings for the Notifications tab. */
+    notificationSettings: (id: number) =>
+      request<import('@pe/shared').WorkshopNotificationSettings>(
+        `/api/workshops/${id}/notification-settings`,
+      ),
+
+    setNotificationSettings: (id: number, notifyPercentFull: number | null) =>
+      request<{ workshopId: number; notifyPercentFull: number | null }>(
+        `/api/workshops/${id}/notification-settings`,
+        { method: 'PATCH', body: JSON.stringify({ notifyPercentFull }) },
+      ),
+
+    /** Registrant roster for the Registrants tab. */    registrants: (
       id: number,
       params: {
         status?: 'active' | 'cancelled' | 'all';
@@ -396,8 +407,16 @@ export const api = {
       request<{ data: { id: number; label: string }[] }>(`/api/lookups/${name}`),
   },
 
-  reports: {
-    catalogue: () =>
+  notifications: {
+    list: (limit = 20) =>
+      request<import('@pe/shared').NotificationListResponse>(`/api/notifications?limit=${limit}`),
+    markRead: (id: number) =>
+      request<void>(`/api/notifications/${id}/read`, { method: 'POST' }),
+    markAllRead: () =>
+      request<{ updated: number }>('/api/notifications/read-all', { method: 'POST' }),
+  },
+
+  reports: {    catalogue: () =>
       request<import('@pe/shared').ReportCatalogueResponse>('/api/reports'),
 
     run: (key: string, params: Record<string, string | number | undefined>) => {
