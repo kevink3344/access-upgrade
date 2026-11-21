@@ -104,27 +104,53 @@
   font-weight: 700;
   letter-spacing: .06em;
   text-transform: uppercase;
-  color: var(--primary-color);
-  background: hsl(var(--primary-color-hsl) / .1);
+  color: var(--badge-blue-text);
+  background: var(--badge-blue-bg);
+  border: 1px solid var(--badge-blue-border);
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--badge-radius);
   vertical-align: 1px;
 }
 
 .role-pill {
   display: inline-block;
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--badge-radius);
+  border: 1px solid transparent;
   font-size: 11.5px;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.role-super_admin { background: #f3e8ff; color: #5b21b6; }
-.role-admin       { background: hsl(var(--primary-color-hsl) / .12); color: var(--primary-dark); }
-.role-manager     { background: #e0f2fe; color: #075985; }
-.role-editor      { background: #eef7c9; color: var(--status-open-text); }
-.role-viewer      { background: var(--surface-neutral); color: #3a464f; }
+.role-super_admin {
+  background: var(--badge-violet-bg);
+  border-color: var(--badge-violet-border);
+  color: var(--badge-violet-text);
+}
+
+.role-admin {
+  background: var(--badge-blue-bg);
+  border-color: var(--badge-blue-border);
+  color: var(--badge-blue-text);
+}
+
+.role-manager {
+  background: var(--badge-blue-bg);
+  border-color: var(--badge-blue-border);
+  color: var(--badge-blue-text);
+}
+
+.role-editor {
+  background: var(--badge-green-bg);
+  border-color: var(--badge-green-border);
+  color: var(--badge-green-text);
+}
+
+.role-viewer {
+  background: var(--badge-slate-bg);
+  border-color: var(--badge-slate-border);
+  color: var(--badge-slate-text);
+}
 
 .row-actions {
   display: inline-flex;
@@ -270,7 +296,229 @@ body.scroll-locked .sidebar {
 }
 
 /* ---------- wide drawer (workshop form) ---------- */
-.drawer-wide { width: min(620px, 100%); }
+.drawer-wide { width: min(720px, 100%); }
+
+/* ---------- drawer tabs ---------- */
+/*
+ * Sits directly under .drawer-head and stays put while the panel below
+ * scrolls. The active tab is marked with a 3px blue underline that overlaps
+ * the bar's own bottom border so the two read as one line.
+ */
+.drawer-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--surface-neutral);
+  flex-shrink: 0;
+  background: var(--surface-card);
+}
+
+.drawer-tab {
+  position: relative;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  padding: 12px 14px 11px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: color .12s ease, border-color .12s ease;
+}
+
+.drawer-tab:hover { color: var(--primary-dark); }
+
+.drawer-tab:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.drawer-tab[aria-selected='true'] {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+}
+
+.drawer-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  border: 1px solid var(--badge-slate-border);
+  background: var(--badge-slate-bg);
+  color: var(--badge-slate-text);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.drawer-tab[aria-selected='true'] .drawer-tab-count {
+  background: var(--badge-blue-bg);
+  border-color: var(--badge-blue-border);
+  color: var(--badge-blue-text);
+}
+
+/* ---------- registrant roster ---------- */
+.roster-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.roster-search { flex: 1 1 220px; min-width: 0; }
+
+.roster-filters {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-subtle);
+  border-radius: var(--radius);
+}
+
+.roster-filter {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 6px 11px;
+  border-radius: calc(var(--radius) - 1px);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background .12s ease, color .12s ease;
+}
+
+.roster-filter:hover { color: var(--primary-dark); }
+
+.roster-filter:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 1px;
+}
+
+.roster-filter[aria-pressed='true'] {
+  background: var(--surface-card);
+  color: var(--primary-color);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .08);
+}
+
+.roster-filter-count {
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.roster-filter[aria-pressed='true'] .roster-filter-count { color: var(--primary-color); }
+
+.roster-summary {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.roster-summary strong {
+  color: var(--text-heading);
+  font-weight: 700;
+}
+
+.roster-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.roster-empty strong {
+  display: block;
+  color: var(--text-heading);
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.roster-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+
+.roster-table th {
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 700;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  background: var(--surface-card);
+  z-index: 1;
+}
+
+.roster-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.roster-table tbody tr:hover { background: var(--surface-zebra); }
+
+.roster-table tr.is-clickable { cursor: pointer; }
+
+.roster-table tr.is-clickable:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+}
+
+.roster-name { font-weight: 600; color: var(--text-heading); }
+
+.roster-email {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.roster-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.roster-table th.num { text-align: right; }
+
+.roster-table tr.is-cancelled .roster-name,
+.roster-table tr.is-cancelled .roster-email { opacity: .55; text-decoration: line-through; }
+
+.roster-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .drawer-tabs { padding: 0 12px; }
+  .drawer-tab { padding: 11px 10px 10px; font-size: 13.5px; }
+  .roster-table th:nth-child(3),
+  .roster-table td:nth-child(3) { display: none; }
+}
 
 .fieldset {
   border: 0;
@@ -482,16 +730,31 @@ body.scroll-locked .sidebar {
 .source-tag {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--badge-radius);
+  border: 1px solid transparent;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .03em;
   white-space: nowrap;
 }
 
-.source-manual  { background: var(--surface-neutral); color: #3a464f; }
-.source-web     { background: hsl(var(--primary-color-hsl) / .12); color: var(--primary-dark); }
-.source-eschools { background: #e0f2fe; color: #075985; }
+.source-manual {
+  background: var(--badge-slate-bg);
+  border-color: var(--badge-slate-border);
+  color: var(--badge-slate-text);
+}
+
+.source-web {
+  background: var(--badge-blue-bg);
+  border-color: var(--badge-blue-border);
+  color: var(--badge-blue-text);
+}
+
+.source-eschools {
+  background: var(--badge-violet-bg);
+  border-color: var(--badge-violet-border);
+  color: var(--badge-violet-text);
+}
 
 @media (max-width: 640px) {
   .drawer-wide { width: 100%; }

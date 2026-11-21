@@ -46,6 +46,36 @@
   --status-unpaid-text: #4a3a00;
   --status-paid: #BED600;
 
+  /* ---- pastel badges ----
+     Every badge in the app pairs a pastel fill with a 1px border of the same
+     hue, one step darker, and a dark text colour of that hue. Keeping the
+     three values together is what makes the set look deliberate rather than
+     like eight unrelated colours. Contrast is >= 7:1 against the fill. */
+  --badge-radius: 1px;
+  --badge-green-bg: #eef7c9;
+  --badge-green-border: #cfdf94;
+  --badge-green-text: #33400a;
+
+  --badge-blue-bg: #dbeafe;
+  --badge-blue-border: #a9c9f5;
+  --badge-blue-text: #1e3a5f;
+
+  --badge-amber-bg: #fdeccf;
+  --badge-amber-border: #f0cf95;
+  --badge-amber-text: #7a4a00;
+
+  --badge-rose-bg: #f9e6eb;
+  --badge-rose-border: #e7bcc9;
+  --badge-rose-text: #6e273d;
+
+  --badge-slate-bg: #e8ebed;
+  --badge-slate-border: #c9d1d7;
+  --badge-slate-text: #3a464f;
+
+  --badge-violet-bg: #eee9fb;
+  --badge-violet-border: #cfc2f0;
+  --badge-violet-text: #43307a;
+
   /* ---- type ---- */
   /* WCPSS uses Open Sans for everything, headings included. There is no
      secondary typeface on wcpss.net, so --font-secondary is kept only as an

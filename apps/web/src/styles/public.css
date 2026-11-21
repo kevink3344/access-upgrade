@@ -115,7 +115,8 @@
   align-items: center;
   gap: 6px;
   padding: 4px 11px;
-  border-radius: 999px;
+  border-radius: var(--badge-radius);
+  border: 1px solid transparent;
   font-size: 12px;
   font-weight: 700;
   margin-top: 12px;
@@ -129,9 +130,23 @@
   background: currentColor;
 }
 
-.avail-plenty { background: #dbeafe; color: #1e3a5f; }
-.avail-limited { background: #fdeccf; color: #7a4a00; }
-.avail-full { background: #f9e6eb; color: #6e273d; }
+.avail-plenty {
+  background: var(--badge-blue-bg);
+  border-color: var(--badge-blue-border);
+  color: var(--badge-blue-text);
+}
+
+.avail-limited {
+  background: var(--badge-amber-bg);
+  border-color: var(--badge-amber-border);
+  color: var(--badge-amber-text);
+}
+
+.avail-full {
+  background: var(--badge-rose-bg);
+  border-color: var(--badge-rose-border);
+  color: var(--badge-rose-text);
+}
 
 /* ---------- terminal states ---------- */
 .public-terminal {

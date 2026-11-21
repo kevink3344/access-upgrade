@@ -175,11 +175,13 @@
   align-items: center;
   gap: 5px;
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--badge-radius);
+  border: 1px solid transparent;
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: .02em;
   white-space: nowrap;
+  line-height: 1.5;
 }
 
 .pill::before {
@@ -190,10 +192,41 @@
   background: currentColor;
 }
 
-.pill-open { background: #eef7c9; color: var(--status-open-text); }
-.pill-closed { background: #e8ebed; color: #3a464f; }
-.pill-cancelled { background: #f9e6eb; color: #6e273d; }
-.pill-full { background: #fdeccf; color: #7a4a00; }
+.pill-open {
+  background: var(--badge-green-bg);
+  border-color: var(--badge-green-border);
+  color: var(--badge-green-text);
+}
+
+.pill-closed {
+  background: var(--badge-slate-bg);
+  border-color: var(--badge-slate-border);
+  color: var(--badge-slate-text);
+}
+
+.pill-cancelled {
+  background: var(--badge-rose-bg);
+  border-color: var(--badge-rose-border);
+  color: var(--badge-rose-text);
+}
+
+.pill-full {
+  background: var(--badge-amber-bg);
+  border-color: var(--badge-amber-border);
+  color: var(--badge-amber-text);
+}
+
+.pill-muted {
+  background: var(--badge-slate-bg);
+  border-color: var(--badge-slate-border);
+  color: var(--badge-slate-text);
+}
+
+.pill-info {
+  background: var(--badge-blue-bg);
+  border-color: var(--badge-blue-border);
+  color: var(--badge-blue-text);
+}
 
 /* ---------- capacity bar ---------- */
 .capacity {
@@ -289,10 +322,11 @@
   font-weight: 700;
   letter-spacing: .05em;
   text-transform: uppercase;
-  color: var(--cc-fifth-color);
-  background: #f9e6eb;
+  color: var(--badge-rose-text);
+  background: var(--badge-rose-bg);
+  border: 1px solid var(--badge-rose-border);
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--badge-radius);
   vertical-align: 1px;
 }
 
@@ -414,12 +448,13 @@
   display: inline-block;
   padding: 1px 7px;
   margin-right: 4px;
-  border-radius: 999px;
+  border-radius: var(--badge-radius);
+  border: 1px solid var(--badge-violet-border);
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: .04em;
-  background: hsl(var(--primary-color-hsl) / .12);
-  color: var(--primary-dark);
+  background: var(--badge-violet-bg);
+  color: var(--badge-violet-text);
 }
 
 /* ---------- compact list inside a drawer ---------- */
