@@ -137,7 +137,12 @@
   color: var(--text-faint);
 }
 
+/* Tables want their rows flush to the panel edge, so the default body has no
+   horizontal padding. Forms and other padded content opt in with
+   .panel-body-padded. */
 .panel-body { padding: 6px 0; }
+
+.panel-body-padded { padding: 20px 22px; }
 
 /* ---------- table ---------- */
 .data-table {

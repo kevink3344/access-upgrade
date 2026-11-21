@@ -132,6 +132,8 @@ it is safe to run against a populated database. To change an existing object, ad
 - [SQL password rotation](docs/features/sql-password-rotation.md) — where the credential lives and how to change it
 - [Public registration](docs/features/public-registration.md) — the two-audience split
 - [Responsive & mobile](docs/features/responsive-mobile.md) — the phone-first requirement
+- [Certificates](docs/features/certificates.md) — CEU/CHC templates, per-participant overrides, PDF output
+- [Utilities](docs/features/utilities.md) — the batch jobs replacing Access macros and action queries
 - [School Cash Online integration](docs/plans/schoolcash-integration.md) — payment data plan
 - [Build records](docs/completions/) — what was built, when, and what broke
 

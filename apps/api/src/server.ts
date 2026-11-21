@@ -25,6 +25,7 @@ import { registrationsRouter } from './routes/registrations.js';
 import { lookupsRouter } from './routes/lookups.js';
 import { registrationLinkRouter } from './routes/registration-link.js';
 import { publicRouter } from './routes/public.js';
+import { certificatesRouter } from './routes/certificates.js';
 
 const app = express();
 
@@ -32,7 +33,10 @@ app.set('trust proxy', 1);
 
 app.use(helmet({ contentSecurityPolicy: false })); // Swagger UI needs inline styles
 app.use(cors({ origin: env.WEB_ORIGIN, credentials: true }));
-app.use(express.json({ limit: '1mb' }));
+// Certificate images travel as base64 data URIs, which inflate by ~4/3, so a
+// 2 MB image needs ~2.7 MB of body. 4 MB leaves headroom without inviting
+// genuinely large uploads.
+app.use(express.json({ limit: '4mb' }));
 app.use(cookieParser());
 
 // ---- OpenAPI / Swagger UI ------------------------------------------------
@@ -206,6 +210,7 @@ app.use('/api/workshop-names', workshopNamesRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/registrations', registrationsRouter);
 app.use('/api/lookups', lookupsRouter);
+app.use('/api/certificates', certificatesRouter);
 
 // Public surface — no auth. Must be mounted before the auth-guarded routes
 // would ever apply; it has its own rate limits and audit logging.

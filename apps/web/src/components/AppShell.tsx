@@ -20,6 +20,7 @@ import {
   IconUtilities,
   IconApi,
   IconAdmin,
+  IconCertificate,
   IconLogout,
 } from './icons';
 
@@ -64,6 +65,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/folders', label: 'Folder builder', icon: IconFolder },
       { to: '/workshops/approval', label: 'Workshop approval', icon: IconApproval },
+      { to: '/certificates', label: 'Certificates', icon: IconCertificate },
       { to: '/reports', label: 'Reports hub', icon: IconReports },
       { to: '/mailing-lists', label: 'Mailing lists', icon: IconMail },
     ],

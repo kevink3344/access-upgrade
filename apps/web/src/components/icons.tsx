@@ -54,6 +54,14 @@ export const IconReports = (p: Props) => (
   </svg>
 );
 
+/** Award ribbon — used for the Certificates screen. */
+export const IconCertificate = (p: Props) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="9" r="6" />
+    <path d="M8.5 14.2 7 22l5-2.8L17 22l-1.5-7.8" />
+  </svg>
+);
+
 export const IconAdmin = (p: Props) => (
   <svg {...base(p)}>
     <path d="M12 2 4 6v6c0 5 3.4 9.3 8 10 4.6-.7 8-5 8-10V6z" />

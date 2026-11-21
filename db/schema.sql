@@ -897,6 +897,122 @@ END
 GO
 
 -- =====================================================================
+--  Certificates: image assets, per-participant overrides, issued PDFs
+--  See docs/features/certificates.md and db/migrations/003-certificates.sql
+--  Images live in SQL Server because Azure SQL has no FILESTREAM.
+-- =====================================================================
+IF OBJECT_ID('core.CertificateAsset', 'U') IS NULL
+BEGIN
+CREATE TABLE core.CertificateAsset (
+    CertificateAssetID INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CertificateAsset PRIMARY KEY,
+    AssetKind          NVARCHAR(30)  NOT NULL,       -- 'template-logo' | 'participant-image'
+    FileName           NVARCHAR(260) NULL,
+    ContentType        NVARCHAR(100) NOT NULL,
+    ByteSize           INT           NOT NULL,
+    Sha256             BINARY(32)    NOT NULL,
+    Content            VARBINARY(MAX) NOT NULL,
+    UploadedBy         NVARCHAR(200) NULL,
+    UploadedAt         DATETIME2(0)  NOT NULL CONSTRAINT DF_CertificateAsset_UploadedAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT CK_CertificateAsset_Kind CHECK (AssetKind IN ('template-logo','participant-image')),
+    CONSTRAINT CK_CertificateAsset_Size CHECK (ByteSize > 0 AND ByteSize <= 2097152)
+);
+CREATE INDEX IX_CertificateAsset_Sha256 ON core.CertificateAsset (Sha256);
+END
+GO
+
+IF COL_LENGTH('core.CertificateTemplate', 'LogoAssetID') IS NULL
+    ALTER TABLE core.CertificateTemplate
+        ADD LogoAssetID INT NULL
+            CONSTRAINT FK_CertificateTemplate_Logo
+            REFERENCES core.CertificateAsset (CertificateAssetID);
+GO
+
+IF OBJECT_ID('core.CertificateOverride', 'U') IS NULL
+BEGIN
+CREATE TABLE core.CertificateOverride (
+    CertificateOverrideID INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CertificateOverride PRIMARY KEY,
+    ParticipantID         INT           NOT NULL REFERENCES core.Participant(ParticipantID),
+    SchoolYearID          INT           NOT NULL REFERENCES ref.SchoolYear(SchoolYearID),
+    CertificateType       NVARCHAR(10)  NOT NULL,   -- 'CEU' | 'CHC'
+    CustomText            NVARCHAR(500) NULL,
+    CustomTextLabel       NVARCHAR(100) NULL,
+    ImageAssetID          INT           NULL REFERENCES core.CertificateAsset(CertificateAssetID),
+    ImageAltText          NVARCHAR(200) NULL,
+    ImagePlacement        NVARCHAR(20)  NULL,       -- 'header' | 'body' | 'footer'
+    UpdatedBy             NVARCHAR(200) NULL,
+    UpdatedAt             DATETIME2(0)  NOT NULL CONSTRAINT DF_CertificateOverride_UpdatedAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT UQ_CertificateOverride UNIQUE (ParticipantID, SchoolYearID, CertificateType),
+    CONSTRAINT CK_CertificateOverride_Type CHECK (CertificateType IN ('CEU','CHC')),
+    CONSTRAINT CK_CertificateOverride_Placement
+        CHECK (ImagePlacement IS NULL OR ImagePlacement IN ('header','body','footer')),
+    -- An image without alt text is an accessibility defect; refuse it here
+    -- rather than trusting the API to check.
+    CONSTRAINT CK_CertificateOverride_AltText
+        CHECK (ImageAssetID IS NULL OR (ImageAltText IS NOT NULL AND LEN(LTRIM(ImageAltText)) > 0))
+);
+END
+GO
+
+IF OBJECT_ID('core.CertificateIssue', 'U') IS NULL
+BEGIN
+CREATE TABLE core.CertificateIssue (
+    CertificateIssueID    INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CertificateIssue PRIMARY KEY,
+    ParticipantID         INT           NOT NULL REFERENCES core.Participant(ParticipantID),
+    SchoolYearID          INT           NOT NULL REFERENCES ref.SchoolYear(SchoolYearID),
+    CertificateType       NVARCHAR(10)  NOT NULL,
+    SnapshotJson          NVARCHAR(MAX) NOT NULL,   -- template + data at issue time
+    PdfContent            VARBINARY(MAX) NULL,
+    PdfByteSize           INT           NULL,
+    TotalHours            DECIMAL(9,2)  NULL,
+    TotalCeus             DECIMAL(9,2)  NULL,
+    IssuedBy              NVARCHAR(200) NULL,
+    IssuedAt              DATETIME2(0)  NOT NULL CONSTRAINT DF_CertificateIssue_IssuedAt DEFAULT SYSUTCDATETIME(),
+    SupersededAt          DATETIME2(0)  NULL,
+    CONSTRAINT CK_CertificateIssue_Type CHECK (CertificateType IN ('CEU','CHC'))
+);
+CREATE INDEX IX_CertificateIssue_Lookup
+    ON core.CertificateIssue (ParticipantID, SchoolYearID, CertificateType);
+END
+GO
+
+-- The legacy "Late" rule that sqryCEUCertificates applied.
+IF COL_LENGTH('core.Registration', 'IsLate') IS NULL
+    ALTER TABLE core.Registration
+        ADD IsLate BIT NOT NULL CONSTRAINT DF_Registration_IsLate DEFAULT 0;
+GO
+
+-- Who can be issued a certificate: ports sqryCEUCertificates.
+IF OBJECT_ID('core.vw_CertificateEligible', 'V') IS NOT NULL
+    DROP VIEW core.vw_CertificateEligible;
+GO
+CREATE VIEW core.vw_CertificateEligible AS
+SELECT
+    p.ParticipantID,
+    w.SchoolYearID,
+    p.FirstName,
+    p.LastName,
+    p.MiddleName,
+    p.Email,
+    a.AgencyName,
+    COUNT(*)                        AS WorkshopCount,
+    SUM(w.SessionHours)             AS TotalHours,
+    SUM(w.SessionHours * 0.1)       AS TotalCeus,
+    MIN(w.StartDate)                AS FirstDate,
+    MAX(COALESCE(w.EndDate, w.StartDate)) AS LastDate,
+    SUM(CASE WHEN w.SessionHours IS NULL THEN 1 ELSE 0 END) AS MissingHoursCount
+FROM core.Participant p
+JOIN core.Registration r ON r.ParticipantID = p.ParticipantID
+JOIN core.Workshop     w ON w.WorkshopID   = r.WorkshopID
+LEFT JOIN core.Agency  a ON a.AgencyID     = p.AgencyID
+WHERE r.Attended    = 1
+  AND r.IsCancelled = 0
+  AND r.IsLate      = 0
+  AND w.WorkshopCode LIKE 't%'
+GROUP BY p.ParticipantID, w.SchoolYearID, p.FirstName, p.LastName,
+         p.MiddleName, p.Email, a.AgencyName;
+GO
+
+-- =====================================================================
 --  audit -- change tracking and public-form submissions
 
 -- =====================================================================

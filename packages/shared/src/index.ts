@@ -740,3 +740,105 @@ export interface PublicRegisterRequest {
   website?: string;
   elapsedMs?: number;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Certificates                                                       */
+/* ------------------------------------------------------------------ */
+
+export type CertificateType = 'CEU' | 'CHC';
+
+export interface CertificateFieldVisibility {
+  name: boolean;
+  certificateType: boolean;
+  programTitle: boolean;
+  programDirector: boolean;
+  inclusiveDates: boolean;
+  unitsOfRenewalCredit: boolean;
+  agency: boolean;
+  employedBy: boolean;
+  roleFlags: boolean;
+  ssn: boolean;
+  homeAddress: boolean;
+  expirationDate: boolean;
+}
+
+export interface CertificateTemplateRow {
+  CertificateTemplateID: number;
+  SchoolYearID: number;
+  SchoolYear: string | null;
+  CertificateType: CertificateType;
+  Title: string | null;
+  Subtitle: string | null;
+  LogoPath: string | null;
+  LogoAssetID: number | null;
+  HasLogo: boolean;
+  ProgramDirectorName: string | null;
+  ProgramDirectorTitle: string | null;
+  ApprovingDirectorName: string | null;
+  ApprovingDirectorTitle: string | null;
+  CreditUnitLabel: string | null;
+  FooterText: string | null;
+  VisibleFields: CertificateFieldVisibility;
+  UpdatedBy: string | null;
+  UpdatedAt: string;
+}
+
+export interface CertificateTemplateWrite {
+  title?: string | null;
+  subtitle?: string | null;
+  programDirectorName?: string | null;
+  programDirectorTitle?: string | null;
+  approvingDirectorName?: string | null;
+  approvingDirectorTitle?: string | null;
+  creditUnitLabel?: string | null;
+  footerText?: string | null;
+  visibleFields?: Partial<CertificateFieldVisibility>;
+}
+
+export interface CertificateEligibleRow {
+  ParticipantID: number;
+  SchoolYearID: number;
+  FirstName: string | null;
+  LastName: string | null;
+  MiddleName: string | null;
+  Email: string | null;
+  AgencyName: string | null;
+  WorkshopCount: number;
+  TotalHours: number | null;
+  TotalCeus: number | null;
+  FirstDate: string | null;
+  LastDate: string | null;
+  MissingHoursCount: number;
+  HasIssued: number;
+}
+
+export interface CertificateEligibleResponse {
+  data: CertificateEligibleRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface CertificateOverrideRow {
+  CertificateOverrideID: number;
+  CustomText: string | null;
+  CustomTextLabel: string | null;
+  ImageAssetID: number | null;
+  ImageAltText: string | null;
+  ImagePlacement: 'header' | 'body' | 'footer' | null;
+  UpdatedAt: string;
+  ImageContentType: string | null;
+}
+
+export interface CertificateOverrideWrite {
+  schoolYearId: number;
+  certificateType: CertificateType;
+  customText?: string | null;
+  customTextLabel?: string | null;
+  imageAltText?: string | null;
+  imagePlacement?: 'header' | 'body' | 'footer' | null;
+  /** Full data URI, or null to remove the image. */
+  imageData?: string | null;
+  imageContentType?: string;
+  imageFileName?: string;
+}

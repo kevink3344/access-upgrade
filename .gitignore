@@ -76,3 +76,6 @@ venv/
 # Uncomment if they should not be tracked.
 # docs/plans/*.html
 # docs/plans/*.pdf
+
+# Reference design files (not runtime assets)
+docs/certificate/*.pdf

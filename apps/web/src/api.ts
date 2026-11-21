@@ -396,6 +396,55 @@ export const api = {
       request<{ data: { id: number; label: string }[] }>(`/api/lookups/${name}`),
   },
 
+  certificates: {
+    capabilities: () => request<{ pdfRendering: boolean }>('/api/certificates/capabilities'),
+
+    templates: (schoolYearId: number) =>
+      request<{ data: import('@pe/shared').CertificateTemplateRow[] }>(
+        `/api/certificates/templates?schoolYearId=${schoolYearId}`,
+      ),
+
+    updateTemplate: (id: number, body: import('@pe/shared').CertificateTemplateWrite) =>
+      request<{ certificateTemplateId: number }>(`/api/certificates/templates/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+
+    uploadLogo: (id: number, body: { data: string; contentType: string; fileName?: string }) =>
+      request<{ certificateTemplateId: number; logoAssetId: number }>(
+        `/api/certificates/templates/${id}/logo`,
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+
+    eligible: (params: { schoolYearId: number; q?: string; page?: number; pageSize?: number }) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      return request<import('@pe/shared').CertificateEligibleResponse>(
+        `/api/certificates/eligible?${qs}`,
+      );
+    },
+
+    override: (participantId: number, schoolYearId: number, certificateType: 'CEU' | 'CHC') =>
+      request<{ data: import('@pe/shared').CertificateOverrideRow | null }>(
+        `/api/certificates/overrides/${participantId}?schoolYearId=${schoolYearId}&certificateType=${certificateType}`,
+      ),
+
+    saveOverride: (participantId: number, body: import('@pe/shared').CertificateOverrideWrite) =>
+      request<{ participantId: number; saved: boolean }>(
+        `/api/certificates/overrides/${participantId}`,
+        { method: 'PUT', body: JSON.stringify(body) },
+      ),
+
+    /** Returns a blob URL for the rendered PDF. */
+    pdfUrl: (participantId: number, schoolYearId: number, certificateType: 'CEU' | 'CHC') =>
+      `/api/certificates/pdf/${participantId}?schoolYearId=${schoolYearId}&certificateType=${certificateType}`,
+
+    previewUrl: (participantId: number, schoolYearId: number, certificateType: 'CEU' | 'CHC') =>
+      `/api/certificates/preview/${participantId}?schoolYearId=${schoolYearId}&certificateType=${certificateType}`,
+  },
+
   registrations: {
     list: (params: {      page?: number;
       pageSize?: number;
