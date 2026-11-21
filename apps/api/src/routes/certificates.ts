@@ -196,16 +196,6 @@ certificatesRouter.get('/templates', requireAuth, async (req, res, next) => {
   }
 });
 
-/**
- * @openapi
- * /api/certificates/templates/{id}:
- *   patch:
- *     tags: [Certificates]
- *     summary: Update a certificate template
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       200: { description: Updated }
- */
 const templatePatch = z.object({
   title: z.string().max(200).nullable().optional(),
   subtitle: z.string().max(500).nullable().optional(),
@@ -216,8 +206,134 @@ const templatePatch = z.object({
   creditUnitLabel: z.string().max(100).nullable().optional(),
   footerText: z.string().max(500).nullable().optional(),
   visibleFields: z.record(z.boolean()).optional(),
+  layout: z.enum(['portrait', 'landscape']).optional(),
 });
 
+const templateCreate = templatePatch.extend({
+  schoolYearId: z.number().int(),
+  certificateType: certType,
+});
+
+/**
+ * @openapi
+ * /api/certificates/templates:
+ *   post:
+ *     tags: [Certificates]
+ *     summary: Create a certificate template
+ *     description: >
+ *       Creates a template for a school year and certificate type. Refuses if
+ *       one already exists for that pair, since the unique constraint would
+ *       otherwise surface as an opaque SQL error.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Created }
+ *       409: { description: A template already exists for that year and type }
+ */
+certificatesRouter.post(
+  '/templates',
+  requireAuth,
+  requireRole('SUPER_ADMIN', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const parsed = templateCreate.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: 'Invalid template',
+          details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+        });
+        return;
+      }
+
+      const d = parsed.data;
+
+      const existing = await query<{ id: number }>(
+        `SELECT TOP 1 CertificateTemplateID AS id
+           FROM core.CertificateTemplate
+          WHERE SchoolYearID = @sy AND CertificateType = @type`,
+        {
+          sy: { type: sql.Int, value: d.schoolYearId },
+          type: { type: sql.NVarChar(10), value: d.certificateType },
+        },
+      );
+
+      if (existing.recordset[0]) {
+        res.status(409).json({
+          error: 'already_exists',
+          message: `A ${d.certificateType} template already exists for that school year.`,
+          certificateTemplateId: existing.recordset[0].id,
+        });
+        return;
+      }
+
+      // Copy the logos from the most recent template so a new certificate is
+      // usable immediately rather than starting blank. Staff can still replace
+      // them afterwards.
+      const donor = await query<{ LogoAssetID: number | null; SecondaryLogoAssetID: number | null }>(
+        `SELECT TOP 1 LogoAssetID, SecondaryLogoAssetID
+           FROM core.CertificateTemplate
+          WHERE LogoAssetID IS NOT NULL
+          ORDER BY SchoolYearID DESC, CertificateTemplateID DESC`,
+      );
+      const logos = donor.recordset[0];
+
+      const created = await query<{ id: number }>(
+        `INSERT INTO core.CertificateTemplate
+           (SchoolYearID, CertificateType, Title, Subtitle,
+            ProgramDirectorName, ProgramDirectorTitle,
+            ApprovingDirectorName, ApprovingDirectorTitle,
+            CreditUnitLabel, FooterText, VisibleFields, Layout,
+            LogoAssetID, SecondaryLogoAssetID, UpdatedBy)
+         OUTPUT INSERTED.CertificateTemplateID AS id
+         VALUES (@sy, @type, @title, @subtitle, @pdn, @pdt, @adn, @adt,
+                 @unit, @footer, @vf, @layout, @logo, @logo2, @by)`,
+        {
+          sy: { type: sql.Int, value: d.schoolYearId },
+          type: { type: sql.NVarChar(10), value: d.certificateType },
+          title: { type: sql.NVarChar(200), value: d.title ?? 'Certificate' },
+          subtitle: { type: sql.NVarChar(500), value: d.subtitle ?? 'of Attendance' },
+          pdn: { type: sql.NVarChar(100), value: d.programDirectorName ?? null },
+          pdt: { type: sql.NVarChar(100), value: d.programDirectorTitle ?? 'Program Director' },
+          adn: { type: sql.NVarChar(100), value: d.approvingDirectorName ?? null },
+          adt: {
+            type: sql.NVarChar(100),
+            value: d.approvingDirectorTitle ?? 'Director, Project Enlightenment',
+          },
+          unit: {
+            type: sql.NVarChar(100),
+            value:
+              d.creditUnitLabel ??
+              (d.certificateType === 'CHC' ? 'Child Care Hours' : 'Unit(s) of Renewal Credit'),
+          },
+          footer: { type: sql.NVarChar(500), value: d.footerText ?? null },
+          vf: {
+            type: sql.NVarChar(sql.MAX),
+            value: d.visibleFields ? JSON.stringify(d.visibleFields) : null,
+          },
+          layout: { type: sql.NVarChar(10), value: d.layout ?? 'portrait' },
+          logo: { type: sql.Int, value: logos?.LogoAssetID ?? null },
+          logo2: { type: sql.Int, value: logos?.SecondaryLogoAssetID ?? null },
+          by: { type: sql.NVarChar(200), value: req.user?.email ?? null },
+        },
+      );
+
+      res.status(201).json({ certificateTemplateId: created.recordset[0]!.id });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/certificates/templates/{id}:
+ *   patch:
+ *     tags: [Certificates]
+ *     summary: Update a certificate template
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Updated }
+ */
 certificatesRouter.patch(
   '/templates/:id',
   requireAuth,
@@ -271,6 +387,11 @@ certificatesRouter.patch(
         }
         sets.push('VisibleFields = @vf');
         params.vf = { type: sql.NVarChar(sql.MAX), value: JSON.stringify(canonical) };
+      }
+
+      if (d.layout !== undefined) {
+        sets.push('Layout = @layout');
+        params.layout = { type: sql.NVarChar(10), value: d.layout };
       }
 
       if (sets.length === 0) {
@@ -676,6 +797,9 @@ async function buildModel(
       creditUnitLabel: (t.CreditUnitLabel as string) ?? 'Unit(s) of Renewal Credit',
       footerText: (t.FooterText as string) ?? null,
       visibleFields: parseVisibleFields(t.VisibleFields as string | null),
+      layout: ((t.Layout as string) === 'landscape' ? 'landscape' : 'portrait') as
+        | 'portrait'
+        | 'landscape',
       logoDataUri: await loadAssetDataUri(t.LogoAssetID as number | null),
       secondaryLogoDataUri: await loadAssetDataUri(t.SecondaryLogoAssetID as number | null),
     },

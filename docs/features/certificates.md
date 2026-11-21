@@ -54,10 +54,20 @@ real eligibility rule is derived, see §3.
 | **Credit-unit label** | Text | "Unit(s) of Renewal Credit" (CEU) / "Child Care Hours" (CHC) |
 | **Footer disclaimer** | Text | Default keeps the WCPSS-employee notice |
 | **Field visibility** | Toggles | See §2.2 |
+| **Layout** | Select | Portrait (8.5×11) or landscape (11×8.5) |
 
-**Not configurable:** layout, field positions, page size, fonts. Those need a
-developer. This is the line between "configurable template" and "report
+**Not configurable:** field positions, page size beyond the two orientations, fonts. Those
+need a developer. This is the line between "configurable template" and "report
 designer", and the latter is a product in its own right.
+
+### 2.1.1 Layout
+
+`core.CertificateTemplate.Layout` stores `'portrait'` or `'landscape'`, defaulting to
+portrait. Landscape reduces the type scale to 82% so the same content still fits one
+sheet — the alternative is a second layout that overflows onto a second page.
+
+The choice is per template, so a school year can differ from its neighbours, and an
+already-issued certificate keeps the orientation it was issued with.
 
 ### 2.2 Field visibility
 

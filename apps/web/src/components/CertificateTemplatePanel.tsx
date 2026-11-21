@@ -57,9 +57,31 @@ export function CertificateTemplatePanel({
     footerText: '',
   });
   const [visible, setVisible] = useState<CertificateFieldVisibility | null>(null);
+  const [layout, setLayout] = useState<'portrait' | 'landscape'>('portrait');
   const [previewHtml, setPreviewHtml] = useState<string>('');
   const [notice, setNotice] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [previewScale, setPreviewScale] = useState(0.62);
+  const previewColRef = useRef<HTMLDivElement>(null);
+
+  // Scale the true-size page to fill the preview column, so landscape and
+  // portrait both use the full width instead of leaving dead space.
+  useEffect(() => {
+    const el = previewColRef.current;
+    if (!el) return;
+
+    const pageInches = layout === 'landscape' ? 11 : 8.5;
+    const recalc = () => {
+      const width = el.getBoundingClientRect().width;
+      // 1in = 96px in CSS.
+      if (width > 0) setPreviewScale(width / (pageInches * 96));
+    };
+
+    recalc();
+    const ro = new ResizeObserver(recalc);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [layout]);
 
   useEffect(() => {
     if (!template) return;
@@ -74,6 +96,7 @@ export function CertificateTemplatePanel({
       footerText: template.FooterText ?? '',
     });
     setVisible(template.VisibleFields);
+    setLayout(template.Layout === 'landscape' ? 'landscape' : 'portrait');
     setDirty(false);
   }, [template]);
 
@@ -111,6 +134,7 @@ export function CertificateTemplatePanel({
         creditUnitLabel: form.creditUnitLabel || null,
         footerText: form.footerText || null,
         visibleFields: visible ?? undefined,
+        layout,
       }),
     onSuccess: () => {
       setNotice('Template saved. Certificates generated from now on use these settings.');
@@ -229,6 +253,28 @@ export function CertificateTemplatePanel({
           </fieldset>
 
           <fieldset className="fieldset" disabled={!canEdit}>
+            <legend>Layout</legend>
+            <div className="field">
+              <label htmlFor="t-layout">Page orientation</label>
+              <select
+                id="t-layout"
+                value={layout}
+                onChange={(e) => {
+                  setLayout(e.target.value as 'portrait' | 'landscape');
+                  setDirty(true);
+                }}
+              >
+                <option value="portrait">Portrait — 8.5 × 11 in</option>
+                <option value="landscape">Landscape — 11 × 8.5 in</option>
+              </select>
+              <span className="field-hint">
+                Landscape fits more across the page, so the type scale is reduced slightly to keep
+                everything on one sheet. The preview updates when you save.
+              </span>
+            </div>
+          </fieldset>
+
+          <fieldset className="fieldset" disabled={!canEdit}>
             <legend>Text</legend>
             <div className="field">
               <label htmlFor="t-title">Title</label>
@@ -340,18 +386,29 @@ export function CertificateTemplatePanel({
         </div>
       </div>
 
-      <div className="cert-preview-column">
+      <div className="cert-preview-column" ref={previewColRef}>
         <div className="cert-preview-label">
           Live preview
           {sampleParticipantId ? '' : ' — no eligible participant to preview against'}
         </div>
         {previewHtml ? (
-          <iframe
-            className="cert-preview-frame"
-            title="Certificate preview"
-            srcDoc={previewHtml}
-            sandbox=""
-          />
+          <div
+            className="cert-preview-scaler"
+            style={
+              {
+                '--cert-scale': previewScale,
+                // Reserve the scaled height so the sticky column does not jump.
+                height: `calc(${layout === 'landscape' ? '8.5in' : '11in'} * ${previewScale})`,
+              } as React.CSSProperties
+            }
+          >
+            <iframe
+              className={`cert-preview-frame cert-preview-${layout}`}
+              title="Certificate preview"
+              srcDoc={previewHtml}
+              sandbox=""
+            />
+          </div>
         ) : (
           <div className="cert-preview-empty">Preview unavailable</div>
         )}

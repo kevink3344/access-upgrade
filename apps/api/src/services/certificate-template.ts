@@ -58,6 +58,8 @@ export interface CertificateModel {
     creditUnitLabel: string;
     footerText: string | null;
     visibleFields: CertificateFieldVisibility;
+    /** 'portrait' (8.5x11) or 'landscape' (11x8.5). */
+    layout: 'portrait' | 'landscape';
     /** Data URI, already resolved from the database. */
     logoDataUri: string | null;
     /** Optional second mark shown top-left (the NCDHHS block). */
@@ -120,6 +122,13 @@ export function renderCertificateHtml(model: CertificateModel): string {
   const { template: t, participant: p, override: o } = model;
   const v = { ...DEFAULT_VISIBLE_FIELDS, ...t.visibleFields };
 
+  const landscape = t.layout === 'landscape';
+  // Landscape is 11x8.5in: less vertical room, more horizontal. The type
+  // scale and spacing shrink so the same content still fits one page.
+  const pageW = landscape ? '11in' : '8.5in';
+  const pageH = landscape ? '8.5in' : '11in';
+  const scale = landscape ? 0.82 : 1;
+
   const logo = t.logoDataUri
     ? `<img class="logo" src="${t.logoDataUri}" alt="Project Enlightenment" />`
     : '';
@@ -173,7 +182,7 @@ export function renderCertificateHtml(model: CertificateModel): string {
 <meta charset="utf-8" />
 <title>${esc(t.title)} — ${esc(p.fullName)}</title>
 <style>
-  @page { size: letter portrait; margin: 0; }
+  @page { size: ${pageW} ${pageH}; margin: 0; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: #fff; }
   body {
@@ -183,7 +192,7 @@ export function renderCertificateHtml(model: CertificateModel): string {
     print-color-adjust: exact;
   }
   .page {
-    width: 8.5in; height: 11in;
+    width: ${pageW}; height: ${pageH};
     padding: 0.3in;
     position: relative;
   }
@@ -205,30 +214,50 @@ export function renderCertificateHtml(model: CertificateModel): string {
   }
 
   /* ---- header ----
-     The NCDHHS lockup is 2.82:1, so it needs a fixed width rather than a
-     height to stay visually balanced against the squarer PE mark. */
+     Three columns so the Project Enlightenment mark sits in the optical
+     centre of the page: NCDHHS lockup left, PE centred, right column left
+     empty as whitespace. Equal side columns keep the centre truly centred
+     rather than offset by the wider NCDHHS lockup. */
   .header {
-    display: flex; align-items: center; justify-content: center;
-    gap: 0.3in; margin-bottom: 0.04in;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0.2in;
+    margin-bottom: 0.04in;
   }
-  .logo-secondary { width: 2.35in; height: auto; object-fit: contain; }
-  .logo { height: 0.42in; width: auto; object-fit: contain; }
+  .header-left { justify-self: start; }
+  .header-centre { justify-self: center; }
+  .header-right { justify-self: end; }
+  .logo-secondary {
+    display: block;
+    width: ${(2.35 * scale).toFixed(2)}in;
+    height: auto;
+    object-fit: contain;
+  }
+  .logo {
+    display: block;
+    /* The PE mark is a 3.1:1 lockup (sunburst + wordmark), so it is sized by
+       width to keep the wordmark legible next to the NCDHHS block. */
+    width: ${(1.95 * scale).toFixed(2)}in;
+    height: auto;
+    object-fit: contain;
+  }
 
   h1 {
-    font-size: 52pt; line-height: 1; letter-spacing: .02em;
-    margin: 0.04in 0 0; text-align: center;
+    font-size: ${(52 * scale).toFixed(1)}pt; line-height: 1; letter-spacing: .02em;
+    margin: ${(0.04 * scale).toFixed(3)}in 0 0; text-align: center;
     color: #0C5488; font-weight: 800; text-transform: uppercase;
   }
   .subtitle {
-    font-size: 27pt; line-height: 1.1; text-align: center;
+    font-size: ${(27 * scale).toFixed(1)}pt; line-height: 1.1; text-align: center;
     color: #0C5488; font-weight: 400; text-transform: uppercase;
-    letter-spacing: .04em; margin: 0 0 0;
+    letter-spacing: .04em; margin: 0;
   }
 
   /* Rule with the orange dot, exactly as in the source template. */
   .divider {
     position: relative; height: 1px; background: #0C5488;
-    margin: 0.16in 0 0.22in;
+    margin: ${(0.16 * scale).toFixed(3)}in 0 ${(0.22 * scale).toFixed(3)}in;
   }
   .divider::after {
     content: ''; position: absolute; left: 50%; top: 50%;
@@ -237,15 +266,24 @@ export function renderCertificateHtml(model: CertificateModel): string {
   }
 
   /* ---- body ---- */
-  .presented { text-align: center; font-size: 13pt; color: #212121; margin-bottom: 0.08in; }
-  .name {
-    text-align: center; font-size: 28pt; font-weight: 600;
-    color: #212121; margin: 0.12in 0.4in 0.18in;
-    border-bottom: 1px solid #212121; padding-bottom: 0.08in;
+  .presented {
+    text-align: center; font-size: ${(13 * scale).toFixed(1)}pt;
+    color: #212121; margin-bottom: ${(0.08 * scale).toFixed(3)}in;
   }
-  .cert-type { text-align: center; font-size: 11pt; font-style: italic; color: #5E8EB0; margin-bottom: 0.16in; }
+  .name {
+    text-align: center; font-size: ${(28 * scale).toFixed(1)}pt; font-weight: 600;
+    color: #212121; margin: ${(0.12 * scale).toFixed(3)}in 0.4in ${(0.18 * scale).toFixed(3)}in;
+    border-bottom: 1px solid #212121; padding-bottom: ${(0.08 * scale).toFixed(3)}in;
+  }
+  .cert-type {
+    text-align: center; font-size: ${(11 * scale).toFixed(1)}pt; font-style: italic;
+    color: #5E8EB0; margin-bottom: ${(0.16 * scale).toFixed(3)}in;
+  }
 
-  .series { text-align: center; font-size: 13pt; color: #212121; margin-bottom: 0.22in; line-height: 1.5; }
+  .series {
+    text-align: center; font-size: ${(13 * scale).toFixed(1)}pt;
+    color: #212121; margin-bottom: ${(0.22 * scale).toFixed(3)}in; line-height: 1.5;
+  }
   .series-name { font-weight: 600; }
 
   .workshops {
@@ -268,9 +306,9 @@ export function renderCertificateHtml(model: CertificateModel): string {
   /* ---- metrics row ---- */
   .metrics {
     display: flex; align-items: stretch; justify-content: center;
-    gap: 0; margin: 0.1in 0 0.18in;
+    gap: 0; margin: ${(0.1 * scale).toFixed(3)}in 0 ${(0.18 * scale).toFixed(3)}in;
     border-top: 1px solid #0C5488; border-bottom: 1px solid #0C5488;
-    padding: 0.12in 0;
+    padding: ${(0.12 * scale).toFixed(3)}in 0;
   }
   .metric {
     flex: 1; display: flex; align-items: center; gap: 0.1in;
@@ -278,46 +316,50 @@ export function renderCertificateHtml(model: CertificateModel): string {
   }
   .metric + .metric { border-left: 1px solid #212121; }
   .metric-icon {
-    width: 0.42in; height: 0.42in; border-radius: 50%;
+    width: ${(0.42 * scale).toFixed(2)}in; height: ${(0.42 * scale).toFixed(2)}in;
+    border-radius: 50%;
     background: #E3732B; color: #fff;
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
   }
-  .metric-icon svg { width: 0.24in; height: 0.24in; }
+  .metric-icon svg { width: ${(0.24 * scale).toFixed(2)}in; height: ${(0.24 * scale).toFixed(2)}in; }
   .metric-label {
-    font-size: 10pt; font-weight: 700; letter-spacing: .06em;
+    font-size: ${(10 * scale).toFixed(1)}pt; font-weight: 700; letter-spacing: .06em;
     text-transform: uppercase; color: #0C5488;
   }
-  .metric-value { font-size: 15pt; font-weight: 700; color: #212121; line-height: 1.15; }
+  .metric-value { font-size: ${(15 * scale).toFixed(1)}pt; font-weight: 700; color: #212121; line-height: 1.15; }
 
   .spacer { flex: 1; }
 
   /* ---- signatures ---- */
-  .signatures { display: flex; justify-content: space-around; gap: 0.5in; margin: 0.18in 0 0.16in; }
+  .signatures {
+    display: flex; justify-content: space-around; gap: 0.5in;
+    margin: ${(0.18 * scale).toFixed(3)}in 0 ${(0.16 * scale).toFixed(3)}in;
+  }
   .sig { flex: 1; text-align: center; }
   .sig-line { border-top: 1px solid #212121; margin-bottom: 5px; }
-  .sig-name { font-size: 11pt; font-weight: 600; }
-  .sig-title { font-size: 9pt; color: #5E8EB0; }
+  .sig-name { font-size: ${(11 * scale).toFixed(1)}pt; font-weight: 600; }
+  .sig-title { font-size: ${(9 * scale).toFixed(1)}pt; color: #5E8EB0; }
 
   /* ---- footer ---- */
   .footer {
     display: flex; align-items: stretch; gap: 0;
-    border-top: 1px solid #212121; padding-top: 0.1in;
-    font-size: 9pt; color: #212121;
+    border-top: 1px solid #212121; padding-top: ${(0.1 * scale).toFixed(3)}in;
+    font-size: ${(9 * scale).toFixed(1)}pt; color: #212121;
   }
   .footer-col { padding: 0 0.14in; }
   .footer-col + .footer-col { border-left: 1px solid #212121; }
   .footer-sponsor { flex: 1.35; }
   .footer-note { flex: 1.25; display: flex; align-items: center; }
   .footer-generated { flex: 1; }
-  .sponsor-line { color: #2B59A1; font-size: 9.5pt; }
-  .sponsor-org { font-weight: 700; color: #212121; font-size: 9.5pt; }
+  .sponsor-line { color: #2B59A1; font-size: ${(9.5 * scale).toFixed(1)}pt; }
+  .sponsor-org { font-weight: 700; color: #212121; font-size: ${(9.5 * scale).toFixed(1)}pt; }
   .footer-label {
-    font-size: 9.5pt; font-weight: 700; letter-spacing: .05em;
+    font-size: ${(9.5 * scale).toFixed(1)}pt; font-weight: 700; letter-spacing: .05em;
     text-transform: uppercase; color: #0C5488; margin-bottom: 2px;
   }
-  .footer-value { font-size: 10.5pt; font-weight: 700; color: #212121; }
-  .disclaimer { font-size: 8pt; color: #5E8EB0; margin-top: 0.08in; }
+  .footer-value { font-size: ${(10.5 * scale).toFixed(1)}pt; font-weight: 700; color: #212121; }
+  .disclaimer { font-size: ${(8 * scale).toFixed(1)}pt; color: #5E8EB0; margin-top: 0.08in; }
 </style>
 </head>
 <body>
@@ -325,8 +367,9 @@ export function renderCertificateHtml(model: CertificateModel): string {
   <div class="frame"></div>
   <div class="content">
     <div class="header">
-      ${secondaryLogo}
-      ${logo}
+      <div class="header-left">${secondaryLogo}</div>
+      <div class="header-centre">${logo}</div>
+      <div class="header-right"></div>
     </div>
 
     <h1>${esc(t.title)}</h1>

@@ -234,23 +234,43 @@ body.scroll-locked .sidebar {
 }
 
 /*
- * The certificate is 8.5x11in. The iframe is scaled down to fit the column
- * with CSS transform rather than reflowing the document — the whole point is
- * that preview and print are identical.
+ * The certificate is 8.5x11in portrait or 11x8.5in landscape. The iframe is
+ * laid out at true page size and then scaled to fill the column width, so
+ * preview and print are identical and no whitespace is left over.
+ *
+ * --cert-scale is set from JS (see CertificateTemplatePanel) because it
+ * depends on the measured column width, which CSS alone cannot know.
  */
 .cert-preview-frame {
-  width: 8.5in;
-  height: 11in;
+  display: block;
   border: 1px solid var(--border-color);
   background: #fff;
-  transform: scale(0.62);
-  transform-origin: top left;
   box-shadow: var(--shadow-card);
+  transform-origin: top left;
+}
+
+.cert-preview-portrait {
+  width: 8.5in;
+  height: 11in;
+  transform: scale(var(--cert-scale, 0.62));
+}
+
+.cert-preview-landscape {
+  width: 11in;
+  height: 8.5in;
+  transform: scale(var(--cert-scale, 0.5));
 }
 
 .cert-preview-column {
-  /* Reserve the scaled height so the sticky column does not jump. */
-  min-height: calc(11in * 0.62 + 40px);
+  overflow: hidden;
+}
+
+/*
+ * Holds the true-size iframe and reserves only the scaled height, so the
+ * sticky column does not jump when the layout changes.
+ */
+.cert-preview-scaler {
+  position: relative;
   overflow: hidden;
 }
 
@@ -288,6 +308,102 @@ body.scroll-locked .sidebar {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+/* ---------- reports hub ---------- */
+.reports-layout {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .reports-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+.reports-nav {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.reports-nav-group { margin-bottom: 18px; }
+
+.reports-nav-group h3 {
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-faint);
+  margin: 0 0 6px;
+  padding-left: 8px;
+}
+
+.reports-nav-group ul { list-style: none; margin: 0; padding: 0; }
+
+.reports-nav-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text-body);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background .12s ease, color .12s ease;
+}
+
+.reports-nav-item:hover { background: var(--surface-subtle); color: var(--primary-dark); }
+
+.reports-nav-item.is-active {
+  background: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+  font-weight: 600;
+}
+
+.reports-nav-item:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 1px;
+}
+
+.reports-nav-ext { color: var(--text-faint); font-size: 12px; }
+
+.reports-nav-note {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin: 8px 0 0;
+  padding: 0 9px;
+  line-height: 1.45;
+}
+
+.reports-params {
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.reports-params .field { margin-bottom: 0; min-width: 150px; }
+
+.reports-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  padding-bottom: 1px;
+}
+
+.reports-footer {
+  padding: 10px 18px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- drawer resize handle ---------- */

@@ -779,6 +779,8 @@ export interface CertificateTemplateRow {
   CreditUnitLabel: string | null;
   FooterText: string | null;
   VisibleFields: CertificateFieldVisibility;
+  /** 'portrait' (8.5x11) or 'landscape' (11x8.5). */
+  Layout: 'portrait' | 'landscape';
   UpdatedBy: string | null;
   UpdatedAt: string;
 }
@@ -793,6 +795,7 @@ export interface CertificateTemplateWrite {
   creditUnitLabel?: string | null;
   footerText?: string | null;
   visibleFields?: Partial<CertificateFieldVisibility>;
+  layout?: 'portrait' | 'landscape';
 }
 
 export interface CertificateEligibleRow {
@@ -841,4 +844,62 @@ export interface CertificateOverrideWrite {
   imageData?: string | null;
   imageContentType?: string;
   imageFileName?: string;
+}
+/* ------------------------------------------------------------------ */
+/*  Reports                                                            */
+/* ------------------------------------------------------------------ */
+
+export type ReportGroup =
+  | 'attendance'
+  | 'workshops'
+  | 'evaluations'
+  | 'surveys'
+  | 'demographics'
+  | 'operational';
+
+export interface ReportParameter {
+  key: string;
+  label: string;
+  type: 'school-year' | 'date' | 'category' | 'workshop';
+  required?: boolean;
+}
+
+export interface ReportColumn {
+  key: string;
+  label: string;
+  align?: 'left' | 'right';
+}
+
+export interface ReportCatalogueItem {
+  key: string;
+  title: string;
+  description: string;
+  group: ReportGroup;
+  replaces: string;
+  parameters: ReportParameter[];
+  columns: ReportColumn[];
+}
+
+export interface ReportFinancialLink {
+  title: string;
+  description: string;
+  href: string;
+  replaces: string;
+}
+
+export interface ReportCatalogueResponse {
+  data: ReportCatalogueItem[];
+  links: ReportFinancialLink[];
+  /** Most recent school year each report can produce rows for. */
+  defaultSchoolYearByReport: Record<string, number | null>;
+}
+
+export interface ReportRunResponse {
+  key: string;
+  title: string;
+  columns: ReportColumn[];
+  parameters: Record<string, string | number>;
+  data: Record<string, string | number | null>[];
+  total: number;
+  truncated: boolean;
 }

@@ -927,6 +927,30 @@ IF COL_LENGTH('core.CertificateTemplate', 'LogoAssetID') IS NULL
             REFERENCES core.CertificateAsset (CertificateAssetID);
 GO
 
+IF COL_LENGTH('core.CertificateTemplate', 'SecondaryLogoAssetID') IS NULL
+    ALTER TABLE core.CertificateTemplate
+        ADD SecondaryLogoAssetID INT NULL
+            CONSTRAINT FK_CertificateTemplate_SecondaryLogo
+            REFERENCES core.CertificateAsset (CertificateAssetID);
+GO
+
+-- Portrait (8.5x11) or landscape (11x8.5). See db/migrations/004.
+IF COL_LENGTH('core.CertificateTemplate', 'Layout') IS NULL
+    ALTER TABLE core.CertificateTemplate
+        ADD Layout NVARCHAR(10) NOT NULL
+            CONSTRAINT DF_CertificateTemplate_Layout DEFAULT 'portrait';
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.check_constraints
+     WHERE name = 'CK_CertificateTemplate_Layout'
+       AND parent_object_id = OBJECT_ID('core.CertificateTemplate')
+)
+    ALTER TABLE core.CertificateTemplate
+        ADD CONSTRAINT CK_CertificateTemplate_Layout
+        CHECK (Layout IN ('portrait', 'landscape'));
+GO
+
 IF OBJECT_ID('core.CertificateOverride', 'U') IS NULL
 BEGIN
 CREATE TABLE core.CertificateOverride (

@@ -396,13 +396,47 @@ export const api = {
       request<{ data: { id: number; label: string }[] }>(`/api/lookups/${name}`),
   },
 
-  certificates: {
-    capabilities: () => request<{ pdfRendering: boolean }>('/api/certificates/capabilities'),
+  reports: {
+    catalogue: () =>
+      request<import('@pe/shared').ReportCatalogueResponse>('/api/reports'),
+
+    run: (key: string, params: Record<string, string | number | undefined>) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<import('@pe/shared').ReportRunResponse>(`/api/reports/${key}${suffix}`);
+    },
+
+    pdfUrl: (key: string, params: Record<string, string | number | undefined>) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return `/api/reports/${key}/pdf${suffix}`;
+    },
+  },
+
+  certificates: {    capabilities: () => request<{ pdfRendering: boolean }>('/api/certificates/capabilities'),
 
     templates: (schoolYearId: number) =>
       request<{ data: import('@pe/shared').CertificateTemplateRow[] }>(
         `/api/certificates/templates?schoolYearId=${schoolYearId}`,
       ),
+
+    createTemplate: (body: {
+      schoolYearId: number;
+      certificateType: 'CEU' | 'CHC';
+      title?: string;
+      subtitle?: string;
+      layout?: 'portrait' | 'landscape';
+    }) =>
+      request<{ certificateTemplateId: number }>('/api/certificates/templates', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
 
     updateTemplate: (id: number, body: import('@pe/shared').CertificateTemplateWrite) =>
       request<{ certificateTemplateId: number }>(`/api/certificates/templates/${id}`, {
