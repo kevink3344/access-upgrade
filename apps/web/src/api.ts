@@ -193,6 +193,7 @@ export const api = {
       agencyId?: number;
       sort?: 'name' | 'email' | 'agency';
       dir?: 'asc' | 'desc';
+      includeEmpty?: boolean;
     } = {}) => {
       const qs = new URLSearchParams();
       for (const [k, v] of Object.entries(params)) {

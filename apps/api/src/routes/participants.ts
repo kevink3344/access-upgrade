@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { query, sql, type SqlParam } from '../db.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
+import { queryBoolean } from '../query.js';
 
 export const participantsRouter = Router();
 
@@ -12,6 +13,7 @@ const listQuery = z.object({
   agencyId: z.coerce.number().int().optional(),
   sort: z.enum(['name', 'email', 'agency']).default('name'),
   dir: z.enum(['asc', 'desc']).default('asc'),
+  includeEmpty: queryBoolean().default(false),
 });
 
 const SORT: Record<string, string> = {
@@ -19,6 +21,33 @@ const SORT: Record<string, string> = {
   email: 'p.Email',
   agency: 'a.AgencyName',
 };
+
+/**
+ * A participant row carrying no information at all: no name, no contact
+ * details, and nothing linked to it.
+ *
+ * These are artefacts of the Access import (19 rows as of the ETL). They are
+ * hidden from the list by default because they show as "Unnamed" with every
+ * column blank, but they are not deleted — `includeEmpty=true` still returns
+ * them, and they remain editable by direct id.
+ */
+const IS_EMPTY = `(
+  (p.FirstName IS NULL OR LTRIM(RTRIM(p.FirstName)) = '')
+  AND (p.LastName IS NULL OR LTRIM(RTRIM(p.LastName)) = '')
+  AND NULLIF(LTRIM(RTRIM(ISNULL(p.Email,  ''))), '') IS NULL
+  AND NULLIF(LTRIM(RTRIM(ISNULL(p.Email2, ''))), '') IS NULL
+  AND NULLIF(LTRIM(RTRIM(ISNULL(p.Email3, ''))), '') IS NULL
+  AND NULLIF(LTRIM(RTRIM(ISNULL(p.HomePhone, ''))), '') IS NULL
+  AND NULLIF(LTRIM(RTRIM(ISNULL(p.WorkPhone, ''))), '') IS NULL
+  AND NULLIF(LTRIM(RTRIM(ISNULL(p.HomeAddress1, ''))), '') IS NULL
+  AND p.AgencyID IS NULL
+  AND NOT EXISTS (SELECT 1 FROM core.Registration       r  WHERE r.ParticipantID  = p.ParticipantID)
+  AND NOT EXISTS (SELECT 1 FROM core.SessionParticipant sp WHERE sp.ParticipantID = p.ParticipantID)
+  AND NOT EXISTS (SELECT 1 FROM core.CertificateIssue   ci WHERE ci.ParticipantID = p.ParticipantID)
+  AND NOT EXISTS (SELECT 1 FROM core.CreditSlip         cs
+                   WHERE cs.ParticipantID = p.ParticipantID
+                      OR cs.UsedParticipantID = p.ParticipantID)
+)`;
 
 /**
  * Writable participant fields. Excludes:
@@ -118,6 +147,7 @@ function paramType(column: string) {
  *       - { in: query, name: agencyId, schema: { type: integer } }
  *       - { in: query, name: sort, schema: { type: string, enum: [name, email, agency] } }
  *       - { in: query, name: dir, schema: { type: string, enum: [asc, desc] } }
+ *       - { in: query, name: includeEmpty, schema: { type: boolean, default: false }, description: Include placeholder rows with no name, contact details or linked records }
  *     responses:
  *       200:
  *         description: Paginated participants
@@ -144,11 +174,12 @@ participantsRouter.get('/', requireAuth, async (req, res, next) => {
       return;
     }
 
-    const { page, pageSize, q, agencyId, sort, dir } = parsed.data;
+    const { page, pageSize, q, agencyId, sort, dir, includeEmpty } = parsed.data;
 
     const where: string[] = [];
     const params: Record<string, SqlParam> = {};
 
+    if (!includeEmpty) where.push(`NOT ${IS_EMPTY}`);
     if (q) {
       where.push('(p.FirstName LIKE @q OR p.LastName LIKE @q OR p.Email LIKE @q)');
       params.q = { type: sql.NVarChar(260), value: `%${q}%` };
