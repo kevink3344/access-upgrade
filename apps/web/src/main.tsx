@@ -88,7 +88,7 @@ const ROUTES: Record<string, string> = {
   '/admin/utilities': 'Utilities',
   '/api-docs': 'API documentation',
   '/admin/webhooks': 'Webhooks',
-  '/admin/forms': 'Forms',
+  '/admin/forms': 'Form Designer',
   '/notifications': 'Notifications',
 };
 

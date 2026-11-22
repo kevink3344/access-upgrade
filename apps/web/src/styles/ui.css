@@ -1916,6 +1916,17 @@ body.drawer-resizing {
   box-shadow: 0 0 0 3px hsl(var(--primary-color-hsl) / .15);
 }
 
+/* Filter row above a data table. */
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 .checkbox-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

@@ -21,13 +21,15 @@ export function FormsPage() {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['forms'],
-    queryFn: () => api.forms.list(),
+    queryKey: ['forms', showArchived],
+    queryFn: () => api.forms.list(showArchived),
   });
 
   const rows = data?.data ?? [];
+  const archivedCount = rows.filter((f) => f.isArchived).length;
 
   function openEditor(id: number) {
     window.history.pushState({}, '', `/admin/forms/${id}`);
@@ -53,8 +55,17 @@ export function FormsPage() {
     onError: (e: Error) => setNotice(e.message),
   });
 
-  const remove = useMutation({
-    mutationFn: (id: number) => api.forms.remove(id),
+  const archive = useMutation({
+    mutationFn: (id: number) => api.forms.archive(id),
+    onSuccess: () => {
+      setNotice(null);
+      qc.invalidateQueries({ queryKey: ['forms'] });
+    },
+    onError: (e: Error) => setNotice(e.message),
+  });
+
+  const restore = useMutation({
+    mutationFn: (id: number) => api.forms.restore(id),
     onSuccess: () => {
       setNotice(null);
       qc.invalidateQueries({ queryKey: ['forms'] });
@@ -72,10 +83,10 @@ export function FormsPage() {
   }, []);
 
   return (
-    <AppShell currentPath="/admin/forms" title="Forms">
+    <AppShell currentPath="/admin/forms" title="Form Designer">
       <div className="page-head">
         <div>
-          <h2>Forms</h2>
+          <h2>Form Designer</h2>
           <p>
             The questions on the public registration form. Workshop details — title, date,
             time, cost — always show and are not part of a form.
@@ -139,6 +150,21 @@ export function FormsPage() {
 
       <div className="panel">
         <div className="panel-body">
+          <div className="list-toolbar">
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+              <span>Show archived</span>
+            </label>
+            {showArchived && archivedCount > 0 && (
+              <span className="muted" style={{ fontSize: 13 }}>
+                {archivedCount} archived
+              </span>
+            )}
+          </div>
           {isLoading ? (
             <div style={{ padding: 18 }}>
               {[0, 1].map((i) => (
@@ -185,7 +211,9 @@ export function FormsPage() {
                       {f.currentVersionNumber === null ? '—' : `v${f.currentVersionNumber}`}
                     </td>
                     <td data-label="Status">
-                      {!f.isActive ? (
+                      {f.isArchived ? (
+                        <span className="pill pill-muted">Archived</span>
+                      ) : !f.isActive ? (
                         <span className="pill pill-muted">Inactive</span>
                       ) : f.isPublished ? (
                         <span className="pill pill-open">Published</span>
@@ -202,7 +230,7 @@ export function FormsPage() {
                         >
                           Edit
                         </button>
-                        {canPublish && (
+                        {canPublish && !f.isArchived && (
                           <>
                             <button
                               type="button"
@@ -219,16 +247,25 @@ export function FormsPage() {
                               onClick={() => {
                                 if (
                                   window.confirm(
-                                    `Delete "${f.name}"? Links using it must be repointed first.`,
+                                    `Archive "${f.name}"? It is hidden from this list and from the link picker, but its versions and answers are kept. You can restore it later.`,
                                   )
                                 ) {
-                                  remove.mutate(f.formTemplateId);
+                                  archive.mutate(f.formTemplateId);
                                 }
                               }}
                             >
-                              Delete
+                              Archive
                             </button>
                           </>
+                        )}
+                        {canPublish && f.isArchived && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => restore.mutate(f.formTemplateId)}
+                          >
+                            Restore
+                          </button>
                         )}
                       </div>
                     </td>

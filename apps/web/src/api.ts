@@ -484,7 +484,10 @@ export const api = {
   },
 
   forms: {
-    list: () => request<{ data: import('@pe/shared').FormTemplateSummary[] }>('/api/forms'),
+    list: (includeArchived = false) =>
+      request<{ data: import('@pe/shared').FormTemplateSummary[] }>(
+        `/api/forms${includeArchived ? '?includeArchived=true' : ''}`,
+      ),
 
     create: (body: { name: string; description?: string | null }) =>
       request<{ formTemplateId: number; versionId: number }>('/api/forms', {
@@ -495,7 +498,8 @@ export const api = {
     update: (id: number, body: { name?: string; description?: string | null; isActive?: boolean }) =>
       request<void>(`/api/forms/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
-    remove: (id: number) => request<void>(`/api/forms/${id}`, { method: 'DELETE' }),
+    archive: (id: number) => request<void>(`/api/forms/${id}/archive`, { method: 'POST' }),
+    restore: (id: number) => request<void>(`/api/forms/${id}/restore`, { method: 'POST' }),
 
     versions: (id: number) =>
       request<{ data: import('@pe/shared').FormVersionSummary[] }>(`/api/forms/${id}/versions`),

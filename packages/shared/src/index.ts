@@ -1084,6 +1084,8 @@ export interface FormTemplateSummary {
   currentVersionId: number | null;
   currentVersionNumber: number | null;
   isPublished: boolean;
+  isArchived: boolean;
+  archivedAt: string | null;
   updatedAt: string | null;
 }
 

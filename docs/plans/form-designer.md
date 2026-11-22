@@ -407,14 +407,15 @@ registrant, one column per question.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/forms` | List templates with current version |
+| `GET` | `/api/forms?includeArchived=` | List templates with current version; archived ones only when asked for |
 | `POST` | `/api/forms` | Create a template (seeds a v1 draft from the built-in set) |
 | `GET` | `/api/forms/:id` | Template + all versions |
 | `GET` | `/api/forms/:id/versions/:versionId` | One version with its questions |
 | `POST` | `/api/forms/:id/versions` | Save a new draft version from a question list |
 | `POST` | `/api/forms/:id/versions/:versionId/publish` | Publish a draft |
 | `PATCH` | `/api/forms/:id` | Rename / activate / deactivate |
-| `DELETE` | `/api/forms/:id` | Refuse if any link references it |
+| `POST` | `/api/forms/:id/archive` | Retire a form. Refuse if any link references it. Nothing is deleted |
+| `POST` | `/api/forms/:id/restore` | Un-retire a form |
 | `GET` | `/api/public/registration-links/:slug` | **extended** — returns the pinned version's questions |
 | `GET` | `/api/workshops/:id/form-answers` | Answers for the workshop's registrants |
 
@@ -429,6 +430,7 @@ The public registration POST accepts an `answers` object keyed by
 | Risk | Mitigation |
 |---|---|
 | **A published version is edited in place**, so two registrants saw different forms | Versions are immutable once published. Editing always creates a new draft. |
+| **A form is deleted and its answers become unreadable** | Forms are never deleted. Archive hides a form from the list and the link picker but keeps every version and answer; it can be restored. Archiving is refused while a link still uses it. |
 | **Deleting a question orphans answers** | Questions are soft-deleted (`IsActive = 0`) when a version has answers. Answers are never deleted with the question. |
 | **A custom question collides with a built-in column** | `QuestionKey` is unique per version and custom keys are prefixed `custom_`. |
 | **The public form becomes an injection surface** | Answers are parameterised and length-capped; labels are rendered as text, never HTML. |

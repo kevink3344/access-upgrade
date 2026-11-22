@@ -352,8 +352,11 @@ registrationLinkRouter.patch('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN
       // Only a published version may be pinned: a draft has never been shown
       // to anyone, so publishing it is the staff member's explicit act.
       if (d.formTemplateVersionId !== null) {
-        const v = await query<{ PublishedAt: Date | null }>(
-          `SELECT PublishedAt FROM core.FormTemplateVersion WHERE FormTemplateVersionID = @v`,
+        const v = await query<{ PublishedAt: Date | null; ArchivedAt: Date | null }>(
+          `SELECT v.PublishedAt, t.ArchivedAt
+             FROM core.FormTemplateVersion v
+             JOIN core.FormTemplate t ON t.FormTemplateID = v.FormTemplateID
+            WHERE v.FormTemplateVersionID = @v`,
           { v: { type: sql.Int, value: d.formTemplateVersionId } },
         );
         const row = v.recordset[0];
@@ -362,6 +365,14 @@ registrationLinkRouter.patch('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN
             error: 'validation_failed',
             message: 'That form version does not exist.',
             details: [{ path: 'formTemplateVersionId', message: 'Unknown version' }],
+          });
+          return;
+        }
+        if (row.ArchivedAt) {
+          res.status(422).json({
+            error: 'validation_failed',
+            message: 'That form is archived. Restore it before using it on a registration link.',
+            details: [{ path: 'formTemplateVersionId', message: 'Form is archived' }],
           });
           return;
         }

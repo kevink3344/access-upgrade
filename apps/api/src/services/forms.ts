@@ -63,6 +63,9 @@ export interface FormTemplateSummary {
   currentVersionId: number | null;
   isPublished: boolean;
   updatedAt: string | null;
+  /** Retired forms are hidden from the default list and the link picker. */
+  isArchived: boolean;
+  archivedAt: string | null;
 }
 
 /**
@@ -236,18 +239,19 @@ function parseOptions(json: string | null): string[] {
 /*  Reads                                                              */
 /* ------------------------------------------------------------------ */
 
-export async function listTemplates(): Promise<FormTemplateSummary[]> {
+export async function listTemplates(includeArchived = false): Promise<FormTemplateSummary[]> {
   const r = await query<{
     FormTemplateID: number;
     Name: string;
     Description: string | null;
     IsActive: boolean;
     UpdatedAt: Date | null;
+    ArchivedAt: Date | null;
     CurrentVersionID: number | null;
     CurrentVersionNumber: number | null;
     PublishedAt: Date | null;
   }>(
-    `SELECT t.FormTemplateID, t.Name, t.Description, t.IsActive, t.UpdatedAt,
+    `SELECT t.FormTemplateID, t.Name, t.Description, t.IsActive, t.UpdatedAt, t.ArchivedAt,
             v.FormTemplateVersionID AS CurrentVersionID,
             v.VersionNumber        AS CurrentVersionNumber,
             v.PublishedAt
@@ -258,7 +262,9 @@ export async function listTemplates(): Promise<FormTemplateSummary[]> {
              WHERE FormTemplateID = t.FormTemplateID
              ORDER BY VersionNumber DESC
        ) v
-      ORDER BY t.Name`,
+      WHERE (@includeArchived = 1 OR t.ArchivedAt IS NULL)
+      ORDER BY t.ArchivedAt, t.Name`,
+    { includeArchived: { type: sql.Bit, value: includeArchived ? 1 : 0 } },
   );
 
   return r.recordset.map((x) => ({
@@ -270,6 +276,8 @@ export async function listTemplates(): Promise<FormTemplateSummary[]> {
     currentVersionNumber: x.CurrentVersionNumber,
     isPublished: x.PublishedAt !== null,
     updatedAt: x.UpdatedAt ? x.UpdatedAt.toISOString() : null,
+    isArchived: x.ArchivedAt !== null,
+    archivedAt: x.ArchivedAt ? x.ArchivedAt.toISOString() : null,
   }));
 }
 
@@ -573,20 +581,49 @@ export async function countLinksUsingTemplate(formTemplateId: number): Promise<n
   return r.recordset[0]?.n ?? 0;
 }
 
-export async function deleteTemplate(formTemplateId: number): Promise<void> {
+/**
+ * Retire a form without destroying anything.
+ *
+ * A form that is in use by a registration link is refused: archiving it would
+ * leave a live link pointing at a form staff can no longer see or edit.
+ */
+export async function archiveTemplate(
+  formTemplateId: number,
+  actor: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const inUse = await countLinksUsingTemplate(formTemplateId);
+  if (inUse > 0) {
+    return {
+      ok: false,
+      reason: `${inUse} registration link(s) use this form. Repoint them before archiving.`,
+    };
+  }
+
   await query(
-    `DELETE q FROM core.FormQuestion q
-       JOIN core.FormTemplateVersion v ON v.FormTemplateVersionID = q.FormTemplateVersionID
-      WHERE v.FormTemplateID = @id`,
-    { id: { type: sql.Int, value: formTemplateId } },
+    `UPDATE core.FormTemplate
+        SET ArchivedAt = SYSUTCDATETIME(), ArchivedBy = @by,
+            UpdatedBy = @by, UpdatedAt = SYSUTCDATETIME()
+      WHERE FormTemplateID = @id AND ArchivedAt IS NULL`,
+    {
+      id: { type: sql.Int, value: formTemplateId },
+      by: { type: sql.NVarChar(200), value: actor },
+    },
   );
+
+  return { ok: true };
+}
+
+export async function restoreTemplate(formTemplateId: number, actor: string): Promise<void> {
   await query(
-    `DELETE FROM core.FormTemplateVersion WHERE FormTemplateID = @id`,
-    { id: { type: sql.Int, value: formTemplateId } },
+    `UPDATE core.FormTemplate
+        SET ArchivedAt = NULL, ArchivedBy = NULL,
+            UpdatedBy = @by, UpdatedAt = SYSUTCDATETIME()
+      WHERE FormTemplateID = @id`,
+    {
+      id: { type: sql.Int, value: formTemplateId },
+      by: { type: sql.NVarChar(200), value: actor },
+    },
   );
-  await query(`DELETE FROM core.FormTemplate WHERE FormTemplateID = @id`, {
-    id: { type: sql.Int, value: formTemplateId },
-  });
 }
 
 /* ------------------------------------------------------------------ */

@@ -1286,6 +1286,10 @@ CREATE TABLE core.FormTemplate (
     Name           NVARCHAR(100) NOT NULL,
     Description    NVARCHAR(500) NULL,
     IsActive       BIT           NOT NULL CONSTRAINT DF_FormTemplate_IsActive DEFAULT 1,
+    -- Archived forms are retired rather than deleted: the row, its versions
+    -- and its answers all stay, and it can be restored.
+    ArchivedAt     DATETIME2     NULL,
+    ArchivedBy     NVARCHAR(200) NULL,
     CreatedBy      NVARCHAR(200) NOT NULL,
     CreatedAt      DATETIME2     NOT NULL CONSTRAINT DF_FormTemplate_CreatedAt DEFAULT SYSUTCDATETIME(),
     UpdatedBy      NVARCHAR(200) NULL,

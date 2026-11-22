@@ -5,13 +5,13 @@ import {
   answersForParticipant,
   answersForRegistration,
   answersForWorkshop,
-  countLinksUsingTemplate,
+  archiveTemplate,
   createTemplate,
-  deleteTemplate,
   getVersion,
   listTemplates,
   listVersions,
   publishVersion,
+  restoreTemplate,
   saveDraft,
   updateTemplate,
 } from '../services/forms.js';
@@ -52,12 +52,15 @@ const questionSchema = z.object({
  *     tags: [Forms]
  *     summary: List form templates
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: includeArchived, schema: { type: boolean, default: false }, description: Include retired forms }
  *     responses:
  *       200: { description: Templates with their current version }
  */
-formsRouter.get('/', requireAuth, async (_req, res, next) => {
+formsRouter.get('/', requireAuth, async (req, res, next) => {
   try {
-    res.json({ data: await listTemplates() });
+    const includeArchived = req.query.includeArchived === 'true' || req.query.includeArchived === '1';
+    res.json({ data: await listTemplates(includeArchived) });
   } catch (err) {
     next(err);
   }
@@ -144,17 +147,20 @@ formsRouter.patch('/:id', requireAuth, requireRole(...EDIT_ROLES), async (req, r
 
 /**
  * @openapi
- * /api/forms/{id}:
- *   delete:
+ * /api/forms/{id}/archive:
+ *   post:
  *     tags: [Forms]
- *     summary: Delete a template
- *     description: Refuses when any registration link still points at it.
+ *     summary: Archive a form (retire it without deleting anything)
+ *     description: >
+ *       The form, its versions and its answers all stay. It is hidden from the
+ *       default list and from the registration-link picker, and can be
+ *       restored. Refused while a registration link still uses it.
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       204: { description: Deleted }
+ *       204: { description: Archived }
  *       409: { description: In use by a registration link }
  */
-formsRouter.delete('/:id', requireAuth, requireRole(...PUBLISH_ROLES), async (req, res, next) => {
+formsRouter.post('/:id/archive', requireAuth, requireRole(...PUBLISH_ROLES), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
@@ -162,16 +168,35 @@ formsRouter.delete('/:id', requireAuth, requireRole(...PUBLISH_ROLES), async (re
       return;
     }
 
-    const inUse = await countLinksUsingTemplate(id);
-    if (inUse > 0) {
-      res.status(409).json({
-        error: 'conflict',
-        message: `${inUse} registration link(s) use this form. Repoint or remove them first.`,
-      });
+    const result = await archiveTemplate(id, req.user!.email);
+    if (!result.ok) {
+      res.status(409).json({ error: 'conflict', message: result.reason });
       return;
     }
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
 
-    await deleteTemplate(id);
+/**
+ * @openapi
+ * /api/forms/{id}/restore:
+ *   post:
+ *     tags: [Forms]
+ *     summary: Restore an archived form
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       204: { description: Restored }
+ */
+formsRouter.post('/:id/restore', requireAuth, requireRole(...PUBLISH_ROLES), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+    await restoreTemplate(id, req.user!.email);
     res.status(204).end();
   } catch (err) {
     next(err);
