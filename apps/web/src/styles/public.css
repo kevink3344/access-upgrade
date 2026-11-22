@@ -10,53 +10,48 @@
   flex-direction: column;
 }
 
-.public-header {
-  background: linear-gradient(135deg, #165788 0%, #12466e 55%, #0e3a5c 100%);
-  color: #fff;
-  padding: 20px 0 18px;
-}
-
-/* Same box as .public-main: a 720px column centred with a 20px gutter, so the
-   logo and the cards below it share one left edge at every width. */
-.public-header-inner {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 0 20px;
+/* The brand lockup sits at the top of every public card rather than in a
+   coloured banner, so the logo and the workshop title share one surface.
+   On a white card the orange mark needs no backing chip. */
+.public-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  padding-bottom: 18px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-/* The sunburst mark is solid orange on transparency. Against the dark header
-   gradient it only reaches 2.57:1, so it sits on a white chip to clear the
-   3:1 WCAG minimum for non-text graphics without recolouring the brand.
-   The negative margin cancels the chip's padding so the visible white edge,
-   not the padded box, aligns with the card edge. */
 .public-mark {
-  width: 36px;
-  height: 32px;
+  width: 52px;
+  height: 46px;
   object-fit: contain;
   flex-shrink: 0;
-  box-sizing: content-box;
-  padding: 4px;
-  margin-left: -4px;
-  background: #fff;
-  border-radius: var(--radius);
 }
 
-.public-header b {
+.public-brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.public-brand b {
   display: block;
   font-family: var(--font-primary);
-  font-size: 16px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: .02em;
   line-height: 1.2;
+  color: var(--text-heading);
+  text-transform: uppercase;
 }
 
-.public-header small {
-  font-size: 11.5px;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, .7);
-  font-weight: 600;
+.public-brand small {
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--text-muted);
+  font-weight: 400;
 }
 
 .public-main {
@@ -92,8 +87,6 @@
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px 20px;
   margin-top: 18px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border-subtle);
 }
 
 .public-meta div {
@@ -428,9 +421,6 @@
   .public-card { padding: 20px 16px; }
   .public-main { padding: 16px 14px 48px; }
 
-  /* Keep the header content on the same gutter as the cards below it. */
-  .public-header-inner { padding: 0 14px; }
-
   /* The form reads small on a phone, so the whole scale is raised ~25%.
      Inputs stay at 16px or above - anything smaller makes iOS Safari zoom
      the page on focus, which is worse than small text. */
@@ -453,7 +443,8 @@
   .public-form .btn-primary { font-size: 19px; }
   .payment-notice { font-size: 17px; }
 
-  .public-header b { font-size: 19px; }
-  .public-header small { font-size: 14px; }
+  .public-brand b { font-size: 15px; }
+  .public-brand small { font-size: 13.5px; }
+  .public-mark { width: 44px; height: 39px; }
   .public-foot { font-size: 14px; }
 }

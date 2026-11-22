@@ -1,4 +1,4 @@
-﻿import { useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import type { PublicLinkState } from '@pe/shared';
@@ -57,25 +57,34 @@ function fmtTime(t: string | null): string {
   return `${hour}:${String(m ?? 0).padStart(2, '0')} ${suffix}`;
 }
 
+/**
+ * The Project Enlightenment lockup that sits at the top of every public card.
+ *
+ * Rendered inside the card rather than as a page banner, so the logo and the
+ * workshop title share one surface instead of being split by a colour band.
+ */
+function PublicBrand() {
+  return (
+    <div className="public-brand">
+      <img
+        className="public-mark"
+        src="/images/sunburst-logo.png"
+        alt=""
+        aria-hidden="true"
+        width={52}
+        height={46}
+      />
+      <span className="public-brand-text">
+        <b>Project Enlightenment</b>
+        <small>Workshop Registration</small>
+      </span>
+    </div>
+  );
+}
+
 function PublicChrome({ children }: { children: React.ReactNode }) {
   return (
     <div className="public-page">
-      <header className="public-header">
-        <div className="public-header-inner">
-          <img
-            className="public-mark"
-            src="/images/sunburst-logo.png"
-            alt=""
-            aria-hidden="true"
-            width={36}
-            height={32}
-          />
-          <span>
-            <b>Project Enlightenment</b>
-            <small>Workshop registration</small>
-          </span>
-        </div>
-      </header>
       <main className="public-main">{children}</main>
       <p className="public-foot">
         Wake County Public School System · Project Enlightenment
@@ -88,6 +97,7 @@ function Terminal({ title, message }: { title: string; message: string }) {
   return (
     <PublicChrome>
       <div className="public-card public-terminal">
+        <PublicBrand />
         <div className="icon-wrap" aria-hidden="true">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <circle cx="12" cy="12" r="10" />
@@ -203,6 +213,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     return (
       <PublicChrome>
         <div className="public-card">
+        <PublicBrand />
           <div className="skeleton" style={{ height: 28, width: '60%', marginBottom: 14 }} />
           <div className="skeleton" style={{ height: 16, width: '40%' }} />
         </div>
@@ -252,6 +263,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     return (
       <PublicChrome>
         <div className="public-card public-terminal">
+        <PublicBrand />
           <div className="icon-wrap" aria-hidden="true">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 6 9 17l-5-5" />
@@ -302,6 +314,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
   return (
     <PublicChrome>
       <div className="public-card">
+        <PublicBrand />
         <h1>{w.title ?? 'Workshop'}</h1>
         {w.code && <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13.5 }}>{w.code}</p>}
 
