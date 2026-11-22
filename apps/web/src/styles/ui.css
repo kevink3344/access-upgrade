@@ -1512,6 +1512,10 @@ body.drawer-resizing {
   /* Six tabs no longer fit a phone. Without this the last one is clipped and
      unreachable, because the strip is not a scroll container. */
   overflow-x: auto;
+  /* Setting overflow-x to auto makes overflow-y compute to auto as well, so
+     the tabs' -1px margin-bottom (which overlaps the active underline onto the
+     bar's own border) produced a 1px vertical scroll. Pin it to hidden. */
+  overflow-y: hidden;
   scrollbar-width: thin;
   -webkit-overflow-scrolling: touch;
 }
