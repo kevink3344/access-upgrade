@@ -745,6 +745,8 @@ export interface RegistrationLinkState {
     /** Send the registrant to PaymentUrl after a successful submission. */
     redirectToPayment: boolean;
     paymentUrl: string | null;
+    /** The form version this link asks. Null = the built-in form. */
+    formTemplateVersionId: number | null;
     webRegistrations: number;
     createdBy: string;
     createdAt: string;

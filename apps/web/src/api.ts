@@ -345,7 +345,13 @@ export const api = {
 
     update: (
       workshopId: number,
-      body: { isActive?: boolean; webSeatCap?: number | null },
+      body: {
+        isActive?: boolean;
+        webSeatCap?: number | null;
+        redirectToPayment?: boolean;
+        paymentUrl?: string | null;
+        formTemplateVersionId?: number | null;
+      },
     ) =>
       request<{ ok: true }>(`/api/workshops/${workshopId}/registration-link`, {
         method: 'PATCH',

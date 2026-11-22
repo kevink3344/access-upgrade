@@ -24,6 +24,8 @@ const updateSchema = z.object({
   opensAt: z.string().datetime().nullable().optional(),
   closesAt: z.string().datetime().nullable().optional(),
   redirectToPayment: z.boolean().optional(),
+  /** Which form version the public form asks. Null = the built-in form. */
+  formTemplateVersionId: z.number().int().positive().nullable().optional(),
   /** Must be an absolute http(s) URL, or null to clear. */
   paymentUrl: z
     .string()
@@ -67,11 +69,12 @@ async function currentLink(workshopId: number) {
     ClosesAt: Date | null;
     RedirectToPayment: boolean;
     PaymentUrl: string | null;
+    FormTemplateVersionID: number | null;
     CreatedBy: string;
     CreatedAt: Date;
   }>(
     `SELECT TOP 1 RegistrationLinkID, Slug, IsActive, WebSeatCap, OpensAt, ClosesAt,
-                  RedirectToPayment, PaymentUrl, CreatedBy, CreatedAt
+                  RedirectToPayment, PaymentUrl, FormTemplateVersionID, CreatedBy, CreatedAt
        FROM core.WorkshopRegistrationLink
       WHERE WorkshopID = @id AND RevokedAt IS NULL
       ORDER BY RegistrationLinkID DESC`,
@@ -165,6 +168,7 @@ registrationLinkRouter.get('/', requireAuth, async (req, res, next) => {
             closesAt: link.ClosesAt?.toISOString() ?? null,
             redirectToPayment: link.RedirectToPayment,
             paymentUrl: link.PaymentUrl,
+            formTemplateVersionId: link.FormTemplateVersionID,
             webRegistrations: web,
             createdBy: link.CreatedBy,
             createdAt: link.CreatedAt.toISOString(),
@@ -343,6 +347,35 @@ registrationLinkRouter.patch('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN
       const url = d.paymentUrl && d.paymentUrl.trim() !== '' ? d.paymentUrl.trim() : null;
       sets.push('PaymentUrl = @payUrl');
       params.payUrl = { type: sql.NVarChar(500), value: url };
+    }
+    if (d.formTemplateVersionId !== undefined) {
+      // Only a published version may be pinned: a draft has never been shown
+      // to anyone, so publishing it is the staff member's explicit act.
+      if (d.formTemplateVersionId !== null) {
+        const v = await query<{ PublishedAt: Date | null }>(
+          `SELECT PublishedAt FROM core.FormTemplateVersion WHERE FormTemplateVersionID = @v`,
+          { v: { type: sql.Int, value: d.formTemplateVersionId } },
+        );
+        const row = v.recordset[0];
+        if (!row) {
+          res.status(422).json({
+            error: 'validation_failed',
+            message: 'That form version does not exist.',
+            details: [{ path: 'formTemplateVersionId', message: 'Unknown version' }],
+          });
+          return;
+        }
+        if (!row.PublishedAt) {
+          res.status(422).json({
+            error: 'validation_failed',
+            message: 'Publish the form before using it on a registration link.',
+            details: [{ path: 'formTemplateVersionId', message: 'Version is a draft' }],
+          });
+          return;
+        }
+      }
+      sets.push('FormTemplateVersionID = @ftv');
+      params.ftv = { type: sql.Int, value: d.formTemplateVersionId };
     }
 
     // A redirect with no destination would send the registrant nowhere, and

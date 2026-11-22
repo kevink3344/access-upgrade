@@ -21,10 +21,36 @@ export function RegistrationLinkPanel({ workshopId }: { workshopId: number }) {
   const [error, setError] = useState<string | null>(null);
   const [confirmRotate, setConfirmRotate] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState('');
+  /** Chosen form version, used only while creating a link. */
+  const [pendingFormId, setPendingFormId] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['registration-link', workshopId],
     queryFn: () => api.registrationLink.get(workshopId),
+  });
+
+  // One entry per form, using its latest published version. Staff pick a
+  // form, not a version — versions exist so an already-shared link keeps
+  // asking the questions it was shared with, not as a choice to make.
+  const publishedVersions = useQuery({
+    queryKey: ['forms', 'published-versions'],
+    queryFn: async () => {
+      const templates = await api.forms.list();
+      const out: { formTemplateVersionId: number; templateName: string }[] = [];
+      for (const t of templates.data) {
+        const versions = await api.forms.versions(t.formTemplateId);
+        // versions come back newest first; the first published one is current.
+        const latest = versions.data.find((v) => v.publishedAt);
+        if (latest) {
+          out.push({
+            formTemplateVersionId: latest.formTemplateVersionId,
+            templateName: t.name,
+          });
+        }
+      }
+      return out;
+    },
+    staleTime: 60_000,
   });
 
   // Seed the URL field from the server, and re-seed whenever the saved value
@@ -39,7 +65,24 @@ export function RegistrationLinkPanel({ workshopId }: { workshopId: number }) {
   }
 
   const create = useMutation({
-    mutationFn: (rotate: boolean) => api.registrationLink.create(workshopId, { rotate }),
+    mutationFn: async (rotate: boolean) => {
+      const created = await api.registrationLink.create(workshopId, { rotate });
+      // The create endpoint has no form field, so pin the chosen version in a
+      // follow-up PATCH. A failure here leaves a working built-in-form link
+      // rather than no link at all, so it is reported, not rolled back.
+      if (pendingFormId !== null) {
+        try {
+          await api.registrationLink.update(workshopId, { formTemplateVersionId: pendingFormId });
+        } catch (e) {
+          setError(
+            e instanceof HttpError
+              ? `Link created, but the form was not attached: ${e.message}`
+              : 'Link created, but the form was not attached.',
+          );
+        }
+      }
+      return created;
+    },
     onSuccess: () => {
       refresh();
       setConfirmRotate(false);
@@ -53,6 +96,7 @@ export function RegistrationLinkPanel({ workshopId }: { workshopId: number }) {
       webSeatCap?: number | null;
       redirectToPayment?: boolean;
       paymentUrl?: string | null;
+      formTemplateVersionId?: number | null;
     }) => api.registrationLink.update(workshopId, body),
     onSuccess: () => {
       setError(null);
@@ -102,6 +146,27 @@ export function RegistrationLinkPanel({ workshopId }: { workshopId: number }) {
             Create a shareable link so participants can register online. The link is
             inactive until you open it.
           </p>
+
+          <div className="field" style={{ maxWidth: 380, marginBottom: 12 }}>
+            <label htmlFor="link-form">Form template</label>
+            <select
+              id="link-form"
+              className="input"
+              value={pendingFormId ?? ''}
+              onChange={(e) => setPendingFormId(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">Built-in form (no custom questions)</option>
+              {(publishedVersions.data ?? []).map((v) => (
+                <option key={v.formTemplateVersionId} value={v.formTemplateVersionId}>
+                  {v.templateName}
+                </option>
+              ))}
+            </select>
+            <span className="field-hint">
+              Only published forms appear. Workshop details always show regardless.
+            </span>
+          </div>
+
           <button
             type="button"
             className="btn btn-primary btn-sm"
@@ -122,6 +187,32 @@ export function RegistrationLinkPanel({ workshopId }: { workshopId: number }) {
             >
               {copied ? 'Copied' : 'Copy'}
             </button>
+          </div>
+
+          <div className="field" style={{ maxWidth: 380, marginBottom: 12 }}>
+            <label htmlFor="link-form">Form template</label>
+            <select
+              id="link-form"
+              className="input"
+              value={link.formTemplateVersionId ?? ''}
+              onChange={(e) =>
+                update.mutate({
+                  formTemplateVersionId: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+              disabled={update.isPending}
+            >
+              <option value="">Built-in form (no custom questions)</option>
+              {(publishedVersions.data ?? []).map((v) => (
+                <option key={v.formTemplateVersionId} value={v.formTemplateVersionId}>
+                  {v.templateName}
+                </option>
+              ))}
+            </select>
+            <span className="field-hint">
+              Changing this affects future registrations only — answers already collected stay
+              attached to the questions they were asked.
+            </span>
           </div>
 
           <div className="toggle-row">
