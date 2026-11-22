@@ -1092,23 +1092,10 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
 }
 
 /* ---------- form designer ---------- */
-.form-editor-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 22px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-zebra);
-  flex-wrap: wrap;
-}
-
-.form-editor-version {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text-heading);
-}
+.form-editor-page { display: flex; flex-direction: column; gap: 14px; }
 
 .form-editor-dirty {
+  display: inline-block;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--badge-amber-text);
@@ -1118,18 +1105,20 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
   padding: 1px 7px;
 }
 
-.form-editor-body {
-  flex: 1 1 auto;
+/* Two columns on a page, not a fixed-height drawer: the whole page scrolls,
+   so a long question list is never trapped behind the fold. */
+.form-editor-page-body {
   display: grid;
-  grid-template-columns: minmax(200px, 300px) 1fr;
-  min-height: 0;
-  overflow: hidden;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: 16px;
+  align-items: start;
 }
 
 .form-editor-list {
-  border-right: 1px solid var(--border-subtle);
-  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
   background: var(--surface-card);
+  overflow: hidden;
 }
 
 .form-editor-list-head {
@@ -1143,9 +1132,7 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
   font-weight: 700;
   color: var(--text-faint);
   border-bottom: 1px solid var(--border-subtle);
-  position: sticky;
-  top: 0;
-  background: var(--surface-card);
+  background: var(--surface-zebra);
 }
 
 .form-editor-list ul { list-style: none; margin: 0; padding: 0; }
@@ -1155,6 +1142,8 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
   align-items: center;
   border-bottom: 1px solid var(--border-subtle);
 }
+
+.form-editor-list li:last-child { border-bottom: 0; }
 
 .form-editor-list li.is-active { background: hsl(var(--primary-color-hsl) / 7%); }
 
@@ -1193,8 +1182,10 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
 .form-q-actions .btn { padding: 0 6px; min-height: 20px; line-height: 1; font-size: 11px; }
 
 .form-editor-detail {
-  padding: 16px 20px 40px;
-  overflow-y: auto;
+  padding: 18px 20px 24px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--surface-card);
 }
 
 .form-q-check {
@@ -1227,8 +1218,7 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
 }
 
 @media (max-width: 720px) {
-  .form-editor-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  .form-editor-list { max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--border-subtle); }
+  .form-editor-page-body { grid-template-columns: 1fr; }
 }
 
 /* ---------- reports hub ---------- */

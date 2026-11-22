@@ -4,13 +4,13 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { AppShell } from '../components/AppShell';
 import { IconRequests } from '../components/icons';
-import { FormTemplateEditor } from '../components/FormTemplateEditor';
 
 /**
  * Form Designer: the list of form templates.
  *
  * A template is a named question set; its versions are what links actually
- * pin. Editing opens the editor, which always writes a new draft version.
+ * pin. Editing opens the full-page editor at /admin/forms/:id, which always
+ * writes a new draft version.
  */
 export function FormsPage() {
   const { user } = useAuth();
@@ -18,7 +18,6 @@ export function FormsPage() {
   const canPublish = user && ['SUPER_ADMIN', 'ADMIN'].includes(user.role);
   const qc = useQueryClient();
 
-  const [editingId, setEditingId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
@@ -30,6 +29,11 @@ export function FormsPage() {
 
   const rows = data?.data ?? [];
 
+  function openEditor(id: number) {
+    window.history.pushState({}, '', `/admin/forms/${id}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }
+
   const create = useMutation({
     mutationFn: () => api.forms.create({ name: newName.trim() }),
     onSuccess: (r) => {
@@ -37,7 +41,7 @@ export function FormsPage() {
       setNewName('');
       setNotice(null);
       qc.invalidateQueries({ queryKey: ['forms'] });
-      setEditingId(r.formTemplateId);
+      openEditor(r.formTemplateId);
     },
     onError: (e: Error) => setNotice(e.message),
   });
@@ -59,11 +63,11 @@ export function FormsPage() {
   });
 
   useEffect(() => {
-    // Deep link: /admin/forms?edit=<id>
+    // Legacy deep link: /admin/forms?edit=<id> redirects to the page route.
     const id = new URLSearchParams(window.location.search).get('edit');
     if (id && /^\d+$/.test(id)) {
-      setEditingId(Number(id));
-      window.history.replaceState({}, '', window.location.pathname);
+      window.history.replaceState({}, '', `/admin/forms/${id}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
     }
   }, []);
 
@@ -167,7 +171,7 @@ export function FormsPage() {
                       <button
                         type="button"
                         className="linklike"
-                        onClick={() => setEditingId(f.formTemplateId)}
+                        onClick={() => openEditor(f.formTemplateId)}
                       >
                         {f.name}
                       </button>
@@ -194,7 +198,7 @@ export function FormsPage() {
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
-                          onClick={() => setEditingId(f.formTemplateId)}
+                          onClick={() => openEditor(f.formTemplateId)}
                         >
                           Edit
                         </button>
@@ -235,18 +239,6 @@ export function FormsPage() {
           )}
         </div>
       </div>
-
-      {editingId !== null && (
-        <FormTemplateEditor
-          formTemplateId={editingId}
-          canEdit={!!canEdit}
-          canPublish={!!canPublish}
-          onClose={() => {
-            setEditingId(null);
-            qc.invalidateQueries({ queryKey: ['forms'] });
-          }}
-        />
-      )}
     </AppShell>
   );
 }

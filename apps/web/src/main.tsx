@@ -25,6 +25,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { WebhooksPage } from './pages/WebhooksPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { FormsPage } from './pages/FormsPage';
+import { FormEditorPage } from './pages/FormEditorPage';
 import { ApiDocsPage } from './pages/ApiDocsPage';
 import { PublicRegisterPage } from './pages/PublicRegisterPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
@@ -158,6 +159,14 @@ function Router() {
       return <PlaceholderPage path={path} title="Not available" />;
     }
     return <FormsPage />;
+  }
+
+  const formEditorMatch = /^\/admin\/forms\/(\d+)\/?$/.exec(path);
+  if (formEditorMatch) {
+    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      return <PlaceholderPage path={path} title="Not available" />;
+    }
+    return <FormEditorPage formTemplateId={Number(formEditorMatch[1])} />;
   }
 
   const title = ROUTES[path];

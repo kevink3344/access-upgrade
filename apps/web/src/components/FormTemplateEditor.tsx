@@ -2,15 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { FormFieldType, FormQuestion, FormQuestionDraft } from '@pe/shared';
 import { api } from '../api';
-import { useScrollLock } from '../hooks/useScrollLock';
-import { DrawerResizeHandle } from './DrawerResizeHandle';
-import { useResizableDrawer } from '../hooks/useResizableDrawer';
 
 interface Props {
   formTemplateId: number;
   canEdit: boolean;
   canPublish: boolean;
-  onClose: () => void;
+  onBack: () => void;
 }
 
 const FIELD_TYPES: { value: FormFieldType; label: string }[] = [
@@ -62,10 +59,8 @@ function slugKey(label: string, taken: Set<string>): string {
  * it. That is what keeps a shared link asking the questions it was shared
  * with, even after staff change the form.
  */
-export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onClose }: Props) {
+export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack }: Props) {
   const qc = useQueryClient();
-  const resize = useResizableDrawer('pe.drawer.formEditor');
-  useScrollLock(true);
 
   const [questions, setQuestions] = useState<FormQuestionDraft[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
@@ -77,6 +72,16 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onClos
     queryKey: ['form', formTemplateId, 'versions'],
     queryFn: () => api.forms.versions(formTemplateId),
   });
+
+  const templates = useQuery({
+    queryKey: ['forms'],
+    queryFn: () => api.forms.list(),
+    staleTime: 60_000,
+  });
+
+  const templateName = templates.data?.data.find(
+    (t) => t.formTemplateId === formTemplateId,
+  )?.name;
 
   // Edit the newest version — usually the published one, or a draft if one
   // is already in progress.
@@ -170,34 +175,25 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onClos
   }
 
   return (
-    <>
-      <div className="drawer-backdrop" onClick={onClose} aria-hidden="true" />
-      <aside
-        className="drawer drawer-wide"
-        role="dialog"
-        aria-label="Form editor"
-        style={resize.drawerStyle}
-      >
-        <DrawerResizeHandle dragging={resize.dragging} handleProps={resize.handleProps} />
-        <header className="drawer-head">
-          <h2>Form editor</h2>
-          <button type="button" className="drawer-close" onClick={onClose} aria-label="Close">
-            ×
+    <div className="form-editor-page">
+      <div className="page-head">
+        <div>
+          <button type="button" className="linklike" onClick={onBack} style={{ fontSize: 12.5 }}>
+            ← All forms
           </button>
-        </header>
-
-        <div className="form-editor-bar">
-          <span className="form-editor-version">
+          <h2 style={{ marginTop: 4 }}>{templateName ?? 'Form editor'}</h2>
+          <p>
             {currentVersion
-              ? `v${currentVersion.versionNumber}${currentVersion.publishedAt ? ' · published' : ' · draft'}`
+              ? `Version ${currentVersion.versionNumber}${currentVersion.publishedAt ? ' · published' : ' · draft'}`
               : 'Loading…'}
-          </span>
-          {dirty && <span className="form-editor-dirty">Unsaved changes</span>}
-          <span style={{ flex: 1 }} />
+            {dirty && <span className="form-editor-dirty" style={{ marginLeft: 8 }}>Unsaved changes</span>}
+          </p>
+        </div>
+        <div className="row-actions">
           {canEdit && (
             <button
               type="button"
-              className="btn btn-ghost btn-sm"
+              className="btn btn-ghost"
               onClick={() => save.mutate()}
               disabled={save.isPending || questions.length === 0}
             >
@@ -207,7 +203,7 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onClos
           {canPublish && currentVersionId !== null && !currentVersion?.publishedAt && (
             <button
               type="button"
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary"
               onClick={() => publish.mutate(currentVersionId)}
               disabled={publish.isPending}
             >
@@ -215,20 +211,21 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onClos
             </button>
           )}
         </div>
+      </div>
 
-        {notice && (
-          <div className="alert alert-info" role="status" style={{ margin: '0 22px 12px' }}>
-            <span>{notice}</span>
-          </div>
-        )}
-        {error && (
-          <div className="alert alert-error" role="alert" style={{ margin: '0 22px 12px' }}>
-            <span>{error}</span>
-          </div>
-        )}
+      {notice && (
+        <div className="alert alert-info" role="status">
+          <span>{notice}</span>
+        </div>
+      )}
+      {error && (
+        <div className="alert alert-error" role="alert">
+          <span>{error}</span>
+        </div>
+      )}
 
-        <div className="form-editor-body">
-          <div className="form-editor-list">
+      <div className="form-editor-page-body">
+        <div className="form-editor-list">
             <div className="form-editor-list-head">
               <span>Questions</span>
               {canEdit && (
@@ -411,9 +408,8 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onClos
                 </div>
               </>
             )}
-          </div>
         </div>
-      </aside>
-    </>
+      </div>
+    </div>
   );
 }
