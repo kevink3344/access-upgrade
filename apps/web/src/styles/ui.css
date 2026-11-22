@@ -1663,6 +1663,129 @@ body.drawer-resizing {
 
 .roster-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 
+/* Narrow first column holding the answers disclosure arrow. */
+.roster-expand-col { width: 28px; padding-left: 4px !important; padding-right: 0 !important; }
+
+.roster-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.roster-expand:hover { background: var(--surface-subtle); color: var(--primary-dark); }
+
+.roster-expand:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 1px;
+}
+
+/* The expanded answers sit under their registrant, tinted so the pairing is
+   obvious and the row does not read as another registrant. */
+.roster-answers-row td {
+  padding: 0 10px 12px;
+  background: var(--surface-zebra);
+}
+
+.roster-answers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px 20px;
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--primary-color);
+  background: var(--surface-card);
+  border-radius: var(--radius);
+}
+
+.roster-answers div { min-width: 0; }
+
+.roster-answers dt {
+  font-size: 10.5px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-faint);
+  margin-bottom: 2px;
+}
+
+.roster-answers dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-heading);
+  overflow-wrap: anywhere;
+}
+
+/* Name/value list used by the registration drawer's Form answers tab. */
+.answers-source {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--primary-color);
+  background: var(--surface-subtle);
+  border-radius: var(--radius);
+}
+
+.answers-source-label {
+  font-size: 10.5px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+
+.answers-source strong {
+  font-size: 13.5px;
+  color: var(--text-heading);
+  overflow-wrap: anywhere;
+}
+
+.answer-list { margin: 0; padding: 0; }
+
+.answer-list div {
+  display: grid;
+  grid-template-columns: minmax(140px, 40%) 1fr;
+  gap: 4px 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.answer-list div:last-child { border-bottom: 0; }
+
+.answer-list dt {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.answer-list dd {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-heading);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .answer-list div { grid-template-columns: 1fr; gap: 2px; }
+}
+
+@media (max-width: 640px) {
+  /* The arrow is the only way to reveal answers, so it needs a real touch
+     target on a phone. */
+  .roster-expand { width: 44px; height: 44px; font-size: 14px; }
+  .roster-expand-col { width: 48px; }
+}
+
 .roster-table th {
   text-align: left;
   font-size: 11px;

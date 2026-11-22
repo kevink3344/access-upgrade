@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 
@@ -44,6 +44,17 @@ export function WorkshopRegistrants({
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [page, setPage] = useState(1);
+  /** Registration ids whose custom answers are expanded. */
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  function toggleExpanded(registrationId: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(registrationId)) next.delete(registrationId);
+      else next.add(registrationId);
+      return next;
+    });
+  }
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search.trim()), 250);
@@ -64,6 +75,37 @@ export function WorkshopRegistrants({
   const total = data?.total ?? 0;
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  /**
+   * Custom answers for this workshop, keyed by RegistrationID.
+   *
+   * Fetched separately from the roster because the roster is paginated and
+   * filtered — the answers belong to whichever rows are on screen, so they are
+   * looked up by id rather than merged into the roster query.
+   */
+  const answers = useQuery({
+    queryKey: ['workshop', workshopId, 'form-answers'],
+    queryFn: () => api.forms.answersForWorkshop(workshopId),
+  });
+
+  const answersByReg = useMemo(() => {
+    const map = new Map<number, { label: string; value: string | null }[]>();
+    for (const g of answers.data?.data ?? []) {
+      map.set(g.registrationId, g.answers);
+    }
+    return map;
+  }, [answers.data]);
+
+  /** Question labels that at least one registrant answered, in first-seen order. */
+  const answeredLabels = useMemo(() => {
+    const seen: string[] = [];
+    for (const g of answers.data?.data ?? []) {
+      for (const a of g.answers) {
+        if (!seen.includes(a.label)) seen.push(a.label);
+      }
+    }
+    return seen;
+  }, [answers.data]);
+
   const tabs: { key: Status; label: string; count: number | undefined }[] = [
     { key: 'active', label: 'Registered', count: counts?.active },
     { key: 'cancelled', label: 'Cancelled', count: counts?.cancelled },
@@ -81,6 +123,12 @@ export function WorkshopRegistrants({
           <>
             {' · '}
             <strong>{counts.cancelled}</strong> cancelled
+          </>
+        )}
+        {answeredLabels.length > 0 && (
+          <>
+            {' · '}
+            <strong>{answersByReg.size}</strong> with custom answers
           </>
         )}
       </p>
@@ -140,6 +188,9 @@ export function WorkshopRegistrants({
           <table className="roster-table">
             <thead>
               <tr>
+                <th scope="col" className="roster-expand-col">
+                  <span className="visually-hidden">Answers</span>
+                </th>
                 <th scope="col">Name</th>
                 <th scope="col">Agency</th>
                 <th scope="col">Registered</th>
@@ -148,33 +199,75 @@ export function WorkshopRegistrants({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={r.RegistrationID}
-                  className={`is-clickable${r.IsCancelled ? ' is-cancelled' : ''}`}
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`Open registration for ${r.ParticipantName ?? 'participant'}`}
-                  onClick={() => onOpenRegistration(r.RegistrationID)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onOpenRegistration(r.RegistrationID);
-                    }
-                  }}
-                >
-                  <td>
-                    <span className="roster-name">{r.ParticipantName?.trim() || '—'}</span>
-                    {r.Email && <span className="roster-email">{r.Email}</span>}
-                  </td>
-                  <td>{r.AgencyName ?? '—'}</td>
-                  <td>{fmtDate(r.RegistrationDate)}</td>
-                  <td className="num">{fmtMoney(r.PaidAmount)}</td>
-                  <td>
-                    <StatusPill cancelled={r.IsCancelled} attended={r.Attended} />
-                  </td>
-                </tr>
-              ))}
+              {rows.map((r) => {
+                const their = answersByReg.get(r.RegistrationID) ?? [];
+                const isOpen = expanded.has(r.RegistrationID);
+                return (
+                  <Fragment key={r.RegistrationID}>
+                    <tr
+                      className={`is-clickable${r.IsCancelled ? ' is-cancelled' : ''}`}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Open registration for ${r.ParticipantName ?? 'participant'}`}
+                      onClick={() => onOpenRegistration(r.RegistrationID)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onOpenRegistration(r.RegistrationID);
+                        }
+                      }}
+                    >
+                      <td className="roster-expand-col">
+                        {their.length > 0 && (
+                          <button
+                            type="button"
+                            className="roster-expand"
+                            aria-expanded={isOpen}
+                            aria-label={
+                              isOpen
+                                ? `Hide answers for ${r.ParticipantName ?? 'participant'}`
+                                : `Show answers for ${r.ParticipantName ?? 'participant'}`
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleExpanded(r.RegistrationID);
+                            }}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          >
+                            {isOpen ? '▾' : '▸'}
+                          </button>
+                        )}
+                      </td>
+                      <td>
+                        <span className="roster-name">{r.ParticipantName?.trim() || '—'}</span>
+                        {r.Email && <span className="roster-email">{r.Email}</span>}
+                      </td>
+                      <td>{r.AgencyName ?? '—'}</td>
+                      <td>{fmtDate(r.RegistrationDate)}</td>
+                      <td className="num">{fmtMoney(r.PaidAmount)}</td>
+                      <td>
+                        <StatusPill cancelled={r.IsCancelled} attended={r.Attended} />
+                      </td>
+                    </tr>
+
+                    {isOpen && their.length > 0 && (
+                      <tr className="roster-answers-row">
+                        <td />
+                        <td colSpan={5}>
+                          <dl className="roster-answers">
+                            {their.map((a) => (
+                              <div key={a.label}>
+                                <dt>{a.label}</dt>
+                                <dd>{a.value?.trim() || '—'}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
 

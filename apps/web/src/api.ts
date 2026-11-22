@@ -521,6 +521,13 @@ export const api = {
       request<{ data: import('@pe/shared').FormAnswerGroup[] }>(
         `/api/forms/answers/participant/${participantId}`,
       ),
+
+    answersForRegistration: (registrationId: number) =>
+      request<{
+        formName: string | null;
+        formVersionNumber: number | null;
+        answers: { questionKey: string; label: string; value: string | null }[];
+      }>(`/api/forms/answers/registration/${registrationId}`),
   },
 
   webhooks: {

@@ -546,6 +546,143 @@ export async function saveAnswers(
   }
 }
 
+/**
+ * Answers for one registration, plus which form the registrant actually saw.
+ *
+ * Built-in questions (name, email, phone, agency, notes) are stored in their
+ * real columns rather than in FormAnswer, so they are read from there and
+ * merged in. Without this the tab would show only the custom questions, which
+ * is not the form the registrant actually completed.
+ */
+export async function answersForRegistration(registrationId: number) {
+  // The form name comes from the link the registration came through, which
+  // pins a version. A NULL version means the built-in form was used.
+  const meta = await query<{
+    FormName: string | null;
+    VersionNumber: number | null;
+    RegistrationLinkID: number | null;
+    FirstName: string | null;
+    LastName: string | null;
+    Email: string | null;
+    HomePhone: string | null;
+    AgencyName: string | null;
+    Notes: string | null;
+    IsTeacherMailingList: boolean | null;
+    IsParentMailingList: boolean | null;
+    ChildrenAges: string | null;
+    SecondCaregiverInfo: string | null;
+    GradeLevel: string | null;
+  }>(
+    `SELECT t.Name AS FormName, v.VersionNumber, r.RegistrationLinkID,
+            p.FirstName, p.LastName, p.Email, p.HomePhone, r.Notes,
+            p.IsTeacherMailingList, p.IsParentMailingList,
+            p.ChildrenAges, p.SecondCaregiverInfo, p.GradeLevel,
+            ag.AgencyName
+       FROM core.Registration r
+       JOIN core.Participant p ON p.ParticipantID = r.ParticipantID
+       LEFT JOIN core.Agency ag ON ag.AgencyID = p.AgencyID
+       LEFT JOIN core.WorkshopRegistrationLink l
+              ON l.RegistrationLinkID = r.RegistrationLinkID
+       LEFT JOIN core.FormTemplateVersion v
+              ON v.FormTemplateVersionID = l.FormTemplateVersionID
+       LEFT JOIN core.FormTemplate t
+              ON t.FormTemplateID = v.FormTemplateID
+      WHERE r.RegistrationID = @id`,
+    { id: { type: sql.Int, value: registrationId } },
+  );
+
+  const head = meta.recordset[0];
+
+  const r = await query<{
+    QuestionKey: string;
+    Label: string;
+    FieldType: FieldType;
+    SortOrder: number;
+    AnswerText: string | null;
+    AgencyName: string | null;
+  }>(
+    `SELECT q.QuestionKey, q.Label, q.FieldType, q.SortOrder, a.AnswerText, ag.AgencyName
+       FROM core.FormAnswer a
+       JOIN core.FormQuestion q ON q.FormQuestionID = a.FormQuestionID
+       -- An agency answer stores the AgencyID; resolve it so staff read a
+       -- school name rather than a number.
+       LEFT JOIN core.Agency ag
+              ON q.FieldType = 'agency'
+             AND TRY_CAST(a.AnswerText AS INT) = ag.AgencyID
+      WHERE a.RegistrationID = @id
+      ORDER BY q.SortOrder`,
+    { id: { type: sql.Int, value: registrationId } },
+  );
+
+  /**
+   * The fields the built-in form has always asked, in the order it asks them.
+   *
+   * These are not FormAnswer rows — the public form writes them straight to
+   * Participant/Registration — so they are read from those columns. The role
+   * branch follows, matching how the public form branches.
+   */
+  const builtIn: { questionKey: string; label: string; value: string | null }[] = [];
+
+  if (head) {
+    const role =
+      head.IsTeacherMailingList && !head.IsParentMailingList
+        ? 'Educator'
+        : head.IsParentMailingList && !head.IsTeacherMailingList
+          ? 'Parent/caregiver'
+          : null;
+
+    if (role) builtIn.push({ questionKey: 'registrantRole', label: 'I am registering as', value: role });
+
+    builtIn.push(
+      { questionKey: 'firstName', label: 'First name', value: head.FirstName },
+      { questionKey: 'lastName', label: 'Last name', value: head.LastName },
+      { questionKey: 'email', label: 'Email', value: head.Email },
+      { questionKey: 'phone', label: 'Phone', value: head.HomePhone },
+      { questionKey: 'agency', label: 'School or agency', value: head.AgencyName },
+    );
+
+    // The role-specific questions, mirroring the public form's branch.
+    if (role === 'Educator' && head.GradeLevel) {
+      builtIn.push({
+        questionKey: 'classAges',
+        label: 'How old are the students in your class?',
+        value: head.GradeLevel,
+      });
+    }
+    if (role === 'Parent/caregiver') {
+      if (head.ChildrenAges) {
+        builtIn.push({
+          questionKey: 'childrenAges',
+          label: 'What are the ages of your children?',
+          value: head.ChildrenAges,
+        });
+      }
+      if (head.SecondCaregiverInfo) {
+        builtIn.push({
+          questionKey: 'secondCaregiver',
+          label: 'Additional parent/caregiver details',
+          value: head.SecondCaregiverInfo,
+        });
+      }
+    }
+
+    builtIn.push({ questionKey: 'notes', label: 'Anything we should know?', value: head.Notes });
+  }
+
+  // Custom answers come after the built-ins, as they do on the public form.
+  const custom = r.recordset.map((x) => ({
+    questionKey: x.QuestionKey,
+    label: x.Label,
+    value: x.FieldType === 'agency' ? (x.AgencyName ?? x.AnswerText) : x.AnswerText,
+  }));
+
+  return {
+    formName: head?.FormName ?? null,
+    formVersionNumber: head?.VersionNumber ?? null,
+    answers: [...builtIn, ...custom],
+  };
+}
+
 /** Answers for every registrant on a workshop, grouped by registration. */
 export async function answersForWorkshop(workshopId: number) {
   const r = await query<{
@@ -554,16 +691,24 @@ export async function answersForWorkshop(workshopId: number) {
     FormQuestionID: number;
     QuestionKey: string;
     Label: string;
+    FieldType: FieldType;
     SortOrder: number;
     AnswerText: string | null;
+    AgencyName: string | null;
   }>(
     `SELECT r.RegistrationID,
             CONCAT(p.FirstName, ' ', p.LastName) AS ParticipantName,
-            q.FormQuestionID, q.QuestionKey, q.Label, q.SortOrder, a.AnswerText
+            q.FormQuestionID, q.QuestionKey, q.Label, q.FieldType, q.SortOrder, a.AnswerText,
+            ag.AgencyName
        FROM core.Registration r
        JOIN core.Participant p ON p.ParticipantID = r.ParticipantID
        JOIN core.FormAnswer a ON a.RegistrationID = r.RegistrationID
        JOIN core.FormQuestion q ON q.FormQuestionID = a.FormQuestionID
+       -- An agency answer stores the AgencyID; resolve it so staff read a
+       -- school name rather than a number.
+       LEFT JOIN core.Agency ag
+              ON q.FieldType = 'agency'
+             AND TRY_CAST(a.AnswerText AS INT) = ag.AgencyID
       WHERE r.WorkshopID = @w
       ORDER BY r.RegistrationID, q.SortOrder`,
     { w: { type: sql.Int, value: workshopId } },
@@ -587,7 +732,7 @@ export async function answersForWorkshop(workshopId: number) {
     entry.answers.push({
       questionKey: row.QuestionKey,
       label: row.Label,
-      value: row.AnswerText,
+      value: row.FieldType === 'agency' ? (row.AgencyName ?? row.AnswerText) : row.AnswerText,
     });
   }
 
@@ -604,16 +749,22 @@ export async function answersForParticipant(participantId: number) {
     StartDate: Date | null;
     QuestionKey: string;
     Label: string;
+    FieldType: FieldType;
     SortOrder: number;
     AnswerText: string | null;
+    AgencyName: string | null;
   }>(
     `SELECT r.RegistrationID, w.WorkshopID, w.WorkshopCode, n.WorkshopName, w.StartDate,
-            q.QuestionKey, q.Label, q.SortOrder, a.AnswerText
+            q.QuestionKey, q.Label, q.FieldType, q.SortOrder, a.AnswerText,
+            ag.AgencyName
        FROM core.Registration r
        JOIN core.Workshop w ON w.WorkshopID = r.WorkshopID
        LEFT JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
        JOIN core.FormAnswer a ON a.RegistrationID = r.RegistrationID
        JOIN core.FormQuestion q ON q.FormQuestionID = a.FormQuestionID
+       LEFT JOIN core.Agency ag
+              ON q.FieldType = 'agency'
+             AND TRY_CAST(a.AnswerText AS INT) = ag.AgencyID
       WHERE r.ParticipantID = @p
       ORDER BY w.StartDate DESC, q.SortOrder`,
     { p: { type: sql.Int, value: participantId } },
@@ -647,7 +798,7 @@ export async function answersForParticipant(participantId: number) {
     entry.answers.push({
       questionKey: row.QuestionKey,
       label: row.Label,
-      value: row.AnswerText,
+      value: row.FieldType === 'agency' ? (row.AgencyName ?? row.AnswerText) : row.AnswerText,
     });
   }
 
