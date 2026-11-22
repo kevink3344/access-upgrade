@@ -142,7 +142,14 @@ export function AppShell({
       <aside className="sidebar">
         <div className="sidebar-brand">
           <a className="mark" href="/">
-            <span className="mark-icon" aria-hidden="true">PE</span>
+            <img
+              className="mark-icon"
+              src="/images/sunburst-logo.png"
+              alt=""
+              aria-hidden="true"
+              width={34}
+              height={30}
+            />
             <span className="mark-text">
               <b>Project Enlightenment</b>
               <small>Training Database</small>

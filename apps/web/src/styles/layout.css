@@ -48,15 +48,8 @@
 
 .sidebar-brand .mark-icon {
   width: 34px;
-  height: 34px;
-  border-radius: var(--radius);
-  background: var(--primary-color);
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-primary);
-  font-weight: 700;
-  font-size: 15px;
+  height: 30px;
+  object-fit: contain;
   flex-shrink: 0;
 }
 
