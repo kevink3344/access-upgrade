@@ -14,9 +14,10 @@ const FIELD_TYPES: { value: FormFieldType; label: string }[] = [
   { value: 'text', label: 'Short text' },
   { value: 'longtext', label: 'Long text' },
   { value: 'number', label: 'Number' },
-  { value: 'select', label: 'Dropdown' },
+  { value: 'select', label: 'Dropdown (your own options)' },
   { value: 'radio', label: 'Radio buttons' },
   { value: 'checkbox', label: 'Checkboxes' },
+  { value: 'agency', label: 'School or Agency (from the school list)' },
 ];
 
 const CHOICE_TYPES: FormFieldType[] = ['select', 'radio', 'checkbox'];
@@ -324,6 +325,11 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
                   />
                   {CHOICE_TYPES.includes(active.fieldType) && (
                     <span className="field-hint">Not used for choice fields.</span>
+                  )}
+                  {active.fieldType === 'agency' && (
+                    <span className="field-hint">
+                      The school picker supplies its own placeholder.
+                    </span>
                   )}
                 </div>
 

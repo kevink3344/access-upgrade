@@ -17,7 +17,15 @@ import { query, sql, type SqlParam } from '../db.js';
  * report working without knowing this feature exists.
  */
 
-export type FieldType = 'text' | 'longtext' | 'number' | 'select' | 'radio' | 'checkbox';
+export type FieldType =
+  | 'text'
+  | 'longtext'
+  | 'number'
+  | 'select'
+  | 'radio'
+  | 'checkbox'
+  /** Live type-ahead over core.Agency; stores the chosen AgencyID. */
+  | 'agency';
 
 export interface FormQuestion {
   formQuestionId: number;
@@ -109,7 +117,7 @@ const BUILT_IN_QUESTIONS: Omit<DraftQuestion, 'sortOrder'>[] = [
     label: 'School or agency',
     helpText: null,
     placeholder: null,
-    fieldType: 'select',
+    fieldType: 'agency',
     isRequired: false,
     options: [],
     maxLength: null,

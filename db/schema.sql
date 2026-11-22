@@ -1330,7 +1330,7 @@ CREATE TABLE core.FormQuestion (
     IsActive              BIT           NOT NULL CONSTRAINT DF_FormQuestion_IsActive DEFAULT 1,
     CONSTRAINT UQ_FormQuestion_Key UNIQUE (FormTemplateVersionID, QuestionKey),
     CONSTRAINT CK_FormQuestion_FieldType
-        CHECK (FieldType IN ('text', 'longtext', 'number', 'select', 'radio', 'checkbox'))
+        CHECK (FieldType IN ('text', 'longtext', 'number', 'select', 'radio', 'checkbox', 'agency'))
 );
 END
 GO

@@ -33,7 +33,7 @@ const questionSchema = z.object({
   label: z.string().min(1, 'A label is required').max(200),
   helpText: z.string().max(300).nullable().optional(),
   placeholder: z.string().max(100).nullable().optional(),
-  fieldType: z.enum(['text', 'longtext', 'number', 'select', 'radio', 'checkbox']),
+  fieldType: z.enum(['text', 'longtext', 'number', 'select', 'radio', 'checkbox', 'agency']),
   isRequired: z.boolean(),
   options: z.array(z.string().min(1).max(100)).default([]),
   maxLength: z.number().int().positive().nullable().optional(),
@@ -248,6 +248,12 @@ formsRouter.post('/:id/versions', requireAuth, requireRole(...EDIT_ROLES), async
       if (q.fieldType === 'select' || q.fieldType === 'radio' || q.fieldType === 'checkbox') {
         if (q.options.length === 0 && !q.mapsToColumn) {
           problems.push(`"${q.label}" is a ${q.fieldType} and needs at least one option.`);
+        }
+      } else if (q.fieldType === 'agency') {
+        // The school picker is its own source; a static option list would be
+        // ignored, so refuse one rather than silently dropping it.
+        if (q.options.length > 0) {
+          problems.push(`"${q.label}" is a School or Agency field and cannot have its own options.`);
         }
       } else if (q.placeholder && q.placeholder.length > 100) {
         problems.push(`"${q.label}" has a placeholder longer than 100 characters.`);

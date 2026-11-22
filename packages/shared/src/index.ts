@@ -1009,7 +1009,15 @@ export interface WorkshopNotificationSettings {
 /*  Form Designer                                                      */
 /* ------------------------------------------------------------------ */
 
-export type FormFieldType = 'text' | 'longtext' | 'number' | 'select' | 'radio' | 'checkbox';
+export type FormFieldType =
+  | 'text'
+  | 'longtext'
+  | 'number'
+  | 'select'
+  | 'radio'
+  | 'checkbox'
+  /** Live type-ahead over core.Agency; stores the chosen AgencyID. */
+  | 'agency';
 
 export interface FormQuestion {
   formQuestionId: number;

@@ -1,8 +1,9 @@
-﻿import { useEffect, useRef, useState, type FormEvent } from 'react';
+﻿import { useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import type { PublicLinkState } from '@pe/shared';
 import { api, HttpError } from '../api';
+import { AgencyPicker } from '../components/AgencyPicker';
 
 const schema = z.object({
   registrantRole: z.enum(['Educator', 'Parent/caregiver'], {
@@ -105,8 +106,6 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
   const [form, setForm] = useState<Record<string, string>>({});
   const [agencyId, setAgencyId] = useState<number | null>(null);
   const [agencyLabel, setAgencyLabel] = useState('');
-  const [agencyQuery, setAgencyQuery] = useState('');
-  const [agencyOptions, setAgencyOptions] = useState<{ id: number; label: string }[]>([]);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -116,31 +115,14 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
   /** Custom answers keyed by QuestionKey, for links pinned to a form version. */
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [answerErrors, setAnswerErrors] = useState<Record<string, string>>({});
+  /** Labels for custom `agency` questions, keyed by QuestionKey. */
+  const [agencyLabels, setAgencyLabels] = useState<Record<string, string>>({});
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['public-link', slug],
     queryFn: () => api.publicRegistration.resolve(slug),
     retry: false,
   });
-
-  // Agency type-ahead.
-  useEffect(() => {
-    if (agencyQuery.trim().length < 2) {
-      setAgencyOptions([]);
-      return;
-    }
-    let cancelled = false;
-    const t = setTimeout(() => {
-      api.publicRegistration
-        .agencies(agencyQuery)
-        .then((r) => !cancelled && setAgencyOptions(r.data))
-        .catch(() => !cancelled && setAgencyOptions([]));
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [agencyQuery]);
 
   function set(key: string, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -460,56 +442,17 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
 
           {form.registrantRole === 'Educator' && (
             <>
-              <div className="field" style={{ position: 'relative' }}>
+              <div className="field">
                 <label htmlFor="r-agency">School or agency <span style={{ fontWeight: 400, color: 'var(--text-faint)' }}>(optional)</span></label>
-                {agencyId ? (
-                  <div className="typeahead-selected">
-                    <span>{agencyLabel}</span>
-                    <button
-                      type="button"
-                      className="typeahead-clear"
-                      onClick={() => {
-                        setAgencyId(null);
-                        setAgencyLabel('');
-                        setAgencyQuery('');
-                      }}
-                      aria-label="Clear school"
-                    >
-                      Ã—
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <input
-                      id="r-agency"
-                      type="search"
-                      placeholder="Start typing your school…"
-                      value={agencyQuery}
-                      onChange={(e) => setAgencyQuery(e.target.value)}
-                      autoComplete="off"
-                    />
-                    {agencyOptions.length > 0 && (
-                      <ul className="typeahead-list" role="listbox">
-                        {agencyOptions.map((o) => (
-                          <li key={o.id}>
-                            <button
-                              type="button"
-                              role="option"
-                              aria-selected="false"
-                              onClick={() => {
-                                setAgencyId(o.id);
-                                setAgencyLabel(o.label);
-                                setAgencyOptions([]);
-                              }}
-                            >
-                              {o.label}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </>
-                )}
+                <AgencyPicker
+                  id="r-agency"
+                  value={agencyId}
+                  label={agencyLabel}
+                  onChange={(id, lbl) => {
+                    setAgencyId(id);
+                    setAgencyLabel(lbl);
+                  }}
+                />
               </div>
 
               <div className="field">
@@ -596,7 +539,18 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
                     )}
                   </label>
 
-                  {q.fieldType === 'longtext' ? (
+                  {q.fieldType === 'agency' ? (
+                    <AgencyPicker
+                      id={`q-${q.questionKey}`}
+                      value={typeof value === 'string' && value ? Number(value) : null}
+                      label={agencyLabels[q.questionKey] ?? ''}
+                      onChange={(id, lbl) => {
+                        setAnswer(id === null ? '' : String(id));
+                        setAgencyLabels((prev) => ({ ...prev, [q.questionKey]: lbl }));
+                      }}
+                      describedBy={q.helpText ? `q-${q.questionKey}-help` : undefined}
+                    />
+                  ) : q.fieldType === 'longtext' ? (
                     <textarea
                       id={`q-${q.questionKey}`}
                       rows={3}
