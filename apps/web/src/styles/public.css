@@ -319,6 +319,9 @@
    so the redirect is never a surprise. Sits above the button and uses a
    warm background so it reads as an alert rather than body copy. */
 .payment-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
   margin: 0 0 14px;
   padding: 12px 14px;
   border-radius: var(--radius);
@@ -327,7 +330,15 @@
   font-size: 13.5px;
   line-height: 1.5;
   color: var(--text-heading);
-  text-align: center;
+  text-align: left;
+}
+
+/* Nudged down so the icon's optical centre sits on the first text line
+   rather than the top of the line box. */
+.payment-notice-icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--primary-color);
 }
 
 .payment-notice strong {
