@@ -1071,6 +1071,166 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
 
 .att-list li.is-present { background: hsl(var(--primary-color-hsl) / 4%); }
 
+/* Custom question choices (radio / checkbox) on the public form. */
+.q-choices { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }
+
+.q-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.q-choice input {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  flex: 0 0 auto;
+  accent-color: var(--primary-color);
+}
+
+/* ---------- form designer ---------- */
+.form-editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 22px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-zebra);
+  flex-wrap: wrap;
+}
+
+.form-editor-version {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.form-editor-dirty {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--badge-amber-text);
+  background: var(--badge-amber-bg);
+  border: 1px solid var(--badge-amber-border);
+  border-radius: var(--badge-radius);
+  padding: 1px 7px;
+}
+
+.form-editor-body {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(200px, 300px) 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.form-editor-list {
+  border-right: 1px solid var(--border-subtle);
+  overflow-y: auto;
+  background: var(--surface-card);
+}
+
+.form-editor-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border-subtle);
+  position: sticky;
+  top: 0;
+  background: var(--surface-card);
+}
+
+.form-editor-list ul { list-style: none; margin: 0; padding: 0; }
+
+.form-editor-list li {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.form-editor-list li.is-active { background: hsl(var(--primary-color-hsl) / 7%); }
+
+.form-q-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.form-q-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.form-q-lock { font-size: 10px; opacity: .6; }
+
+.form-q-meta { font-size: 11px; color: var(--text-faint); }
+
+.form-q-actions { display: flex; flex-direction: column; padding-right: 4px; }
+
+.form-q-actions .btn { padding: 0 6px; min-height: 20px; line-height: 1; font-size: 11px; }
+
+.form-editor-detail {
+  padding: 16px 20px 40px;
+  overflow-y: auto;
+}
+
+.form-q-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin: 4px 0 14px;
+  cursor: pointer;
+}
+
+.form-q-check input { width: 18px; height: 18px; accent-color: var(--primary-color); }
+
+.form-q-preview {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius);
+  background: var(--surface-subtle);
+}
+
+.form-q-preview-title {
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+}
+
+@media (max-width: 720px) {
+  .form-editor-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .form-editor-list { max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--border-subtle); }
+}
+
 /* ---------- reports hub ---------- */
 .reports-layout {
   display: grid;

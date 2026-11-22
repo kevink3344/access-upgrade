@@ -477,6 +477,46 @@ export const api = {
       request<{ data: import('@pe/shared').SchoolYearOption[] }>('/api/lookups/school-years'),
   },
 
+  forms: {
+    list: () => request<{ data: import('@pe/shared').FormTemplateSummary[] }>('/api/forms'),
+
+    create: (body: { name: string; description?: string | null }) =>
+      request<{ formTemplateId: number; versionId: number }>('/api/forms', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    update: (id: number, body: { name?: string; description?: string | null; isActive?: boolean }) =>
+      request<void>(`/api/forms/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+    remove: (id: number) => request<void>(`/api/forms/${id}`, { method: 'DELETE' }),
+
+    versions: (id: number) =>
+      request<{ data: import('@pe/shared').FormVersionSummary[] }>(`/api/forms/${id}/versions`),
+
+    version: (id: number, versionId: number) =>
+      request<import('@pe/shared').FormVersion>(`/api/forms/${id}/versions/${versionId}`),
+
+    saveDraft: (id: number, questions: import('@pe/shared').FormQuestionDraft[]) =>
+      request<{ formTemplateVersionId: number }>(`/api/forms/${id}/versions`, {
+        method: 'POST',
+        body: JSON.stringify({ questions }),
+      }),
+
+    publish: (id: number, versionId: number) =>
+      request<void>(`/api/forms/${id}/versions/${versionId}/publish`, { method: 'POST' }),
+
+    answersForWorkshop: (workshopId: number) =>
+      request<{ data: import('@pe/shared').FormAnswerGroup[] }>(
+        `/api/forms/answers/workshop/${workshopId}`,
+      ),
+
+    answersForParticipant: (participantId: number) =>
+      request<{ data: import('@pe/shared').FormAnswerGroup[] }>(
+        `/api/forms/answers/participant/${participantId}`,
+      ),
+  },
+
   webhooks: {
     list: () => request<{ data: import('@pe/shared').WebhookRow[] }>('/api/webhooks'),
     get: (id: number) => request<import('@pe/shared').WebhookRow>(`/api/webhooks/${id}`),

@@ -24,6 +24,7 @@ import { CertificatesPage } from './pages/CertificatesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { WebhooksPage } from './pages/WebhooksPage';
 import { NotificationsPage } from './pages/NotificationsPage';
+import { FormsPage } from './pages/FormsPage';
 import { ApiDocsPage } from './pages/ApiDocsPage';
 import { PublicRegisterPage } from './pages/PublicRegisterPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
@@ -86,6 +87,7 @@ const ROUTES: Record<string, string> = {
   '/admin/utilities': 'Utilities',
   '/api-docs': 'API documentation',
   '/admin/webhooks': 'Webhooks',
+  '/admin/forms': 'Forms',
   '/notifications': 'Notifications',
 };
 
@@ -149,6 +151,13 @@ function Router() {
       return <PlaceholderPage path={path} title="Not available" />;
     }
     return <WebhooksPage />;
+  }
+
+  if (path === '/admin/forms') {
+    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      return <PlaceholderPage path={path} title="Not available" />;
+    }
+    return <FormsPage />;
   }
 
   const title = ROUTES[path];

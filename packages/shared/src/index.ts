@@ -755,6 +755,11 @@ export interface PublicLinkState {
   state: PublicLinkStatus;
   /** Seats left, from the live roster. Null when the workshop is uncapped. */
   seatsRemaining: number | null;
+  /**
+   * The form version this link is pinned to, or null when the link uses the
+   * built-in form. Workshop details always render regardless.
+   */
+  form: FormVersion | null;
   opensAt: string | null;
   /** True when staff configured a payment redirect for this link. */
   redirectToPayment: boolean;
@@ -796,6 +801,8 @@ export interface PublicRegisterRequest {
   /** Honeypot — must stay empty. */
   website?: string;
   elapsedMs?: number;
+  /** Custom answers keyed by QuestionKey, for links pinned to a form version. */
+  answers?: Record<string, string | string[] | null>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -998,6 +1005,83 @@ export interface WorkshopNotificationSettings {
   notifyPercentFull: number | null;
   lastNotifiedAt: string | null;
 }
+/* ------------------------------------------------------------------ */
+/*  Form Designer                                                      */
+/* ------------------------------------------------------------------ */
+
+export type FormFieldType = 'text' | 'longtext' | 'number' | 'select' | 'radio' | 'checkbox';
+
+export interface FormQuestion {
+  formQuestionId: number;
+  sortOrder: number;
+  questionKey: string;
+  label: string;
+  helpText: string | null;
+  placeholder: string | null;
+  fieldType: FormFieldType;
+  isRequired: boolean;
+  options: string[];
+  maxLength: number | null;
+  mapsToColumn: string | null;
+  isBuiltIn: boolean;
+}
+
+/** A question as sent by the editor — ids are assigned server-side. */
+export interface FormQuestionDraft {
+  sortOrder: number;
+  questionKey: string;
+  label: string;
+  helpText?: string | null;
+  placeholder?: string | null;
+  fieldType: FormFieldType;
+  isRequired: boolean;
+  options: string[];
+  maxLength?: number | null;
+  mapsToColumn?: string | null;
+  isBuiltIn: boolean;
+}
+
+export interface FormVersion {
+  formTemplateVersionId: number;
+  formTemplateId: number;
+  versionNumber: number;
+  publishedAt: string | null;
+  publishedBy: string | null;
+  questions: FormQuestion[];
+}
+
+export interface FormVersionSummary {
+  formTemplateVersionId: number;
+  versionNumber: number;
+  publishedAt: string | null;
+  publishedBy: string | null;
+  createdBy: string;
+  createdAt: string;
+  questionCount: number;
+}
+
+export interface FormTemplateSummary {
+  formTemplateId: number;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  currentVersionId: number | null;
+  currentVersionNumber: number | null;
+  isPublished: boolean;
+  updatedAt: string | null;
+}
+
+/** One registration's custom answers. */
+export interface FormAnswerGroup {
+  registrationId: number;
+  participantName: string | null;
+  workshopId?: number;
+  workshopCode?: string | null;
+  workshopName?: string | null;
+  startDate?: string | null;
+  answers: { questionKey: string; label: string; value: string | null }[];
+}
+
 /* ------------------------------------------------------------------ */
 /*  Webhooks                                                           */
 /* ------------------------------------------------------------------ */

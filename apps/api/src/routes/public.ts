@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { query, sql, type SqlParam } from '../db.js';
 import { env } from '../env.js';
 import { checkWorkshopCapacity } from '../services/notifications.js';
+import { getVersionForLink, saveAnswers } from '../services/forms.js';
 
 /**
  * Public registration endpoints. Mounted at /api/public.
@@ -242,9 +243,14 @@ publicRouter.get('/registration-links/:slug', async (req, res, next) => {
 
     const state = linkState(link);
 
+    // The pinned form version, if this link uses one. Null means the link
+    // falls back to the built-in form the page has always rendered.
+    const form = await getVersionForLink(link.RegistrationLinkID);
+
     res.json({
       state,
       seatsRemaining: seatsRemaining(link),
+      form,
       opensAt: link.OpensAt?.toISOString() ?? null,
       // Sent to the browser so the confirmation screen can forward the
       // registrant to payment. Only exposed while the link is actually open.
@@ -290,6 +296,8 @@ const registerSchema = z.object({
   website: z.string().optional(),
   /** Milliseconds the form was on screen. */
   elapsedMs: z.number().optional(),
+  /** Custom answers keyed by QuestionKey, for links pinned to a form version. */
+  answers: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -422,6 +430,38 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
       return;
     }
 
+    // ---- custom questions: validate against the pinned version ----
+    // The form the registrant saw is the only one their answers can be judged
+    // against. A required question that is blank is a hard error here, not
+    // just in the browser.
+    const formVersion = await getVersionForLink(link.RegistrationLinkID);
+
+    if (formVersion) {
+      const supplied = data.answers ?? {};
+      const missing: string[] = [];
+
+      for (const q of formVersion.questions) {
+        if (!q.isRequired || q.mapsToColumn) continue; // built-ins validated below
+        const v = supplied[q.questionKey];
+        const blank =
+          v === undefined ||
+          v === null ||
+          (typeof v === 'string' && v.trim() === '') ||
+          (Array.isArray(v) && v.length === 0);
+        if (blank) missing.push(q.label);
+      }
+
+      if (missing.length > 0) {
+        await logSubmission(link.RegistrationLinkID, ip, ua, 'Rejected', 'missing-required');
+        res.status(422).json({
+          error: 'validation_failed',
+          message: `Please answer: ${missing.join(', ')}`,
+          fields: missing,
+        });
+        return;
+      }
+    }
+
     // ---- participant: match on email, else create ----
     const existing = await query<{ ParticipantID: number }>(
       `SELECT TOP 1 ParticipantID FROM core.Participant
@@ -548,6 +588,13 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
       // Safe to call on a duplicate submission too: the fired flag makes it
       // a no-op once the alert has gone out.
       await checkWorkshopCapacity(link.WorkshopID);
+    }
+
+    // Custom answers. Written after the registration exists so the FK holds,
+    // and only for questions on the pinned version — saveAnswers drops any
+    // key the registrant was never shown.
+    if (formVersion && data.answers && Object.keys(data.answers).length > 0) {
+      await saveAnswers(registrationId, formVersion, data.answers);
     }
 
     // Identical response for new and duplicate submissions — the form must

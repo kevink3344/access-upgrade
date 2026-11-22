@@ -1,0 +1,388 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { requireAuth, requireRole } from '../auth/middleware.js';
+import {
+  answersForParticipant,
+  answersForWorkshop,
+  countLinksUsingTemplate,
+  createTemplate,
+  deleteTemplate,
+  getVersion,
+  listTemplates,
+  listVersions,
+  publishVersion,
+  saveDraft,
+  updateTemplate,
+} from '../services/forms.js';
+
+export const formsRouter = Router();
+
+/** Editing drafts is open to managers; publishing is not. */
+const EDIT_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER'] as const;
+const PUBLISH_ROLES = ['SUPER_ADMIN', 'ADMIN'] as const;
+
+const questionSchema = z.object({
+  sortOrder: z.number().int().min(0),
+  questionKey: z
+    .string()
+    .min(1)
+    .max(50)
+    // Built-in keys are camelCase (firstName); custom keys are snake_case.
+    // Both are allowed, but no spaces or punctuation.
+    .regex(/^[A-Za-z][A-Za-z0-9_]*$/, 'Use letters, digits and underscores'),
+  label: z.string().min(1, 'A label is required').max(200),
+  helpText: z.string().max(300).nullable().optional(),
+  placeholder: z.string().max(100).nullable().optional(),
+  fieldType: z.enum(['text', 'longtext', 'number', 'select', 'radio', 'checkbox']),
+  isRequired: z.boolean(),
+  options: z.array(z.string().min(1).max(100)).default([]),
+  maxLength: z.number().int().positive().nullable().optional(),
+  mapsToColumn: z.string().max(50).nullable().optional(),
+  isBuiltIn: z.boolean().default(false),
+});
+
+/**
+ * @openapi
+ * /api/forms:
+ *   get:
+ *     tags: [Forms]
+ *     summary: List form templates
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Templates with their current version }
+ */
+formsRouter.get('/', requireAuth, async (_req, res, next) => {
+  try {
+    res.json({ data: await listTemplates() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/forms:
+ *   post:
+ *     tags: [Forms]
+ *     summary: Create a form template
+ *     description: Seeds an unpublished v1 containing the six built-in questions.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Created }
+ */
+formsRouter.post('/', requireAuth, requireRole(...EDIT_ROLES), async (req, res, next) => {
+  try {
+    const parsed = z
+      .object({
+        name: z.string().min(1, 'A name is required').max(100),
+        description: z.string().max(500).nullable().optional(),
+      })
+      .safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(422).json({
+        error: 'validation_failed',
+        message: 'Invalid template',
+        details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      });
+      return;
+    }
+
+    const created = await createTemplate({
+      name: parsed.data.name,
+      description: parsed.data.description ?? null,
+      actor: req.user!.email,
+    });
+
+    res.status(201).json(created);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/forms/{id}:
+ *   patch:
+ *     tags: [Forms]
+ *     summary: Rename, describe or activate/deactivate a template
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       204: { description: Updated }
+ */
+formsRouter.patch('/:id', requireAuth, requireRole(...EDIT_ROLES), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+
+    const parsed = z
+      .object({
+        name: z.string().min(1).max(100).optional(),
+        description: z.string().max(500).nullable().optional(),
+        isActive: z.boolean().optional(),
+      })
+      .safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(422).json({ error: 'validation_failed', message: 'Invalid template' });
+      return;
+    }
+
+    await updateTemplate(id, parsed.data, req.user!.email);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/forms/{id}:
+ *   delete:
+ *     tags: [Forms]
+ *     summary: Delete a template
+ *     description: Refuses when any registration link still points at it.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       204: { description: Deleted }
+ *       409: { description: In use by a registration link }
+ */
+formsRouter.delete('/:id', requireAuth, requireRole(...PUBLISH_ROLES), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+
+    const inUse = await countLinksUsingTemplate(id);
+    if (inUse > 0) {
+      res.status(409).json({
+        error: 'conflict',
+        message: `${inUse} registration link(s) use this form. Repoint or remove them first.`,
+      });
+      return;
+    }
+
+    await deleteTemplate(id);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/forms/{id}/versions:
+ *   get:
+ *     tags: [Forms]
+ *     summary: Versions of a template, newest first
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Versions }
+ */
+formsRouter.get('/:id/versions', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+    res.json({ data: await listVersions(id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/forms/{id}/versions:
+ *   post:
+ *     tags: [Forms]
+ *     summary: Save a new draft version from a question list
+ *     description: >
+ *       Always creates a new version rather than editing the current one,
+ *       because a published version may already have answers pointing at its
+ *       question ids.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Draft created }
+ *       422: { description: Validation failed }
+ */
+formsRouter.post('/:id/versions', requireAuth, requireRole(...EDIT_ROLES), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+
+    const parsed = z.object({ questions: z.array(questionSchema).min(1) }).safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(422).json({
+        error: 'validation_failed',
+        message: 'Invalid questions',
+        details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      });
+      return;
+    }
+
+    // Publish-time rules, enforced here so a draft cannot be saved in a state
+    // that could never be published.
+    const problems: string[] = [];
+    const keys = new Set<string>();
+
+    for (const q of parsed.data.questions) {
+      if (keys.has(q.questionKey)) {
+        problems.push(`Duplicate question key "${q.questionKey}".`);
+      }
+      keys.add(q.questionKey);
+
+      // A choice field needs options — unless it maps to a real column, in
+      // which case its choices come from a database picker (agency) rather
+      // than a static list.
+      if (q.fieldType === 'select' || q.fieldType === 'radio' || q.fieldType === 'checkbox') {
+        if (q.options.length === 0 && !q.mapsToColumn) {
+          problems.push(`"${q.label}" is a ${q.fieldType} and needs at least one option.`);
+        }
+      } else if (q.placeholder && q.placeholder.length > 100) {
+        problems.push(`"${q.label}" has a placeholder longer than 100 characters.`);
+      }
+    }
+
+    if (problems.length > 0) {
+      res.status(422).json({ error: 'validation_failed', message: problems.join(' '), details: problems });
+      return;
+    }
+
+    const versionId = await saveDraft({
+      formTemplateId: id,
+      questions: parsed.data.questions,
+      actor: req.user!.email,
+    });
+
+    res.status(201).json({ formTemplateVersionId: versionId });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/forms/{id}/versions/{versionId}:
+ *   get:
+ *     tags: [Forms]
+ *     summary: One version with its questions
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Version }
+ *       404: { description: Not found }
+ */
+formsRouter.get('/:id/versions/:versionId', requireAuth, async (req, res, next) => {
+  try {
+    const versionId = Number(req.params.versionId);
+    if (!Number.isInteger(versionId)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+
+    const version = await getVersion(versionId);
+    if (!version) {
+      res.status(404).json({ error: 'not_found', message: 'Version not found' });
+      return;
+    }
+    res.json(version);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/forms/{id}/versions/{versionId}/publish:
+ *   post:
+ *     tags: [Forms]
+ *     summary: Publish a draft version
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       204: { description: Published }
+ */
+formsRouter.post(
+  '/:id/versions/:versionId/publish',
+  requireAuth,
+  requireRole(...PUBLISH_ROLES),
+  async (req, res, next) => {
+    try {
+      const versionId = Number(req.params.versionId);
+      if (!Number.isInteger(versionId)) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+        return;
+      }
+
+      const version = await getVersion(versionId);
+      if (!version) {
+        res.status(404).json({ error: 'not_found', message: 'Version not found' });
+        return;
+      }
+      if (version.publishedAt) {
+        res.status(409).json({ error: 'conflict', message: 'This version is already published.' });
+        return;
+      }
+
+      await publishVersion(versionId, req.user!.email);
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/forms/answers/workshop/{workshopId}:
+ *   get:
+ *     tags: [Forms]
+ *     summary: Custom answers for a workshop's registrants
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Answers grouped by registration }
+ */
+formsRouter.get('/answers/workshop/:workshopId', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.workshopId);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+    res.json({ data: await answersForWorkshop(id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/forms/answers/participant/{participantId}:
+ *   get:
+ *     tags: [Forms]
+ *     summary: Custom answers for one participant, grouped by workshop
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Answers grouped by registration }
+ */
+formsRouter.get('/answers/participant/:participantId', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.participantId);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+    res.json({ data: await answersForParticipant(id) });
+  } catch (err) {
+    next(err);
+  }
+});

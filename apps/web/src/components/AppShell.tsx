@@ -76,6 +76,12 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'Administration',
     items: [
       { to: '/admin/users', label: 'Users', icon: IconUsers, roles: ['SUPER_ADMIN', 'ADMIN'] },
+      {
+        to: '/admin/forms',
+        label: 'Forms',
+        icon: IconRequests,
+        roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'],
+      },
       { to: '/admin/utilities', label: 'Utilities', icon: IconUtilities, roles: ['SUPER_ADMIN', 'ADMIN'] },
       { to: '/admin', label: 'Admin', icon: IconAdmin, roles: ['SUPER_ADMIN', 'ADMIN'] },
     ],

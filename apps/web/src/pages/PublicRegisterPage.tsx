@@ -113,6 +113,9 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
   const [done, setDone] = useState(false);
   /** Honeypot — a real person never fills this. */
   const [website, setWebsite] = useState('');
+  /** Custom answers keyed by QuestionKey, for links pinned to a form version. */
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
+  const [answerErrors, setAnswerErrors] = useState<Record<string, string>>({});
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['public-link', slug],
@@ -162,6 +165,24 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     setErrors({});
     setSubmitting(true);
 
+    // Custom questions on the pinned version. Built-in ones are already
+    // validated by `schema` above, so only the extras are checked here.
+    const customQuestions = (data?.form?.questions ?? []).filter((q) => !q.mapsToColumn);
+    const customErrors: Record<string, string> = {};
+    for (const q of customQuestions) {
+      if (!q.isRequired) continue;
+      const v = answers[q.questionKey];
+      if (!v || (Array.isArray(v) && v.length === 0) || (typeof v === 'string' && !v.trim())) {
+        customErrors[q.questionKey] = `${q.label} is required`;
+      }
+    }
+    if (Object.keys(customErrors).length > 0) {
+      setAnswerErrors(customErrors);
+      setSubmitting(false);
+      return;
+    }
+    setAnswerErrors({});
+
     try {
       await api.publicRegistration.register(slug, {
         registrantRole: parsed.data.registrantRole as Role,
@@ -174,6 +195,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
         childrenAges: parsed.data.childrenAges || undefined,
         secondCaregiverInfo: parsed.data.secondCaregiverInfo || undefined,
         notes: parsed.data.notes || undefined,
+        answers: Object.keys(answers).length > 0 ? answers : undefined,
         website,
         elapsedMs: Date.now() - mountedAt.current,
       });
@@ -547,6 +569,118 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
               onChange={(e) => set('notes', e.target.value)}
             />
           </div>
+
+          {/* Custom questions from the pinned form version. Built-in ones are
+              already rendered above, so only unmapped questions appear here. */}
+          {(data?.form?.questions ?? [])
+            .filter((q) => !q.mapsToColumn)
+            .map((q) => {
+              const value = answers[q.questionKey];
+              const err = answerErrors[q.questionKey];
+
+              function setAnswer(v: string | string[]) {
+                setAnswers((prev) => ({ ...prev, [q.questionKey]: v }));
+                setAnswerErrors((prev) => {
+                  const next = { ...prev };
+                  delete next[q.questionKey];
+                  return next;
+                });
+              }
+
+              return (
+                <div className="field" key={q.questionKey}>
+                  <label htmlFor={`q-${q.questionKey}`}>
+                    {q.label}
+                    {!q.isRequired && (
+                      <span style={{ fontWeight: 400, color: 'var(--text-faint)' }}> (optional)</span>
+                    )}
+                  </label>
+
+                  {q.fieldType === 'longtext' ? (
+                    <textarea
+                      id={`q-${q.questionKey}`}
+                      rows={3}
+                      maxLength={q.maxLength ?? 2000}
+                      placeholder={q.placeholder ?? ''}
+                      value={typeof value === 'string' ? value : ''}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
+                      aria-invalid={!!err}
+                      aria-required={q.isRequired}
+                    />
+                  ) : q.fieldType === 'select' ? (
+                    <select
+                      id={`q-${q.questionKey}`}
+                      value={typeof value === 'string' ? value : ''}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
+                      aria-invalid={!!err}
+                      aria-required={q.isRequired}
+                    >
+                      <option value="">Select…</option>
+                      {q.options.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  ) : q.fieldType === 'radio' ? (
+                    <div className="q-choices" role="radiogroup" aria-required={q.isRequired}>
+                      {q.options.map((o) => (
+                        <label key={o} className="q-choice">
+                          <input
+                            type="radio"
+                            name={`q-${q.questionKey}`}
+                            value={o}
+                            checked={value === o}
+                            onChange={() => setAnswer(o)}
+                          />
+                          <span>{o}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : q.fieldType === 'checkbox' ? (
+                    <div className="q-choices">
+                      {q.options.map((o) => {
+                        const list = Array.isArray(value) ? value : [];
+                        return (
+                          <label key={o} className="q-choice">
+                            <input
+                              type="checkbox"
+                              value={o}
+                              checked={list.includes(o)}
+                              onChange={(e) =>
+                                setAnswer(
+                                  e.target.checked ? [...list, o] : list.filter((x) => x !== o),
+                                )
+                              }
+                            />
+                            <span>{o}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <input
+                      id={`q-${q.questionKey}`}
+                      type={q.fieldType === 'number' ? 'number' : 'text'}
+                      maxLength={q.maxLength ?? 255}
+                      placeholder={q.placeholder ?? ''}
+                      value={typeof value === 'string' ? value : ''}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
+                      aria-invalid={!!err}
+                      aria-required={q.isRequired}
+                    />
+                  )}
+
+                  {q.helpText && (
+                    <span className="field-hint" id={`q-${q.questionKey}-help`}>
+                      {q.helpText}
+                    </span>
+                  )}
+                  {err && <span className="error" role="alert">{err}</span>}
+                </div>
+              );
+            })}
 
           {/* Honeypot: hidden from people, tempting to bots. */}
           <div className="hp-field" aria-hidden="true">
