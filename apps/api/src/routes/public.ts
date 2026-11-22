@@ -442,6 +442,11 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
 
       for (const q of formVersion.questions) {
         if (!q.isRequired || q.mapsToColumn) continue; // built-ins validated below
+        // A branched question that is not visible is not required.
+        if (q.branchOnQuestionKey) {
+          const gate = supplied[q.branchOnQuestionKey];
+          if (typeof gate !== 'string' || gate !== q.branchOptionValue) continue;
+        }
         const v = supplied[q.questionKey];
         const blank =
           v === undefined ||

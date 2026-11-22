@@ -40,6 +40,9 @@ export interface FormQuestion {
   maxLength: number | null;
   mapsToColumn: string | null;
   isBuiltIn: boolean;
+  /** Shown only when this question's answer matches branchOptionValue. */
+  branchOnQuestionKey: string | null;
+  branchOptionValue: string | null;
 }
 
 export interface FormVersion {
@@ -62,8 +65,33 @@ export interface FormTemplateSummary {
   updatedAt: string | null;
 }
 
-/** The six fields the built-in form has always had. Seeded into every new template. */
+/**
+ * The built-in form, matching what the public page has always rendered:
+ *
+ *   I am registering as  (radio: Educator / Parent-caregiver)
+ *   First name, Last name, Email, Phone
+ *   -- Educator branch --
+ *   School or agency, How old are the students in your class?
+ *   -- Parent/caregiver branch --
+ *   What are the ages of your children?, Additional parent/caregiver details
+ *   Anything we should know?
+ *
+ * The branching is expressed as data (branchOnQuestionKey + branchOptionValue)
+ * rather than in the component, so staff can see and change it.
+ */
 const BUILT_IN_QUESTIONS: Omit<DraftQuestion, 'sortOrder'>[] = [
+  {
+    questionKey: 'registrantRole',
+    label: 'I am registering as',
+    helpText: null,
+    placeholder: null,
+    fieldType: 'radio',
+    isRequired: true,
+    options: ['Educator', 'Parent/caregiver'],
+    maxLength: null,
+    mapsToColumn: null,
+    isBuiltIn: true,
+  },
   {
     questionKey: 'firstName',
     label: 'First name',
@@ -123,6 +151,50 @@ const BUILT_IN_QUESTIONS: Omit<DraftQuestion, 'sortOrder'>[] = [
     maxLength: null,
     mapsToColumn: 'Participant.AgencyID',
     isBuiltIn: true,
+    branchOnQuestionKey: 'registrantRole',
+    branchOptionValue: 'Educator',
+  },
+  {
+    questionKey: 'classAges',
+    label: 'How old are the students in your class?',
+    helpText: null,
+    placeholder: 'e.g. 3-4 year olds',
+    fieldType: 'text',
+    isRequired: false,
+    options: [],
+    maxLength: 255,
+    mapsToColumn: 'Participant.GradeLevel',
+    isBuiltIn: true,
+    branchOnQuestionKey: 'registrantRole',
+    branchOptionValue: 'Educator',
+  },
+  {
+    questionKey: 'childrenAges',
+    label: 'What are the ages of your children?',
+    helpText: null,
+    placeholder: 'e.g. 2 and 4',
+    fieldType: 'text',
+    isRequired: false,
+    options: [],
+    maxLength: 255,
+    mapsToColumn: 'Participant.ChildrenAges',
+    isBuiltIn: true,
+    branchOnQuestionKey: 'registrantRole',
+    branchOptionValue: 'Parent/caregiver',
+  },
+  {
+    questionKey: 'secondCaregiver',
+    label: 'Additional information for a second parent/caregiver? Please enter it below.',
+    helpText: null,
+    placeholder: 'Name, phone, email or anything else we should know',
+    fieldType: 'longtext',
+    isRequired: false,
+    options: [],
+    maxLength: 2000,
+    mapsToColumn: 'Participant.SecondCaregiverInfo',
+    isBuiltIn: true,
+    branchOnQuestionKey: 'registrantRole',
+    branchOptionValue: 'Parent/caregiver',
   },
   {
     questionKey: 'notes',
@@ -263,12 +335,18 @@ export async function getVersion(versionId: number): Promise<FormVersion | null>
     MaxLength: number | null;
     MapsToColumn: string | null;
     IsBuiltIn: boolean;
+    BranchOnQuestionID: number | null;
+    BranchOptionValue: string | null;
+    BranchOnKey: string | null;
   }>(
-    `SELECT FormQuestionID, SortOrder, QuestionKey, Label, HelpText, Placeholder,
-            FieldType, IsRequired, OptionsJson, MaxLength, MapsToColumn, IsBuiltIn
-       FROM core.FormQuestion
-      WHERE FormTemplateVersionID = @id AND IsActive = 1
-      ORDER BY SortOrder, FormQuestionID`,
+    `SELECT q.FormQuestionID, q.SortOrder, q.QuestionKey, q.Label, q.HelpText, q.Placeholder,
+            q.FieldType, q.IsRequired, q.OptionsJson, q.MaxLength, q.MapsToColumn, q.IsBuiltIn,
+            q.BranchOnQuestionID, q.BranchOptionValue,
+            b.QuestionKey AS BranchOnKey
+       FROM core.FormQuestion q
+       LEFT JOIN core.FormQuestion b ON b.FormQuestionID = q.BranchOnQuestionID
+      WHERE q.FormTemplateVersionID = @id AND q.IsActive = 1
+      ORDER BY q.SortOrder, q.FormQuestionID`,
     { id: { type: sql.Int, value: versionId } },
   );
 
@@ -291,6 +369,8 @@ export async function getVersion(versionId: number): Promise<FormVersion | null>
       maxLength: x.MaxLength,
       mapsToColumn: x.MapsToColumn,
       isBuiltIn: x.IsBuiltIn,
+      branchOnQuestionKey: x.BranchOnKey,
+      branchOptionValue: x.BranchOptionValue,
     })),
   };
 }
@@ -361,12 +441,22 @@ async function insertVersion(
 
   let questionId = await nextId('core.FormQuestion', 'FormQuestionID');
 
+  // Branch targets are given as question keys (stable, human-readable) but
+  // stored as ids. Resolve them after all rows exist, so a branch can point at
+  // a question defined later in the list.
+  const keyToId = new Map<string, number>();
+  questions.forEach((q, i) => keyToId.set(q.questionKey, questionId + i));
+
   for (const q of questions) {
+    const branchOnId = q.branchOnQuestionKey ? (keyToId.get(q.branchOnQuestionKey) ?? null) : null;
+
     await query(
       `INSERT INTO core.FormQuestion
               (FormQuestionID, FormTemplateVersionID, SortOrder, QuestionKey, Label, HelpText,
-               Placeholder, FieldType, IsRequired, OptionsJson, MaxLength, MapsToColumn, IsBuiltIn)
-       VALUES (@id, @ver, @sort, @key, @label, @help, @ph, @type, @req, @opts, @maxLen, @maps, @builtIn)`,
+               Placeholder, FieldType, IsRequired, OptionsJson, MaxLength, MapsToColumn, IsBuiltIn,
+               BranchOnQuestionID, BranchOptionValue)
+       VALUES (@id, @ver, @sort, @key, @label, @help, @ph, @type, @req, @opts, @maxLen, @maps, @builtIn,
+               @branchOn, @branchVal)`,
       {
         id: { type: sql.Int, value: questionId },
         ver: { type: sql.Int, value: versionId },
@@ -381,6 +471,8 @@ async function insertVersion(
         maxLen: { type: sql.Int, value: q.maxLength ?? null },
         maps: { type: sql.NVarChar(50), value: q.mapsToColumn ?? null },
         builtIn: { type: sql.Bit, value: q.isBuiltIn ? 1 : 0 },
+        branchOn: { type: sql.Int, value: branchOnId },
+        branchVal: { type: sql.NVarChar(100), value: branchOnId ? (q.branchOptionValue ?? null) : null },
       },
     );
     questionId++;
@@ -402,6 +494,9 @@ export interface DraftQuestion {
   maxLength?: number | null;
   mapsToColumn?: string | null;
   isBuiltIn: boolean;
+  /** Question key whose answer gates this one. Null = always shown. */
+  branchOnQuestionKey?: string | null;
+  branchOptionValue?: string | null;
 }
 
 /**

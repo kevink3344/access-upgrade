@@ -35,6 +35,8 @@ function toDraft(q: FormQuestion): FormQuestionDraft {
     maxLength: q.maxLength,
     mapsToColumn: q.mapsToColumn,
     isBuiltIn: q.isBuiltIn,
+    branchOnQuestionKey: q.branchOnQuestionKey,
+    branchOptionValue: q.branchOptionValue,
   };
 }
 
@@ -252,6 +254,15 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
                       <span className="form-q-meta">
                         {q.fieldType}
                         {q.isRequired ? ' · required' : ''}
+                        {q.branchOnQuestionKey && (
+                          <span className="form-q-branch">
+                            {' · only if '}
+                            {questions.find((x) => x.questionKey === q.branchOnQuestionKey)?.label ??
+                              q.branchOnQuestionKey}
+                            {' = '}
+                            {q.branchOptionValue}
+                          </span>
+                        )}
                       </span>
                     </button>
                     {canEdit && (
@@ -384,6 +395,63 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
                   />
                   <span>This question is required</span>
                 </label>
+
+                {/* Branching: show this question only when another question's
+                    answer matches. The built-in form uses this for the
+                    Educator / Parent split. */}
+                <fieldset className="form-branch">
+                  <legend>Show this question</legend>
+
+                  <div className="field" style={{ marginBottom: 8 }}>
+                    <label htmlFor="q-branch-on">Only when</label>
+                    <select
+                      id="q-branch-on"
+                      className="input"
+                      value={active.branchOnQuestionKey ?? ''}
+                      disabled={!canEdit}
+                      onChange={(e) => {
+                        const key = e.target.value || null;
+                        const parent = questions.find((x) => x.questionKey === key);
+                        patch(selected!, {
+                          branchOnQuestionKey: key,
+                          // Default to the parent's first option so the pair is
+                          // never half-set.
+                          branchOptionValue: key ? (parent?.options[0] ?? null) : null,
+                        });
+                      }}
+                    >
+                      <option value="">Always shown</option>
+                      {questions
+                        .filter((x) => x.questionKey !== active.questionKey && x.options.length > 0)
+                        .map((x) => (
+                          <option key={x.questionKey} value={x.questionKey}>
+                            {x.label}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  {active.branchOnQuestionKey && (
+                    <div className="field" style={{ marginBottom: 8 }}>
+                      <label htmlFor="q-branch-value">…is set to</label>
+                      <select
+                        id="q-branch-value"
+                        className="input"
+                        value={active.branchOptionValue ?? ''}
+                        disabled={!canEdit}
+                        onChange={(e) =>
+                          patch(selected!, { branchOptionValue: e.target.value || null })
+                        }
+                      >
+                        {(questions.find((x) => x.questionKey === active.branchOnQuestionKey)
+                          ?.options ?? []
+                        ).map((o) => (
+                          <option key={o} value={o}>{o}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </fieldset>
 
                 {canEdit && !active.isBuiltIn && (
                   <button

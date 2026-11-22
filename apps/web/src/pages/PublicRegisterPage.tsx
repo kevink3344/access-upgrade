@@ -159,7 +159,13 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
 
     // Custom questions on the pinned version. Built-in ones are already
     // validated by `schema` above, so only the extras are checked here.
-    const customQuestions = (data?.form?.questions ?? []).filter((q) => !q.mapsToColumn);
+    // A branched question that is not currently visible is not required.
+    const customQuestions = (data?.form?.questions ?? []).filter((q) => {
+      if (q.mapsToColumn) return false;
+      if (!q.branchOnQuestionKey) return true;
+      const gate = answers[q.branchOnQuestionKey];
+      return typeof gate === 'string' && gate === q.branchOptionValue;
+    });
     const customErrors: Record<string, string> = {};
     for (const q of customQuestions) {
       if (!q.isRequired) continue;
@@ -527,9 +533,16 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
           </div>
 
           {/* Custom questions from the pinned form version. Built-in ones are
-              already rendered above, so only unmapped questions appear here. */}
+              already rendered above, so only unmapped questions appear here.
+              A question with a branch condition is shown only when the
+              question it depends on has the matching answer. */}
           {(data?.form?.questions ?? [])
             .filter((q) => !q.mapsToColumn)
+            .filter((q) => {
+              if (!q.branchOnQuestionKey) return true;
+              const gate = answers[q.branchOnQuestionKey];
+              return typeof gate === 'string' && gate === q.branchOptionValue;
+            })
             .map((q) => {
               const value = answers[q.questionKey];
               const err = answerErrors[q.questionKey];

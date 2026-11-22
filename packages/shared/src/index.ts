@@ -1034,6 +1034,9 @@ export interface FormQuestion {
   maxLength: number | null;
   mapsToColumn: string | null;
   isBuiltIn: boolean;
+  /** Shown only when this question's answer matches branchOptionValue. */
+  branchOnQuestionKey: string | null;
+  branchOptionValue: string | null;
 }
 
 /** A question as sent by the editor — ids are assigned server-side. */
@@ -1049,6 +1052,9 @@ export interface FormQuestionDraft {
   maxLength?: number | null;
   mapsToColumn?: string | null;
   isBuiltIn: boolean;
+  /** Question key whose answer gates this one. Null = always shown. */
+  branchOnQuestionKey?: string | null;
+  branchOptionValue?: string | null;
 }
 
 export interface FormVersion {

@@ -1188,6 +1188,25 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
 
 .form-q-meta { font-size: 11px; color: var(--text-faint); }
 
+.form-q-branch { color: var(--badge-violet-text); font-weight: 600; }
+
+/* Branch condition editor. */
+.form-branch {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 10px 12px 4px;
+  margin: 4px 0 14px;
+}
+
+.form-branch legend {
+  font-size: 10.5px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-faint);
+  padding: 0 4px;
+}
+
 .form-q-actions { display: flex; flex-direction: column; padding-right: 4px; }
 
 .form-q-actions .btn { padding: 0 6px; min-height: 20px; line-height: 1; font-size: 11px; }

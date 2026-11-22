@@ -40,6 +40,9 @@ const questionSchema = z.object({
   maxLength: z.number().int().positive().nullable().optional(),
   mapsToColumn: z.string().max(50).nullable().optional(),
   isBuiltIn: z.boolean().default(false),
+  /** Question key whose answer gates this one. Null = always shown. */
+  branchOnQuestionKey: z.string().max(50).nullable().optional(),
+  branchOptionValue: z.string().max(100).nullable().optional(),
 });
 
 /**
@@ -258,6 +261,27 @@ formsRouter.post('/:id/versions', requireAuth, requireRole(...EDIT_ROLES), async
         }
       } else if (q.placeholder && q.placeholder.length > 100) {
         problems.push(`"${q.label}" has a placeholder longer than 100 characters.`);
+      }
+
+      // A branch needs both halves, and must point at a question that exists
+      // in this version and can actually produce the value being matched.
+      if (q.branchOnQuestionKey || q.branchOptionValue) {
+        if (!q.branchOnQuestionKey || !q.branchOptionValue) {
+          problems.push(`"${q.label}" needs both a branching question and an option.`);
+        } else {
+          const parent = parsed.data.questions.find(
+            (x) => x.questionKey === q.branchOnQuestionKey,
+          );
+          if (!parent) {
+            problems.push(`"${q.label}" branches on "${q.branchOnQuestionKey}", which is not in this form.`);
+          } else if (parent.questionKey === q.questionKey) {
+            problems.push(`"${q.label}" cannot branch on itself.`);
+          } else if (!parent.options.includes(q.branchOptionValue)) {
+            problems.push(
+              `"${q.label}" branches on "${q.branchOptionValue}", which is not an option of "${parent.label}".`,
+            );
+          }
+        }
       }
     }
 

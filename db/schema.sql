@@ -1328,6 +1328,11 @@ CREATE TABLE core.FormQuestion (
     MapsToColumn          NVARCHAR(50)  NULL,
     IsBuiltIn             BIT           NOT NULL CONSTRAINT DF_FormQuestion_IsBuiltIn DEFAULT 0,
     IsActive              BIT           NOT NULL CONSTRAINT DF_FormQuestion_IsActive DEFAULT 1,
+    -- Branching: shown only when BranchOnQuestionID's answer equals
+    -- BranchOptionValue. Both NULL = always shown.
+    BranchOnQuestionID    INT           NULL
+        CONSTRAINT FK_FormQuestion_BranchOn REFERENCES core.FormQuestion(FormQuestionID),
+    BranchOptionValue     NVARCHAR(100) NULL,
     CONSTRAINT UQ_FormQuestion_Key UNIQUE (FormTemplateVersionID, QuestionKey),
     CONSTRAINT CK_FormQuestion_FieldType
         CHECK (FieldType IN ('text', 'longtext', 'number', 'select', 'radio', 'checkbox', 'agency'))
@@ -1351,4 +1356,6 @@ CREATE TABLE core.FormAnswer (
 END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_FormAnswer_Question' AND object_id = OBJECT_ID('core.FormAnswer'))
     CREATE INDEX IX_FormAnswer_Question ON core.FormAnswer(FormQuestionID);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_FormQuestion_BranchOn' AND object_id = OBJECT_ID('core.FormQuestion'))
+    CREATE INDEX IX_FormQuestion_BranchOn ON core.FormQuestion(BranchOnQuestionID) WHERE BranchOnQuestionID IS NOT NULL;
 GO
