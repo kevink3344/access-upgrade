@@ -8,6 +8,8 @@ import { useResizableDrawer } from '../hooks/useResizableDrawer';
 import { DrawerResizeHandle } from './DrawerResizeHandle';
 import { IconAlert } from './icons';
 
+type RegTab = 'who' | 'answers';
+
 const schema = z.object({
   participantId: z.string().min(1, 'Choose a participant'),
   workshopId: z.string().optional(),
@@ -212,10 +214,18 @@ export function RegistrationDrawer({
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [tab, setTab] = useState<RegTab>('who');
 
   const { data: existing, isLoading } = useQuery({
     queryKey: ['registration', registrationId],
     queryFn: () => api.registrations.get(registrationId!),
+    enabled: isEdit,
+  });
+
+  // Custom answers for this registration, shown on the Form Answers tab.
+  const answers = useQuery({
+    queryKey: ['registration', registrationId, 'form-answers'],
+    queryFn: () => api.forms.answersForRegistration(registrationId!),
     enabled: isEdit,
   });
 
@@ -343,14 +353,98 @@ export function RegistrationDrawer({
           <button type="button" className="drawer-close" onClick={onClose} aria-label="Close">×</button>
         </header>
 
-        {isEdit && isLoading ? (
+        {isEdit && (
+          <div className="drawer-tabs" role="tablist" aria-label="Registration sections">
+            <button
+              type="button"
+              role="tab"
+              id="tab-who"
+              className="drawer-tab"
+              aria-selected={tab === 'who'}
+              aria-controls="panel-who"
+              onClick={() => setTab('who')}
+            >
+              Who and what
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-answers"
+              className="drawer-tab"
+              aria-selected={tab === 'answers'}
+              aria-controls="panel-answers"
+              onClick={() => setTab('answers')}
+            >
+              Form answers
+              {(answers.data?.answers.length ?? 0) > 0 && (
+                <span className="drawer-tab-count">{answers.data!.answers.length}</span>
+              )}
+            </button>
+          </div>
+        )}
+
+        {isEdit && tab === 'answers' ? (
+          <div
+            className="drawer-body"
+            role="tabpanel"
+            id="panel-answers"
+            aria-labelledby="tab-answers"
+          >
+            {answers.isLoading ? (
+              <div className="skeleton" style={{ height: 120 }} />
+            ) : answers.isError ? (
+              <div className="alert alert-error" role="alert">
+                <span>Could not load answers. {(answers.error as Error).message}</span>
+              </div>
+            ) : (
+              <>
+                {/* Which form the registrant actually saw, so staff know where
+                    these answers came from. */}
+                <p className="answers-source">
+                  <span className="answers-source-label">Form completed</span>
+                  <strong>
+                    {answers.data?.formName
+                      ? `${answers.data.formName}${
+                          answers.data.formVersionNumber
+                            ? ` · v${answers.data.formVersionNumber}`
+                            : ''
+                        }`
+                      : 'Built-in form (no custom questions)'}
+                  </strong>
+                </p>
+
+                {(answers.data?.answers.length ?? 0) === 0 ? (
+                  <p className="tab-empty">
+                    No answers are recorded for this registration.
+                  </p>
+                ) : (
+                  <dl className="answer-list">
+                    {answers.data!.answers.map((a) => (
+                      <div key={a.questionKey}>
+                        <dt>{a.label}</dt>
+                        <dd>{a.value?.trim() || '—'}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </>
+            )}
+          </div>
+        ) : isEdit && isLoading ? (
           <div className="drawer-body">
             {[0, 1, 2].map((i) => (
               <div key={i} className="skeleton" style={{ height: 44, marginBottom: 12 }} />
             ))}
           </div>
         ) : (
-          <form className="drawer-body" onSubmit={onSubmit} noValidate>
+          <form
+            className="drawer-body"
+            onSubmit={onSubmit}
+            noValidate
+            role={isEdit ? 'tabpanel' : undefined}
+            id={isEdit ? 'panel-who' : undefined}
+            aria-labelledby={isEdit ? 'tab-who' : undefined}
+          >
             {formError && (
               <div className="alert alert-error" role="alert">
                 <IconAlert width={18} height={18} />

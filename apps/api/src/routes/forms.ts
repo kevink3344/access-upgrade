@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import {
   answersForParticipant,
+  answersForRegistration,
   answersForWorkshop,
   countLinksUsingTemplate,
   createTemplate,
@@ -346,6 +347,33 @@ formsRouter.post(
     }
   },
 );
+
+/**
+ * @openapi
+ * /api/forms/answers/registration/{registrationId}:
+ *   get:
+ *     tags: [Forms]
+ *     summary: Custom answers for one registration
+ *     description: >
+ *       Name/value pairs for the questions this registrant answered, in the
+ *       order they appeared on the form. Agency answers are resolved to the
+ *       school name.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Answers }
+ */
+formsRouter.get('/answers/registration/:registrationId', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.registrationId);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+    res.json(await answersForRegistration(id));
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * @openapi
