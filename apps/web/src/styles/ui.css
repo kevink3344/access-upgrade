@@ -1145,7 +1145,18 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
 
 .form-editor-list li:last-child { border-bottom: 0; }
 
-.form-editor-list li.is-active { background: hsl(var(--primary-color-hsl) / 7%); }
+.form-editor-list li.is-active {
+  /* A solid tint rather than color-mix: the global reduced-motion rule forces
+     a .01ms transition on every property, and animating a color-mix value
+     leaves the row painting the previous selection's outline. */
+  background: #eaf1f7;
+  /* Blue outline so the question being edited is unmistakable, including for
+     staff who cannot rely on the subtle background tint alone. */
+  box-shadow: inset 0 0 0 2px var(--primary-color);
+  transition: none;
+}
+
+.form-editor-list li.is-active .form-q-label { color: var(--primary-color); }
 
 .form-q-row {
   flex: 1 1 auto;

@@ -97,7 +97,9 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
   useEffect(() => {
     if (!version.data) return;
     setQuestions(version.data.questions.map(toDraft));
-    setSelected(version.data.questions[0]?.formQuestionId ?? 0);
+    // `selected` is an ARRAY INDEX, not a question id — open on the first
+    // question so staff land straight in the editor.
+    setSelected(version.data.questions.length > 0 ? 0 : null);
     setDirty(false);
   }, [version.data]);
 
