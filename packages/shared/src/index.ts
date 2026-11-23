@@ -506,6 +506,120 @@ export interface AgencyListResponse {
   total: number;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Training requests                                                  */
+/* ------------------------------------------------------------------ */
+
+/** One row on the Training requests list. */
+export interface TrainingRequestRow {
+  TrainingRequestID: number;
+  AgencyID: number | null;
+  AgencyName: string | null;
+  RequestDate: string | null;
+  RequestedBy: string | null;
+  RequestEmail: string | null;
+  RequestPhone: string | null;
+  /** Free text from Access, e.g. "20-30" — not a number. */
+  ParticipantCount: string | null;
+  InvoiceNum: string | null;
+  InvoiceDate: string | null;
+  DueDate: string | null;
+  AmtDue: number | null;
+  IsActive: boolean;
+  QuoteCount: number;
+  ScheduledCount: number;
+  ContactCount: number;
+}
+
+export interface TrainingRequestListResponse {
+  data: TrainingRequestRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  counts: {
+    all: number;
+    active: number;
+    invoiced: number;
+    uninvoiced: number;
+  };
+}
+
+export interface TrainingRequestQuote {
+  TrainingRequestQuoteID: number;
+  WorkshopTypeID: number | null;
+  WorkshopType: string | null;
+  TopicRequested: string | null;
+  Location: string | null;
+  NumStudents: string | null;
+  NumSessions: number | null;
+  DatesRequested: string | null;
+  TimesRequested: string | null;
+  Duration: string | null;
+  SpecialEquip: string | null;
+  RequestAmt: number | null;
+}
+
+export interface TrainingRequestContact {
+  TrainingRequestContactID: number;
+  ContactDate: string | null;
+  Note: string | null;
+}
+
+export interface TrainingRequestScheduled {
+  WorkshopID: number | null;
+  ScheduledOn: string | null;
+  WorkshopCode: string | null;
+  StartDate: string | null;
+  WorkshopName: string | null;
+}
+
+export interface TrainingRequestPayment {
+  PaymentID: number;
+  Amount: number | null;
+  PaymentDate: string | null;
+  PaymentMethod: string | null;
+}
+
+/** Full request, as returned by GET /api/training-requests/:id. */
+export interface TrainingRequestDetail {
+  TrainingRequestID: number;
+  AgencyID: number | null;
+  AgencyName: string | null;
+  AgencyShortName: string | null;
+  AgencyPhone: string | null;
+  RequestDate: string | null;
+  RequestedBy: string | null;
+  RequestPhone: string | null;
+  RequestExt: number | null;
+  RequestEmail: string | null;
+  ParticipantCount: string | null;
+  InvoiceNum: string | null;
+  InvoiceDate: string | null;
+  DueDate: string | null;
+  AmtDue: number | null;
+  IsActive: boolean;
+  quotes: TrainingRequestQuote[];
+  contacts: TrainingRequestContact[];
+  scheduled: TrainingRequestScheduled[];
+  payments: TrainingRequestPayment[];
+}
+
+/** Writable fields — camelCase, matches the API contract. */
+export interface TrainingRequestWrite {
+  agencyId?: number | null;
+  requestDate?: string | null;
+  requestedBy?: string | null;
+  requestPhone?: string | null;
+  requestExt?: number | null;
+  requestEmail?: string | null;
+  participantCount?: string | null;
+  invoiceNum?: string | null;
+  invoiceDate?: string | null;
+  dueDate?: string | null;
+  amtDue?: number | null;
+  isActive?: boolean;
+}
+
 /** Full agency record, as returned by GET /api/agencies/:id. */
 export interface AgencyDetail {
   AgencyID: number;

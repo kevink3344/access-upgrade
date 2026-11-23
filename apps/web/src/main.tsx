@@ -20,6 +20,7 @@ import { AgenciesPage } from './pages/AgenciesPage';
 import { PresentersPage } from './pages/PresentersPage';
 import { WorkshopNamesPage } from './pages/WorkshopNamesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
+import { TrainingRequestsPage } from './pages/TrainingRequestsPage';
 import { CertificatesPage } from './pages/CertificatesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { WebhooksPage } from './pages/WebhooksPage';
@@ -128,6 +129,7 @@ function Router() {
   if (path === '/workshop-names') return <WorkshopNamesPage />;
 
   if (path === '/payments') return <PaymentsPage />;
+  if (path === '/training-requests') return <TrainingRequestsPage />;
   if (path === '/certificates') return <CertificatesPage />;
   if (path === '/reports') return <ReportsPage />;
 

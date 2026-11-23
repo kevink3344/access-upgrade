@@ -487,9 +487,46 @@ export const api = {
       }),
   },
 
+  trainingRequests: {
+    list: (
+      params: {
+        page?: number;
+        pageSize?: number;
+        q?: string;
+        status?: 'all' | 'active' | 'inactive' | 'invoiced' | 'uninvoiced';
+        sort?: 'recent' | 'oldest' | 'agency';
+      } = {},
+    ) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<import('@pe/shared').TrainingRequestListResponse>(
+        `/api/training-requests${suffix}`,
+      );
+    },
+    get: (id: number) =>
+      request<import('@pe/shared').TrainingRequestDetail>(`/api/training-requests/${id}`),
+    create: (body: import('@pe/shared').TrainingRequestWrite) =>
+      request<{ trainingRequestId: number }>('/api/training-requests', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    update: (id: number, body: Partial<import('@pe/shared').TrainingRequestWrite>) =>
+      request<void>(`/api/training-requests/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    addContact: (id: number, body: { contactDate: string; note?: string | null }) =>
+      request<{ contactId: number }>(`/api/training-requests/${id}/contacts`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+  },
+
   lookups: {
-    list: () => request<{ data: string[] }>('/api/lookups'),
-    get: (name: string) =>
+    list: () => request<{ data: string[] }>('/api/lookups'),    get: (name: string) =>
       request<{ data: { id: number; label: string }[] }>(`/api/lookups/${name}`),
     schoolYears: () =>
       request<{ data: import('@pe/shared').SchoolYearOption[] }>('/api/lookups/school-years'),

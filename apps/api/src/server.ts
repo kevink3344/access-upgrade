@@ -30,6 +30,7 @@ import { reportsRouter } from './routes/reports.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { formsRouter } from './routes/forms.js';
+import { trainingRequestsRouter } from './routes/training-requests.js';
 
 const app = express();
 
@@ -190,6 +191,7 @@ const openapiSpec = swaggerJsdoc({
       { name: 'Registrations', description: 'Enrolments and payments' },
       { name: 'Public registration', description: 'Shareable links and the public form' },
       { name: 'Lookups', description: 'Reference data' },
+      { name: 'Training requests', description: 'On-site training requests, quotes and invoicing' },
     ],
   },
   apis: ['./src/routes/*.ts', './dist/routes/*.js'],
@@ -219,6 +221,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/forms', formsRouter);
+app.use('/api/training-requests', trainingRequestsRouter);
 
 // Public surface — no auth. Must be mounted before the auth-guarded routes
 // would ever apply; it has its own rate limits and audit logging.
