@@ -461,11 +461,6 @@ export function WorkshopsPage() {
                     </button>
                   </th>
                   <th scope="col">
-                    <button type="button" className="th-sort" onClick={() => toggleSort('code')}>
-                      Code{sortIndicator('code')}
-                    </button>
-                  </th>
-                  <th scope="col">
                     <button
                       type="button"
                       className="th-sort"
@@ -488,7 +483,7 @@ export function WorkshopsPage() {
               <tbody>
                 {rows.map((w) => (
                   <tr key={w.workshopId}>
-                    <td data-label="Workshop">
+                    <td data-label="Workshop" className="workshop-cell">
                       {canEdit ? (
                         <button
                           type="button"
@@ -501,7 +496,6 @@ export function WorkshopsPage() {
                         <strong>{w.workshopName ?? 'Untitled workshop'}</strong>
                       )}
                     </td>
-                    <td data-label="Code" className="muted">{w.workshopCode ?? '—'}</td>
                     <td data-label="Date">{fmtDate(w.startDate)}</td>
                     <td data-label="School year" className="muted">{w.schoolYear ?? '—'}</td>
                     <td data-label="Capacity">

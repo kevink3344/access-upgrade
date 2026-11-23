@@ -692,4 +692,19 @@
     flex-shrink: 0;
   }
   .data-table td.num { text-align: left; }
+
+  /* The workshop name is the card's heading, not a labelled field: it spans
+     the full width and drops the "WORKSHOP" label above it. */
+  .data-table td.workshop-cell {
+    display: block;
+    padding: 0 0 8px;
+    font-size: 15px;
+  }
+  .data-table td.workshop-cell::before { content: none; }
+  .data-table td.workshop-cell .link-button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    white-space: normal;
+  }
 }

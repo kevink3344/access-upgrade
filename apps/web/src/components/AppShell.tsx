@@ -226,6 +226,18 @@ export function AppShell({
           >
             <IconLayoutSidebar width={18} height={18} />
           </button>
+          {/* The sidebar — and its sunburst — is hidden below 1024px, so the
+              mark is repeated here and shown only at that width. */}
+          <a className="topbar-brand" href="/" aria-label="Project Enlightenment home">
+            <img
+              className="topbar-brand-icon"
+              src="/images/sunburst-logo.png"
+              alt=""
+              aria-hidden="true"
+              width={30}
+              height={26}
+            />
+          </a>
           <div className="topbar-actions">
             {user && <NotificationBell />}
             {user && (
