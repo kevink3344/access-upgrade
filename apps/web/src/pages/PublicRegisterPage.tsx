@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import type { PublicLinkState } from '@pe/shared';
@@ -82,7 +82,21 @@ function PublicBrand() {
   );
 }
 
+/**
+ * Every public state — the form, the "full" screen, the confirmation — renders
+ * through here, so the tab title is set once for all of them. Without this the
+ * page inherits the staff app's title from index.html, which is wrong for a
+ * family who has never seen the staff app.
+ */
 function PublicChrome({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    const previous = document.title;
+    document.title = 'Project Enlightenment - Workshop Registration';
+    return () => {
+      document.title = previous;
+    };
+  }, []);
+
   return (
     <div className="public-page">
       <main className="public-main">{children}</main>
