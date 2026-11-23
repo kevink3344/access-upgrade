@@ -78,6 +78,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/admin/users', label: 'Users', icon: IconUsers, roles: ['SUPER_ADMIN', 'ADMIN'] },
       {
+        to: '/admin/certificates',
+        label: 'Certificate Designer',
+        icon: IconCertificate,
+        roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'],
+      },
+      {
         to: '/admin/forms',
         label: 'Form Designer',
         icon: IconRequests,

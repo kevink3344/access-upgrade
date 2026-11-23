@@ -4,8 +4,8 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { AppShell } from '../components/AppShell';
 import { IconReports } from '../components/icons';
-import { CertificateTemplatePanel } from '../components/CertificateTemplatePanel';
 import { CertificateOverrideDrawer } from '../components/CertificateOverrideDrawer';
+import { CreateCertificateDialog } from '../components/CreateCertificateDialog';
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -20,145 +20,6 @@ function fullName(r: CertificateEligibleRow): string {
   return [r.FirstName, r.MiddleName, r.LastName].filter(Boolean).join(' ').replace(/\s+/g, ' ');
 }
 
-/**
- * Creates a certificate template for a school year.
- *
- * Only two types exist (CEU and CHC), so the dialog disables whichever is
- * already present rather than letting the server return a 409.
- */
-function CreateCertificateDialog({
-  schoolYearId,
-  existingTypes,
-  onClose,
-  onCreated,
-}: {
-  schoolYearId: number;
-  existingTypes: string[];
-  onClose: () => void;
-  onCreated: (id: number) => void;
-}) {
-  const [type, setType] = useState<'CEU' | 'CHC'>(existingTypes.includes('CEU') ? 'CHC' : 'CEU');
-  const [title, setTitle] = useState('Certificate');
-  const [subtitle, setSubtitle] = useState('of Attendance');
-  const [layout, setLayout] = useState<'portrait' | 'landscape'>('portrait');
-  const [error, setError] = useState<string | null>(null);
-
-  const bothExist = existingTypes.includes('CEU') && existingTypes.includes('CHC');
-
-  const create = useMutation({
-    mutationFn: () =>
-      api.certificates.createTemplate({
-        schoolYearId,
-        certificateType: type,
-        title: title.trim() || 'Certificate',
-        subtitle: subtitle.trim() || 'of Attendance',
-        layout,
-      }),
-    onSuccess: (r) => onCreated(r.certificateTemplateId),
-    onError: (e: Error) => setError(e.message),
-  });
-
-  return (
-    <div className="drawer-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="cc-title">
-        <h2 id="cc-title">New certificate</h2>
-
-        {bothExist ? (
-          <>
-            <p>
-              This school year already has both a CEU and a CHC certificate. Edit the existing
-              one on the Template settings tab.
-            </p>
-            <div className="drawer-actions">
-              <button type="button" className="btn btn-ghost" onClick={onClose}>
-                Close
-              </button>
-            </div>
-          </>
-        ) : (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              setError(null);
-              create.mutate();
-            }}
-            noValidate
-          >
-            {error && (
-              <div className="alert alert-error" role="alert">
-                <span>{error}</span>
-              </div>
-            )}
-
-            <div className="field">
-              <label htmlFor="cc-type">Certificate type</label>
-              <select
-                id="cc-type"
-                value={type}
-                onChange={(e) => setType(e.target.value as 'CEU' | 'CHC')}
-              >
-                <option value="CEU" disabled={existingTypes.includes('CEU')}>
-                  CEU — Units of Renewal Credit
-                  {existingTypes.includes('CEU') ? ' (already exists)' : ''}
-                </option>
-                <option value="CHC" disabled={existingTypes.includes('CHC')}>
-                  CHC — Child Care Hours
-                  {existingTypes.includes('CHC') ? ' (already exists)' : ''}
-                </option>
-              </select>
-            </div>
-
-            <div className="field">
-              <label htmlFor="cc-title-input">Title</label>
-              <input
-                id="cc-title-input"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={200}
-              />
-            </div>
-
-            <div className="field">
-              <label htmlFor="cc-subtitle">Subtitle</label>
-              <input
-                id="cc-subtitle"
-                value={subtitle}
-                onChange={(e) => setSubtitle(e.target.value)}
-                maxLength={500}
-              />
-            </div>
-
-            <div className="field">
-              <label htmlFor="cc-layout">Layout</label>
-              <select
-                id="cc-layout"
-                value={layout}
-                onChange={(e) => setLayout(e.target.value as 'portrait' | 'landscape')}
-              >
-                <option value="portrait">Portrait — 8.5 × 11 in</option>
-                <option value="landscape">Landscape — 11 × 8.5 in</option>
-              </select>
-            </div>
-
-            <p className="field-hint">
-              The new template copies sensible defaults. Edit the logo, signatories and fields on
-              the Template settings tab afterwards.
-            </p>
-
-            <div className="drawer-actions">
-              <button type="button" className="btn btn-ghost" onClick={onClose}>
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={create.isPending}>
-                {create.isPending ? 'Creating…' : 'Create certificate'}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export function CertificatesPage() {
   const { user } = useAuth();
@@ -167,7 +28,6 @@ export function CertificatesPage() {
 
   const [schoolYearId, setSchoolYearId] = useState<number | null>(null);
   const [certType, setCertType] = useState<CertificateType>('CEU');
-  const [tab, setTab] = useState<'issue' | 'template'>('issue');
 
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -290,7 +150,7 @@ export function CertificatesPage() {
       <div className="page-head">
         <div>
           <h2>Certificates</h2>
-          <p>Issue CEU and CHC certificates, and edit the template staff see on every one.</p>
+          <p>Issue CEU and CHC certificates. To change what they look like, use the Certificate Designer.</p>
         </div>
         {canEdit && (
           <button
@@ -311,8 +171,9 @@ export function CertificatesPage() {
           onClose={() => setCreateOpen(false)}
           onCreated={(id) => {
             setCreateOpen(false);
-            setNotice('Certificate template created.');
-            setTab('template');
+            setNotice(
+              'Certificate template created. Edit its layout and fields in the Certificate Designer.',
+            );
             qc.invalidateQueries({ queryKey: ['certificates', 'templates', schoolYearId] });
             void id;
           }}
@@ -365,178 +226,144 @@ export function CertificatesPage() {
         <span className="toolbar-count">{total.toLocaleString()} eligible</span>
       </div>
 
-      <div className="drawer-tabs" role="tablist" aria-label="Certificate sections" style={{ paddingLeft: 0, marginBottom: 18 }}>
-        <button
-          type="button"
-          role="tab"
-          className="drawer-tab"
-          aria-selected={tab === 'issue'}
-          onClick={() => setTab('issue')}
-        >
-          Issue certificates
-        </button>
-        <button
-          type="button"
-          role="tab"
-          className="drawer-tab"
-          aria-selected={tab === 'template'}
-          onClick={() => setTab('template')}
-        >
-          Template settings
-        </button>
-      </div>
-
       {notice && (
         <div className="alert alert-info" role="status">
           <span>{notice}</span>
         </div>
       )}
 
-      {tab === 'template' ? (
-        schoolYearId !== null && (
-          <CertificateTemplatePanel
-            schoolYearId={schoolYearId}
-            certificateType={certType}
-            canEdit={!!canEdit}
-            sampleParticipantId={rows[0]?.ParticipantID ?? null}
+      <div className="toolbar">
+        <div className="toolbar-field" style={{ flex: '1 1 260px' }}>
+          <label htmlFor="cert-search">Search</label>
+          <input
+            id="cert-search"
+            type="search"
+            placeholder="Name or email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
-        )
-      ) : (
-        <>
-          <div className="toolbar">
-            <div className="toolbar-field" style={{ flex: '1 1 260px' }}>
-              <label htmlFor="cert-search">Search</label>
-              <input
-                id="cert-search"
-                type="search"
-                placeholder="Name or email…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            {missingHours > 0 && (
-              <span className="toolbar-count" style={{ color: 'var(--badge-amber-text)' }}>
-                {missingHours} on this page have a workshop with no hours recorded
-              </span>
-            )}
-          </div>
+        </div>
+        {missingHours > 0 && (
+          <span className="toolbar-count" style={{ color: 'var(--badge-amber-text)' }}>
+            {missingHours} on this page have a workshop with no hours recorded
+          </span>
+        )}
+      </div>
 
-          <div className="panel">
-            <div className="panel-body">
-              {isLoading ? (
-                <div style={{ padding: 18 }}>
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <div key={i} className="skeleton" style={{ height: 44, marginBottom: 8 }} />
-                  ))}
-                </div>
-              ) : rows.length === 0 ? (
-                <div className="empty">
-                  <IconReports width={28} height={28} />
-                  <p style={{ marginTop: 10 }}>
-                    {debounced
-                      ? 'No one matches that search.'
-                      : 'No one is eligible for a certificate in this school year.'}
-                  </p>
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 460, margin: '8px auto 0' }}>
-                    Eligibility follows the Access rule: attended, not cancelled, not late, and a
-                    workshop code starting with “t”.
-                  </p>
-                </div>
-              ) : (
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Participant</th>
-                      <th>Agency</th>
-                      <th className="num">Workshops</th>
-                      <th className="num">Hours</th>
-                      <th className="num">CEUs</th>
-                      <th>Dates</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r) => (
-                      <tr key={r.ParticipantID}>
-                        <td>
-                          <div style={{ fontWeight: 600 }}>{fullName(r) || '—'}</div>
-                          {r.Email && (
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{r.Email}</div>
-                          )}
-                        </td>
-                        <td>{r.AgencyName ?? '—'}</td>
-                        <td className="num">
-                          {r.WorkshopCount}
-                          {r.MissingHoursCount > 0 && (
-                            <span
-                              className="pill pill-full"
-                              style={{ marginLeft: 6 }}
-                              title={`${r.MissingHoursCount} workshop(s) have no hours recorded`}
-                            >
-                              {r.MissingHoursCount} no hrs
-                            </span>
-                          )}
-                        </td>
-                        <td className="num">{Number(r.TotalHours ?? 0).toFixed(1)}</td>
-                        <td className="num">{Number(r.TotalCeus ?? 0).toFixed(2)}</td>
-                        <td style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                          {fmtDate(r.FirstDate)}
-                          {r.LastDate && r.LastDate !== r.FirstDate ? ` – ${fmtDate(r.LastDate)}` : ''}
-                        </td>
-                        <td>
-                          <div className="row-actions">
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => preview(r)}>
-                              Preview
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-sm"
-                              disabled={busyId === r.ParticipantID || !caps?.pdfRendering}
-                              onClick={() => downloadPdf.mutate(r)}
-                            >
-                              {busyId === r.ParticipantID ? 'Rendering…' : 'Download PDF'}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => setOverrideFor(r)}
-                            >
-                              Edit text &amp; image
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+      <div className="panel">
+        <div className="panel-body">
+          {isLoading ? (
+            <div style={{ padding: 18 }}>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} className="skeleton" style={{ height: 44, marginBottom: 8 }} />
+              ))}
             </div>
-          </div>
-
-          {pageCount > 1 && (
-            <div className="pager">
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Previous
-              </button>
-              <span>
-                Page {page} of {pageCount}
-              </span>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                disabled={page >= pageCount}
-                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-              >
-                Next
-              </button>
+          ) : rows.length === 0 ? (
+            <div className="empty">
+              <IconReports width={28} height={28} />
+              <p style={{ marginTop: 10 }}>
+                {debounced
+                  ? 'No one matches that search.'
+                  : 'No one is eligible for a certificate in this school year.'}
+              </p>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 460, margin: '8px auto 0' }}>
+                Eligibility follows the Access rule: attended, not cancelled, not late, and a
+                workshop code starting with “t”.
+              </p>
             </div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Participant</th>
+                  <th>Agency</th>
+                  <th className="num">Workshops</th>
+                  <th className="num">Hours</th>
+                  <th className="num">CEUs</th>
+                  <th>Dates</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.ParticipantID}>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{fullName(r) || '—'}</div>
+                      {r.Email && (
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{r.Email}</div>
+                      )}
+                    </td>
+                    <td>{r.AgencyName ?? '—'}</td>
+                    <td className="num">
+                      {r.WorkshopCount}
+                      {r.MissingHoursCount > 0 && (
+                        <span
+                          className="pill pill-full"
+                          style={{ marginLeft: 6 }}
+                          title={`${r.MissingHoursCount} workshop(s) have no hours recorded`}
+                        >
+                          {r.MissingHoursCount} no hrs
+                        </span>
+                      )}
+                    </td>
+                    <td className="num">{Number(r.TotalHours ?? 0).toFixed(1)}</td>
+                    <td className="num">{Number(r.TotalCeus ?? 0).toFixed(2)}</td>
+                    <td style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                      {fmtDate(r.FirstDate)}
+                      {r.LastDate && r.LastDate !== r.FirstDate ? ` – ${fmtDate(r.LastDate)}` : ''}
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => preview(r)}>
+                          Preview
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={busyId === r.ParticipantID || !caps?.pdfRendering}
+                          onClick={() => downloadPdf.mutate(r)}
+                        >
+                          {busyId === r.ParticipantID ? 'Rendering…' : 'Download PDF'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setOverrideFor(r)}
+                        >
+                          Edit text &amp; image
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
-        </>
+        </div>
+      </div>
+
+      {pageCount > 1 && (
+        <div className="pager">
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Previous
+          </button>
+          <span>
+            Page {page} of {pageCount}
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={page >= pageCount}
+            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+          >
+            Next
+          </button>
+        </div>
       )}
 
       {overrideFor && schoolYearId !== null && (

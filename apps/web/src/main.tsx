@@ -22,6 +22,7 @@ import { WorkshopNamesPage } from './pages/WorkshopNamesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { TrainingRequestsPage } from './pages/TrainingRequestsPage';
 import { CreditSlipsPage } from './pages/CreditSlipsPage';
+import { CertificateDesignerPage } from './pages/CertificateDesignerPage';
 import { CertificatesPage } from './pages/CertificatesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { WebhooksPage } from './pages/WebhooksPage';
@@ -163,6 +164,13 @@ function Router() {
       return <PlaceholderPage path={path} title="Not available" />;
     }
     return <FormsPage />;
+  }
+
+  if (path === '/admin/certificates') {
+    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      return <PlaceholderPage path={path} title="Not available" />;
+    }
+    return <CertificateDesignerPage />;
   }
 
   const formEditorMatch = /^\/admin\/forms\/(\d+)\/?$/.exec(path);
