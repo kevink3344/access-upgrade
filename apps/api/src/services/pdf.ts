@@ -40,6 +40,9 @@ function managedCacheDirs(): string[] {
   const packageRoot = path.resolve(here, '..', '..');
 
   return [
+    // Where the deploy workflow installs it. Not dot-prefixed: upload-artifact
+    // skips hidden directories, so a `.cache` copy never reaches the server.
+    path.join(packageRoot, 'puppeteer-cache'),
     path.join(packageRoot, '.cache', 'puppeteer'),
     path.join(os.homedir(), '.cache', 'puppeteer'),
   ];

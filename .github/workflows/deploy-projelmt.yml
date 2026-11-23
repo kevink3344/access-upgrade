@@ -99,13 +99,17 @@ jobs:
           # Installed into $OUT explicitly rather than relying on npx to find
           # puppeteer: --omit=dev removed it, and --no-save leaves no lockfile
           # entry for npx to resolve.
-          PUPPETEER_CACHE_DIR="$OUT/.cache/puppeteer" \
-            npx --yes @puppeteer/browsers install chrome@stable --path "$OUT/.cache/puppeteer"
-          du -sh "$OUT/.cache/puppeteer"
+          #
+          # The directory is NOT dot-prefixed on purpose: upload-artifact skips
+          # hidden directories, so `.cache` would be silently dropped between
+          # the build and deploy jobs.
+          PUPPETEER_CACHE_DIR="$OUT/puppeteer-cache" \
+            npx --yes @puppeteer/browsers install chrome@stable --path "$OUT/puppeteer-cache"
+          du -sh "$OUT/puppeteer-cache"
 
           # Fail here rather than shipping a package with no browser: the app
           # would start and quietly report PDF downloads as unavailable.
-          CHROME_BIN=$(find "$OUT/.cache/puppeteer" -type f -name chrome -print -quit)
+          CHROME_BIN=$(find "$OUT/puppeteer-cache" -type f -name chrome -print -quit)
           test -n "$CHROME_BIN" || { echo "::error::no chrome binary was installed"; exit 1; }
           echo "chromium: $CHROME_BIN"
 
@@ -147,7 +151,7 @@ jobs:
           test -x startup.sh || { echo "::error::startup.sh is not executable"; exit 1; }
           # The browser must survive the artifact round-trip, or the app starts
           # and silently reports PDF downloads as unavailable.
-          test -n "$(find .cache/puppeteer -type f -name chrome -print -quit 2>/dev/null)" \
+          test -n "$(find puppeteer-cache -type f -name chrome -print -quit 2>/dev/null)" \
             || { echo "::error::no chrome binary in the deployed package"; exit 1; }
           echo "Package looks complete."
 
