@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { AuthUser } from '@pe/shared';
 import { useAuth } from '../auth';
 import {
@@ -23,6 +23,7 @@ import {
   IconCertificate,
   IconWebhook,
   IconLogout,
+  IconLayoutSidebar,
 } from './icons';
 import { NotificationBell } from './NotificationBell';
 
@@ -112,6 +113,17 @@ const ROLE_LABEL: Record<AuthUser['role'], string> = {
   VIEWER: 'Viewer',
 };
 
+/** Sidebar width preference, remembered across visits. */
+const SIDEBAR_KEY = 'pe.sidebarCollapsed';
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 function initials(name: string): string {
   return name
     .split(/\s+/)
@@ -131,6 +143,15 @@ export function AppShell({
   children: ReactNode;
 }) {
   const { user, signOut } = useAuth();
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
+    } catch {
+      // Private mode or a full quota — the preference simply won't persist.
+    }
+  }, [collapsed]);
 
   // Keep the document title in sync with the screen.
   useEffect(() => {
@@ -144,10 +165,10 @@ export function AppShell({
     items.filter((i) => !i.roles || (user && i.roles.includes(user.role)));
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${collapsed ? ' sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <a className="mark" href="/">
+          <a className="mark" href="/" aria-label="Project Enlightenment home">
             <img
               className="mark-icon"
               src="/images/sunburst-logo.png"
@@ -181,9 +202,10 @@ export function AppShell({
                     href={item.to}
                     className={`sidebar-link${isActive(item.to) ? ' active' : ''}`}
                     aria-current={isActive(item.to) ? 'page' : undefined}
+                    title={collapsed ? item.label : undefined}
                   >
                     <item.icon />
-                    {item.label}
+                    <span className="sidebar-link-label">{item.label}</span>
                   </a>
                 ))}
               </div>
@@ -194,7 +216,16 @@ export function AppShell({
 
       <div className="main">
         <header className="topbar">
-          <h1>{title}</h1>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm topbar-toggle"
+            onClick={() => setCollapsed((v) => !v)}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed}
+          >
+            <IconLayoutSidebar width={18} height={18} />
+          </button>
           <div className="topbar-actions">
             {user && <NotificationBell />}
             {user && (

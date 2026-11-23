@@ -124,6 +124,74 @@
 
 .sidebar-link.active .icon { opacity: 1; }
 
+/* ---------- collapsed rail ---------- */
+
+/* Collapsing narrows the grid column and hides every text label, leaving
+   the sunburst mark and the icons. Nothing is removed from the DOM, so the
+   nav keeps its accessible names for screen readers. */
+.app-shell.sidebar-collapsed {
+  grid-template-columns: var(--sidebar-width-collapsed) minmax(0, 1fr);
+}
+
+.sidebar-collapsed .sidebar-brand {
+  padding: 20px 0 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.sidebar-collapsed .sidebar-brand .mark {
+  gap: 0;
+}
+
+.sidebar-collapsed .sidebar-brand .mark-text {
+  display: none;
+}
+
+.sidebar-collapsed .sidebar-section {
+  padding: 14px 6px 0;
+}
+
+/* The group heading is a word ("Data", "Reports"); at 64px it would wrap, so
+   collapse it to a thin rule that still separates the sections. */
+.sidebar-collapsed .sidebar-section-title {
+  height: 1px;
+  margin: 0 10px 8px;
+  padding: 0;
+  overflow: hidden;
+  font-size: 0;
+  background: var(--surface-neutral);
+}
+
+.sidebar-collapsed .sidebar-link {
+  justify-content: center;
+  padding: 10px 0;
+  gap: 0;
+  border-left-width: 0;
+  border-radius: var(--radius);
+}
+
+.sidebar-collapsed .sidebar-link-label {
+  display: none;
+}
+
+.sidebar-collapsed .sidebar-link .icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* `.btn-ghost` sets a border and loads after this file, so match on two
+   classes to win the cascade without `!important`. */
+.btn.topbar-toggle {
+  flex-shrink: 0;
+  color: var(--text-body);
+  border-color: transparent;
+}
+
+.btn.topbar-toggle:hover {
+  color: var(--primary-color);
+  border-color: transparent;
+}
+
 .sidebar-foot {
   margin-top: auto;
   padding: 14px;
@@ -156,8 +224,8 @@
 .topbar-user .btn {
   min-height: 30px;
   padding: 4px 7px;
-  border-color: var(--border-color);
-  background: #fff;
+  border-color: transparent;
+  background: transparent;
   color: var(--text-muted);
   flex-shrink: 0;
 }
@@ -249,6 +317,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-left: auto;
 }
 
 .content {
@@ -294,4 +363,6 @@
   .mobile-tabs { display: flex; }
   .content { padding: 18px 16px 84px; }
   .topbar { padding: 0 16px; }
+  /* The sidebar is hidden at this width, so the toggle would do nothing. */
+  .btn.topbar-toggle { display: none; }
 }

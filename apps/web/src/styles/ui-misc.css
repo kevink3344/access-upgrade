@@ -1,0 +1,89 @@
+/* ---------- recently visited chips ---------- */
+.recent-visits {
+  margin: -6px 0 18px;
+}
+
+.recent-visits-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.recent-visits-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.recent-clear {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.recent-clear:hover { color: var(--primary-color); }
+
+.recent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.recent-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  max-width: 100%;
+  padding: 7px 13px;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+
+.recent-chip:hover {
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.recent-chip:focus-visible {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px hsl(var(--primary-color-hsl) / .18);
+}
+
+.recent-chip-title {
+  font-weight: 700;
+  color: var(--text-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.recent-chip-sub {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.recent-chip-time {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .recent-chip-title { max-width: 180px; }
+  .recent-chip { font-size: 12.5px; padding: 6px 11px; }
+}

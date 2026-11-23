@@ -183,3 +183,11 @@ export const IconBell = (p: Props) => (
     <path d="M13.73 21a2 2 0 0 1-3.46 0" />
   </svg>
 );
+
+/** Toggle the sidebar between full width and an icon rail. */
+export const IconLayoutSidebar = (p: Props) => (
+  <svg {...base(p)}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9 4v16" />
+  </svg>
+);

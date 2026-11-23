@@ -1,0 +1,160 @@
+/* ---------- form designer ---------- */
+.form-editor-page { display: flex; flex-direction: column; gap: 14px; }
+
+.form-editor-dirty {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--badge-amber-text);
+  background: var(--badge-amber-bg);
+  border: 1px solid var(--badge-amber-border);
+  border-radius: var(--badge-radius);
+  padding: 1px 7px;
+}
+
+/* Two columns on a page, not a fixed-height drawer: the whole page scrolls,
+   so a long question list is never trapped behind the fold. */
+.form-editor-page-body {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.form-editor-list {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+  overflow: hidden;
+}
+
+.form-editor-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-zebra);
+}
+
+.form-editor-list ul { list-style: none; margin: 0; padding: 0; }
+
+.form-editor-list li {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.form-editor-list li:last-child { border-bottom: 0; }
+
+.form-editor-list li.is-active {
+  /* A solid tint rather than color-mix: the global reduced-motion rule forces
+     a .01ms transition on every property, and animating a color-mix value
+     leaves the row painting the previous selection's outline. */
+  background: #eaf1f7;
+  /* Blue outline so the question being edited is unmistakable, including for
+     staff who cannot rely on the subtle background tint alone. */
+  box-shadow: inset 0 0 0 2px var(--primary-color);
+  transition: none;
+}
+
+.form-editor-list li.is-active .form-q-label { color: var(--primary-color); }
+
+.form-q-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.form-q-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.form-q-lock { font-size: 10px; opacity: .6; }
+
+.form-q-meta { font-size: 11px; color: var(--text-faint); }
+
+.form-q-branch { color: var(--badge-violet-text); font-weight: 600; }
+
+/* Branch condition editor. */
+.form-branch {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 10px 12px 4px;
+  margin: 4px 0 14px;
+}
+
+.form-branch legend {
+  font-size: 10.5px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-faint);
+  padding: 0 4px;
+}
+
+.form-q-actions { display: flex; flex-direction: column; padding-right: 4px; }
+
+.form-q-actions .btn { padding: 0 6px; min-height: 20px; line-height: 1; font-size: 11px; }
+
+.form-editor-detail {
+  padding: 18px 20px 24px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+}
+
+.form-q-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin: 4px 0 14px;
+  cursor: pointer;
+}
+
+.form-q-check input { width: 18px; height: 18px; accent-color: var(--primary-color); }
+
+.form-q-preview {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius);
+  background: var(--surface-subtle);
+}
+
+.form-q-preview-title {
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+}
+
+@media (max-width: 720px) {
+  .form-editor-page-body { grid-template-columns: 1fr; }
+}
+

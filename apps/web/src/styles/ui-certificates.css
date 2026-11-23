@@ -1,0 +1,123 @@
+/* ---------- certificates ---------- */
+.cert-template-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .cert-template-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+.cert-preview-column {
+  position: sticky;
+  top: 16px;
+}
+
+.cert-preview-label {
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+/*
+ * The certificate is 8.5x11in portrait or 11x8.5in landscape. The iframe is
+ * laid out at true page size and then scaled to fill the column width, so
+ * preview and print are identical and no whitespace is left over.
+ *
+ * --cert-scale is set from JS (see CertificateTemplatePanel) because it
+ * depends on the measured column width, which CSS alone cannot know.
+ */
+.cert-preview-frame {
+  display: block;
+  border: 1px solid var(--border-color);
+  background: #fff;
+  box-shadow: var(--shadow-card);
+  transform-origin: top left;
+}
+
+.cert-preview-portrait {
+  width: 8.5in;
+  height: 11in;
+  transform: scale(var(--cert-scale, 0.62));
+}
+
+.cert-preview-landscape {
+  width: 11in;
+  height: 8.5in;
+  transform: scale(var(--cert-scale, 0.5));
+}
+
+.cert-preview-column {
+  overflow: hidden;
+}
+
+/*
+ * Holds the true-size iframe and reserves only the scaled height, so the
+ * sticky column does not jump when the layout changes.
+ */
+.cert-preview-scaler {
+  position: relative;
+  overflow: hidden;
+}
+
+.cert-preview-empty {
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius);
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.cert-logo-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.cert-logo-preview {
+  width: 140px;
+  height: 70px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-zebra);
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow: hidden;
+}
+
+.cert-logo-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* A button that reads as a link — used where a table cell opens a drawer. */
+.linklike {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--primary-color);
+  cursor: pointer;
+  text-align: left;
+}
+
+.linklike:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+.linklike:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+

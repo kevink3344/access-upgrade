@@ -1,0 +1,161 @@
+/* ---------- sortable table headers ---------- */
+.th-sort {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.th-sort:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+/* ---------- clickable table cell ---------- */
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--primary-color);
+  text-align: left;
+  cursor: pointer;
+  border-radius: 2px;
+  text-decoration: none;
+}
+
+.link-button:hover {
+  color: var(--primary-dark);
+}
+
+.link-button:focus-visible {
+  outline: 2px solid var(--secondary-color);
+  outline-offset: 2px;
+}
+
+/* ---------- pager ---------- */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-zebra);
+}
+
+.pager-info {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ---------- type-ahead ---------- */
+.typeahead-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  min-height: 44px;
+  background: hsl(var(--primary-color-hsl) / .06);
+  border: 1px solid hsl(var(--primary-color-hsl) / .25);
+  border-radius: var(--radius);
+  font-size: 14.5px;
+  color: var(--text-heading);
+  font-weight: 600;
+}
+
+.typeahead-clear {
+  background: none;
+  border: 0;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+
+.typeahead-clear:hover { color: var(--cc-fifth-color); background: #fdf2f4; }
+
+.typeahead-list {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% - 4px);
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(20, 30, 40, .14);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.typeahead-list li button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text-body);
+  cursor: pointer;
+}
+
+.typeahead-list li button:hover,
+.typeahead-list li button:focus-visible {
+  background: hsl(var(--primary-color-hsl) / .08);
+  color: var(--primary-color);
+}
+
+.typeahead-empty {
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+/* ---------- source tag ---------- */
+.source-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--badge-radius);
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+
+.source-manual {
+  background: var(--badge-slate-bg);
+  border-color: var(--badge-slate-border);
+  color: var(--badge-slate-text);
+}
+
+.source-web {
+  background: var(--badge-blue-bg);
+  border-color: var(--badge-blue-border);
+  color: var(--badge-blue-text);
+}
+
+.source-eschools {
+  background: var(--badge-violet-bg);
+  border-color: var(--badge-violet-border);
+  color: var(--badge-violet-text);
+}
+
+@media (max-width: 640px) {
+  .drawer-wide { width: 100%; }
+  .field-row { grid-template-columns: 1fr; }
+}
+

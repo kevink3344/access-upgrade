@@ -1,0 +1,249 @@
+/* ---------- drawer resize handle ---------- */
+/*
+ * The visible edge is 1px, but the hit area is 11px wide and sits entirely
+ * INSIDE the drawer. An earlier version overhung the left edge, which let the
+ * scrim win the hit test and close the drawer on mousedown.
+ */
+.drawer-resize {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 11px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  background: transparent;
+}
+
+.drawer-resize::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: var(--surface-neutral);
+  transition: background .12s ease, width .12s ease;
+}
+
+.drawer-resize:hover::before,
+.drawer-resize.is-dragging::before {
+  width: 2px;
+  background: var(--primary-color);
+}
+
+.drawer-resize:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.drawer-resize-grip {
+  position: relative;
+  width: 3px;
+  height: 34px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--text-faint) 0 2px,
+    transparent 2px 5px
+  );
+  opacity: 0;
+  transition: opacity .12s ease;
+  /* Nudge the grip clear of the 1px edge line so both stay legible. */
+  margin-left: 4px;
+}
+
+.drawer-resize:hover .drawer-resize-grip,
+.drawer-resize.is-dragging .drawer-resize-grip {
+  opacity: .75;
+}
+
+/* While dragging, stop text selection and let the cursor persist across
+   the whole page rather than flickering as it leaves the handle. */
+body.drawer-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+@media (max-width: 640px) {
+  /* A phone has no room to drag; the drawer is already full width. */
+  .drawer-resize { display: none; }
+}
+
+@keyframes slide-in {
+  from { transform: translateX(24px); opacity: .6; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--surface-neutral);
+  flex-shrink: 0;
+}
+
+.drawer-head h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.drawer-close {
+  background: none;
+  border: 0;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: var(--radius);
+}
+
+.drawer-close:hover { color: var(--text-heading); background: var(--surface-subtle); }
+
+.drawer-body {
+  padding: 22px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.drawer-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ---------- dialog ---------- */
+.dialog {
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  width: min(420px, calc(100% - 32px));
+  margin: auto;
+  box-shadow: var(--shadow-card);
+}
+
+.drawer-scrim:has(.dialog) {
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.dialog h2 {
+  margin: 0 0 10px;
+  font-size: 19px;
+}
+
+.dialog p {
+  font-size: 14px;
+  color: var(--text-body);
+  margin: 0;
+}
+
+.dialog .drawer-actions { margin-top: 22px; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 640px) {
+  .toolbar { gap: 8px; }
+  .toolbar-search { flex: 1 1 100%; }
+  .toolbar-select { flex: 1 1 100%; }
+  .toolbar-count { margin-left: 0; padding-bottom: 0; }
+
+  .data-table td.num { text-align: left; }
+  .row-actions { justify-content: flex-start; }
+
+  .drawer { width: 100%; }
+}
+
+/* ---------- wide drawer (workshop form) ---------- */
+.drawer-wide { width: min(720px, 100%); }
+
+/* ---------- drawer tabs ---------- */
+/*
+ * Sits directly under .drawer-head and stays put while the panel below
+ * scrolls. The active tab is marked with a 3px blue underline that overlaps
+ * the bar's own bottom border so the two read as one line.
+ */
+.drawer-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--surface-neutral);
+  flex-shrink: 0;
+  background: var(--surface-card);
+  /* Six tabs no longer fit a phone. Without this the last one is clipped and
+     unreachable, because the strip is not a scroll container. */
+  overflow-x: auto;
+  /* Setting overflow-x to auto makes overflow-y compute to auto as well, so
+     the tabs' -1px margin-bottom (which overlaps the active underline onto the
+     bar's own border) produced a 1px vertical scroll. Pin it to hidden. */
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.drawer-tab { flex: 0 0 auto; }
+
+.drawer-tab {
+  position: relative;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  padding: 12px 14px 11px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: color .12s ease, border-color .12s ease;
+}
+
+.drawer-tab:hover { color: var(--primary-dark); }
+
+.drawer-tab:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.drawer-tab[aria-selected='true'] {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+}
+
+.drawer-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  border: 1px solid var(--badge-slate-border);
+  background: var(--badge-slate-bg);
+  color: var(--badge-slate-text);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.drawer-tab[aria-selected='true'] .drawer-tab-count {
+  background: var(--badge-blue-bg);
+  border-color: var(--badge-blue-border);
+  color: var(--badge-blue-text);
+}
+

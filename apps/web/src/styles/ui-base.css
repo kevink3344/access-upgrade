@@ -1,0 +1,42 @@
+/* ---------- toolbar ---------- */
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.toolbar .field { margin-bottom: 0; }
+
+.toolbar-search { flex: 1 1 260px; min-width: 200px; }
+.toolbar-select { flex: 0 0 190px; }
+
+.toolbar input,
+.toolbar select {
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-heading);
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  min-height: 40px;
+}
+
+.toolbar input:focus,
+.toolbar select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px hsl(var(--primary-color-hsl) / .15);
+}
+
+.toolbar-count {
+  font-size: 12.5px;
+  color: var(--text-faint);
+  font-weight: 600;
+  margin-left: auto;
+  padding-bottom: 10px;
+}
+

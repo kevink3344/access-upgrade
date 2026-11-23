@@ -1,0 +1,153 @@
+/* ---------- form controls ---------- */
+/* `.input` is the standalone form control — for inputs that sit outside a
+   `.field` wrapper (toolbar-adjacent searches, inline filters). It mirrors
+   `.field input` so a stray input never falls back to browser defaults. */
+.input {
+  width: 100%;
+  padding: 11px 13px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--text-heading);
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  transition: border-color .15s ease, box-shadow .15s ease;
+  min-height: 44px;
+}
+
+.input:hover { border-color: #a9b6c0; }
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px hsl(var(--primary-color-hsl) / .15);
+}
+
+.input:disabled {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.field select {
+  width: 100%;
+  padding: 11px 13px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--text-heading);
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  min-height: 44px;
+}
+
+.field select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px hsl(var(--primary-color-hsl) / .15);
+}
+
+.field select:disabled {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.field-hint {
+  display: block;
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 5px;
+  font-weight: 400;
+}
+
+/* ---------- table extras ---------- */
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar-sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.self-tag {
+  display: inline-block;
+  margin-left: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--badge-blue-text);
+  background: var(--badge-blue-bg);
+  border: 1px solid var(--badge-blue-border);
+  padding: 1px 6px;
+  border-radius: var(--badge-radius);
+  vertical-align: 1px;
+}
+
+.role-pill {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: var(--badge-radius);
+  border: 1px solid transparent;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.role-super_admin {
+  background: var(--badge-violet-bg);
+  border-color: var(--badge-violet-border);
+  color: var(--badge-violet-text);
+}
+
+.role-admin {
+  background: var(--badge-blue-bg);
+  border-color: var(--badge-blue-border);
+  color: var(--badge-blue-text);
+}
+
+.role-manager {
+  background: var(--badge-blue-bg);
+  border-color: var(--badge-blue-border);
+  color: var(--badge-blue-text);
+}
+
+.role-editor {
+  background: var(--badge-green-bg);
+  border-color: var(--badge-green-border);
+  color: var(--badge-green-text);
+}
+
+.role-viewer {
+  background: var(--badge-slate-bg);
+  border-color: var(--badge-slate-border);
+  color: var(--badge-slate-text);
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.btn-danger {
+  background: var(--cc-fifth-color);
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) { background: #571f31; }
+
+.btn-danger:disabled { opacity: .6; cursor: not-allowed; }
+
