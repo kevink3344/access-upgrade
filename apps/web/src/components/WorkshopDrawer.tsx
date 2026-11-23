@@ -519,7 +519,7 @@ export function WorkshopDrawer({
 
               <div className="field-row">
                 <div className="field">
-                  <label htmlFor="w-tstart">Start time</label>
+                  <label htmlFor="w-tstart">Default start time</label>
                   <input
                     id="w-tstart"
                     type="time"
@@ -529,7 +529,7 @@ export function WorkshopDrawer({
                 </div>
 
                 <div className="field">
-                  <label htmlFor="w-tend">End time</label>
+                  <label htmlFor="w-tend">Default end time</label>
                   <input
                     id="w-tend"
                     type="time"
@@ -538,6 +538,10 @@ export function WorkshopDrawer({
                   />
                 </div>
               </div>
+              <p className="field-help">
+                Used for new sessions and for workshops with no sessions. A workshop with sessions
+                shows the range of its sessions.
+              </p>
             </fieldset>
 
             <fieldset className="fieldset">
@@ -545,7 +549,7 @@ export function WorkshopDrawer({
 
               <div className="field-row">
                 <div className="field">
-                  <label htmlFor="w-max">Maximum</label>
+                  <label htmlFor="w-max">Default capacity</label>
                   <input
                     id="w-max"
                     type="number"

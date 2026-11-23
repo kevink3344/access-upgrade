@@ -138,10 +138,46 @@ export interface WorkshopPresenterRow {
 export interface WorkshopSessionRow {
   WorkshopSessionID: number;
   SessionDate: string | null;
+  /** HH:mm, or null for a legacy session with no time recorded. */
+  StartTime: string | null;
+  EndTime: string | null;
+  /** The session's own capacity, or null when it inherits the workshop's. */
+  MaxEnrollment: number | null;
+  MinEnrollment: number | null;
+  Notes: string | null;
+  /** Capacity after the workshop fallback — computed server-side. */
+  EffectiveCapacity: number | null;
+  /** True when EffectiveCapacity came from the workshop, not the session. */
+  CapacityInherited: boolean;
+  /** The workshop's non-cancelled registration count, repeated per row. */
+  WorkshopRegistered: number;
   RegAttend: number | null;
   ESchoolAttend: number | null;
-  StaffID: number | null;
-  PresenterName: string | null;
+}
+
+/** Writable session fields — camelCase, matches the API contract. */
+export interface WorkshopSessionWrite {
+  sessionDate: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  maxEnrollment?: number | null;
+  minEnrollment?: number | null;
+  notes?: string | null;
+}
+
+/** Body for the "add several sessions" helper. */
+export interface WorkshopSessionBulkWrite {
+  sessionDate: string;
+  /** HH:mm of the first session. */
+  startTime: string;
+  /** How many back-to-back sessions to create. Capped at 12 server-side. */
+  count: number;
+  durationMinutes: number;
+  maxEnrollment?: number | null;
+}
+
+export interface WorkshopSessionBulkResult {
+  created: Array<{ workshopSessionId: number; startTime: string; endTime: string }>;
 }
 
 /** One person on a session's attendance checklist. */
@@ -263,15 +299,6 @@ export interface WorkshopWrite {
   isRegistrationOpen?: boolean;
   notes?: string | null;
   specialNotes?: string | null;
-}
-
-export interface WorkshopSessionRow {
-  WorkshopSessionID: number;
-  SessionDate: string | null;
-  RegAttend: number | null;
-  ESchoolAttend: number | null;
-  StaffID: number | null;
-  PresenterName: string | null;
 }
 
 export interface LookupOption {
@@ -753,8 +780,16 @@ export interface RegistrationLinkState {
   } | null;
 }
 
-export interface PublicLinkState {
-  state: PublicLinkStatus;
+/** One session option offered by a `session` form question. */
+export interface PublicSessionOption {
+  workshopSessionId: number;
+  /** Stored as the answer, e.g. "10:00 AM – 11:00 AM". */
+  label: string;
+  startTime: string | null;
+  endTime: string | null;
+}
+
+export interface PublicLinkState {  state: PublicLinkStatus;
   /** Seats left, from the live roster. Null when the workshop is uncapped. */
   seatsRemaining: number | null;
   /**
@@ -762,6 +797,11 @@ export interface PublicLinkState {
    * built-in form. Workshop details always render regardless.
    */
   form: FormVersion | null;
+  /**
+   * The workshop's sessions, sent only when the pinned form asks for one via
+   * a `session` question. Empty otherwise.
+   */
+  sessions: PublicSessionOption[];
   opensAt: string | null;
   /** True when staff configured a payment redirect for this link. */
   redirectToPayment: boolean;
@@ -1019,7 +1059,13 @@ export type FormFieldType =
   | 'radio'
   | 'checkbox'
   /** Live type-ahead over core.Agency; stores the chosen AgencyID. */
-  | 'agency';
+  | 'agency'
+  /**
+   * The workshop's own sessions, resolved when the page loads. Stores the
+   * chosen session's label (e.g. "10:00 AM – 11:00 AM"), so the answer stays
+   * readable even after a session is edited or removed.
+   */
+  | 'session';
 
 export interface FormQuestion {
   formQuestionId: number;

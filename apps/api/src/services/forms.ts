@@ -25,7 +25,12 @@ export type FieldType =
   | 'radio'
   | 'checkbox'
   /** Live type-ahead over core.Agency; stores the chosen AgencyID. */
-  | 'agency';
+  | 'agency'
+  /**
+   * The workshop's sessions, resolved per link. Stores the chosen session's
+   * label so the answer survives the session being edited or deleted.
+   */
+  | 'session';
 
 export interface FormQuestion {
   formQuestionId: number;

@@ -299,6 +299,14 @@
   gap: 12px;
 }
 
+/* Explanatory text under a field group, e.g. the workshop's default times. */
+.field-help {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 .field textarea {
   width: 100%;
   padding: 10px 13px;

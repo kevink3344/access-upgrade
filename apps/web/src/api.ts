@@ -165,18 +165,30 @@ export const api = {
     sessions: (id: number) =>
       request<{ data: import('@pe/shared').WorkshopSessionRow[] }>(`/api/workshops/${id}/sessions`),
 
-    addSession: (id: number, body: { sessionDate: string; staffId?: number | null }) =>
-      request<{ workshopSessionId: number }>(`/api/workshops/${id}/sessions`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-      }),
+    addSession: (id: number, body: import('@pe/shared').WorkshopSessionWrite) =>
+      request<{ workshopSessionId: number; warning: string | null }>(
+        `/api/workshops/${id}/sessions`,
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+      ),
+
+    addSessionsBulk: (id: number, body: import('@pe/shared').WorkshopSessionBulkWrite) =>
+      request<import('@pe/shared').WorkshopSessionBulkResult & { warning: string | null }>(
+        `/api/workshops/${id}/sessions/bulk`,
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+      ),
 
     updateSession: (
       id: number,
       sessionId: number,
-      body: { sessionDate?: string; staffId?: number | null },
+      body: Partial<import('@pe/shared').WorkshopSessionWrite>,
     ) =>
-      request<void>(`/api/workshops/${id}/sessions/${sessionId}`, {
+      request<{ warning: string | null }>(`/api/workshops/${id}/sessions/${sessionId}`, {
         method: 'PATCH',
         body: JSON.stringify(body),
       }),

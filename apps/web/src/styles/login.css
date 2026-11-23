@@ -279,6 +279,15 @@
   color: var(--primary-dark);
 }
 
+/* Non-blocking: the action succeeded, but something looks worth checking. */
+.alert-warn {
+  background: #fff8e6;
+  border: 1px solid #f0dfb0;
+  color: #6b4e00;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
   .login-page { grid-template-columns: 1fr; }

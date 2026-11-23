@@ -540,12 +540,30 @@ CREATE TABLE core.WorkshopSession (
     StaffID           INT           NULL,
     BackUpTimeID      INT           NULL REFERENCES ref.BackupTime(BackupTimeID),
     SessionDate       DATETIME2(0)  NULL,
+    -- Time window and capacity per session (migration 012). A NULL
+    -- MaxEnrollment inherits core.Workshop.MaxEnrollment.
+    StartTime         TIME(0)       NULL,
+    EndTime           TIME(0)       NULL,
+    MaxEnrollment     INT           NULL,
+    MinEnrollment     INT           NULL,
+    Notes             NVARCHAR(400) NULL,
     RegAttend         INT           NULL,
     ESchoolAttend     INT           NULL
 );
 END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_WorkshopSession_Workshop' AND object_id = OBJECT_ID('core.WorkshopSession'))
     CREATE INDEX IX_WorkshopSession_Workshop ON core.WorkshopSession(WorkshopID);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_WorkshopSession_Workshop_Date' AND object_id = OBJECT_ID('core.WorkshopSession'))
+    CREATE INDEX IX_WorkshopSession_Workshop_Date ON core.WorkshopSession(WorkshopID, SessionDate, StartTime);
+
+IF OBJECT_ID('core.vw_WorkshopSessionCounts', 'V') IS NULL
+EXEC('
+CREATE VIEW core.vw_WorkshopSessionCounts AS
+SELECT s.WorkshopSessionID,
+       s.WorkshopID,
+       (SELECT COUNT(*) FROM core.Registration r
+         WHERE r.WorkshopID = s.WorkshopID AND r.IsCancelled = 0) AS WorkshopRegistered
+  FROM core.WorkshopSession s;');
 
 IF OBJECT_ID('core.PresenterStaff', 'U') IS NULL
 BEGIN
@@ -1339,7 +1357,7 @@ CREATE TABLE core.FormQuestion (
     BranchOptionValue     NVARCHAR(100) NULL,
     CONSTRAINT UQ_FormQuestion_Key UNIQUE (FormTemplateVersionID, QuestionKey),
     CONSTRAINT CK_FormQuestion_FieldType
-        CHECK (FieldType IN ('text', 'longtext', 'number', 'select', 'radio', 'checkbox', 'agency'))
+        CHECK (FieldType IN ('text', 'longtext', 'number', 'select', 'radio', 'checkbox', 'agency', 'session'))
 );
 END
 GO

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
+import type { WorkshopSessionRow } from '@pe/shared';
 
 interface Props {
   workshopId: number;
@@ -17,47 +18,101 @@ function fmtDate(iso: string | null): string {
   });
 }
 
+function fmtTime(time: string | null): string {
+  if (!time) return '—';
+  const [h, m] = time.split(':').map(Number);
+  const suffix = (h ?? 0) >= 12 ? 'PM' : 'AM';
+  const hour = (h ?? 0) % 12 || 12;
+  return `${hour}:${String(m ?? 0).padStart(2, '0')} ${suffix}`;
+}
+
+/** Minutes since midnight for `HH:mm`, used to preview the repeat helper. */
+function minutesOf(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+function timeOf(minutes: number): string {
+  const wrapped = ((minutes % 1440) + 1440) % 1440;
+  return `${String(Math.floor(wrapped / 60)).padStart(2, '0')}:${String(wrapped % 60).padStart(2, '0')}`;
+}
+
+const inputStyle = { marginBottom: 0 } as const;
+
 /**
  * Sessions on a workshop.
  *
- * A workshop usually has one session, but 311 have more than one. The date is
- * stored on the session, not the workshop, so this is where a multi-day series
- * is actually described.
+ * A workshop usually has one session, but some have more than one. The date,
+ * time window and seat count live on the session, not the workshop, so this
+ * is where a multi-session day is described.
+ *
+ * Sessions are descriptive: registrants still book the workshop, so capacity
+ * here is for staff planning and never blocks a registration.
  */
 export function WorkshopSessions({ workshopId, canEdit }: Props) {
   const qc = useQueryClient();
-  const [adding, setAdding] = useState(false);
-  const [date, setDate] = useState('');
-  const [staff, setStaff] = useState('');
+  const [adding, setAdding] = useState<'one' | 'several' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+
+  const [date, setDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [capacity, setCapacity] = useState('');
+
+  const [bulkCount, setBulkCount] = useState('3');
+  const [bulkDuration, setBulkDuration] = useState('60');
 
   const sessions = useQuery({
     queryKey: ['workshop', workshopId, 'sessions'],
     queryFn: () => api.workshops.sessions(workshopId),
   });
 
-  const presenters = useQuery({
-    queryKey: ['presenters', 'all'],
-    queryFn: () => api.presenters.list({ pageSize: 500 }),
-    enabled: adding,
-    staleTime: 5 * 60_000,
-  });
-
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['workshop', workshopId, 'sessions'] });
+  };
+
+  const resetForm = () => {
+    setAdding(null);
+    setDate('');
+    setStartTime('');
+    setEndTime('');
+    setCapacity('');
+    setBulkCount('3');
+    setBulkDuration('60');
+    setError(null);
   };
 
   const add = useMutation({
     mutationFn: () =>
       api.workshops.addSession(workshopId, {
         sessionDate: date,
-        staffId: staff ? Number(staff) : null,
+        startTime: startTime || null,
+        endTime: endTime || null,
+        maxEnrollment: capacity ? Number(capacity) : null,
       }),
-    onSuccess: () => {
-      setAdding(false);
-      setDate('');
-      setStaff('');
-      setError(null);
+    onSuccess: (res) => {
+      resetForm();
+      // The session was created; the warning explains a scheduling mismatch
+      // rather than a failure, so it is shown after the form closes.
+      if (res.warning) setWarning(res.warning);
+      invalidate();
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  const addBulk = useMutation({
+    mutationFn: () =>
+      api.workshops.addSessionsBulk(workshopId, {
+        sessionDate: date,
+        startTime,
+        count: Number(bulkCount),
+        durationMinutes: Number(bulkDuration),
+        maxEnrollment: capacity ? Number(capacity) : null,
+      }),
+    onSuccess: (res) => {
+      resetForm();
+      if (res.warning) setWarning(res.warning);
       invalidate();
     },
     onError: (e: Error) => setError(e.message),
@@ -74,16 +129,37 @@ export function WorkshopSessions({ workshopId, canEdit }: Props) {
 
   const rows = sessions.data?.data ?? [];
 
+  // Incomplete rows (no time) sort first so they are easy to find and fix.
+  const sorted = [...rows].sort((a, b) => {
+    if (!a.StartTime && b.StartTime) return -1;
+    if (a.StartTime && !b.StartTime) return 1;
+    return 0;
+  });
+
+  // Preview of what the repeat helper will create.
+  const bulkPreview =
+    adding === 'several' && date && startTime && Number(bulkCount) > 0 && Number(bulkDuration) >= 5
+      ? Array.from({ length: Math.min(Number(bulkCount), 12) }, (_, i) => {
+          const from = minutesOf(startTime) + i * Number(bulkDuration);
+          return `${fmtTime(timeOf(from))} – ${fmtTime(timeOf(from + Number(bulkDuration)))}`;
+        })
+      : [];
+
   return (
     <div className="tab-section">
       <div className="tab-head">
         <p className="tab-summary">
           <strong>{rows.length}</strong> session{rows.length === 1 ? '' : 's'}
         </p>
-        {canEdit && !adding && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdding(true)}>
-            Add session
-          </button>
+        {canEdit && adding === null && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdding('several')}>
+              Add several
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdding('one')}>
+              Add session
+            </button>
+          </div>
         )}
       </div>
 
@@ -93,9 +169,23 @@ export function WorkshopSessions({ workshopId, canEdit }: Props) {
         </div>
       )}
 
-      {adding && (
+      {warning && (
+        <div className="alert alert-warn" role="status">
+          <span>{warning}</span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => setWarning(null)}
+            aria-label="Dismiss"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {adding !== null && (
         <div className="tab-add">
-          <div className="field" style={{ marginBottom: 0 }}>
+          <div className="field" style={inputStyle}>
             <label htmlFor="sess-date">Session date</label>
             <input
               id="sess-date"
@@ -105,42 +195,90 @@ export function WorkshopSessions({ workshopId, canEdit }: Props) {
               onChange={(e) => setDate(e.target.value)}
             />
           </div>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label htmlFor="sess-staff">Presenter (optional)</label>
-            <select
-              id="sess-staff"
+          <div className="field" style={inputStyle}>
+            <label htmlFor="sess-start">Start</label>
+            <input
+              id="sess-start"
+              type="time"
               className="input"
-              value={staff}
-              onChange={(e) => setStaff(e.target.value)}
-            >
-              <option value="">Not set</option>
-              {(presenters.data?.data ?? []).map((p) => (
-                <option key={p.PresenterStaffID} value={p.PresenterStaffID}>
-                  {[p.FirstName, p.LastName].filter(Boolean).join(' ')}
-                </option>
-              ))}
-            </select>
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+            />
+          </div>
+          {adding === 'one' && (
+            <div className="field" style={inputStyle}>
+              <label htmlFor="sess-end">End</label>
+              <input
+                id="sess-end"
+                type="time"
+                className="input"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+              />
+            </div>
+          )}
+          {adding === 'several' && (
+            <>
+              <div className="field" style={inputStyle}>
+                <label htmlFor="sess-count">How many</label>
+                <input
+                  id="sess-count"
+                  type="number"
+                  min={1}
+                  max={12}
+                  className="input"
+                  value={bulkCount}
+                  onChange={(e) => setBulkCount(e.target.value)}
+                />
+              </div>
+              <div className="field" style={inputStyle}>
+                <label htmlFor="sess-duration">Minutes each</label>
+                <input
+                  id="sess-duration"
+                  type="number"
+                  min={5}
+                  max={600}
+                  step={5}
+                  className="input"
+                  value={bulkDuration}
+                  onChange={(e) => setBulkDuration(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+          <div className="field" style={inputStyle}>
+            <label htmlFor="sess-capacity">Capacity</label>
+            <input
+              id="sess-capacity"
+              type="number"
+              min={0}
+              className="input"
+              placeholder="Workshop default"
+              value={capacity}
+              onChange={(e) => setCapacity(e.target.value)}
+            />
           </div>
           <button
             type="button"
             className="btn btn-primary btn-sm"
-            disabled={!date || add.isPending}
-            onClick={() => add.mutate()}
+            disabled={!date || !startTime || add.isPending || addBulk.isPending}
+            onClick={() => (adding === 'several' ? addBulk.mutate() : add.mutate())}
           >
-            {add.isPending ? 'Adding…' : 'Add'}
+            {add.isPending || addBulk.isPending ? 'Adding…' : adding === 'several' ? 'Add all' : 'Add'}
           </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => {
-              setAdding(false);
-              setDate('');
-              setStaff('');
-              setError(null);
-            }}
-          >
+          <button type="button" className="btn btn-ghost btn-sm" onClick={resetForm}>
             Cancel
           </button>
+
+          <p className="tab-summary" style={{ flexBasis: '100%' }}>
+            Capacity is for planning. Registrations are taken against the workshop's capacity.
+          </p>
+
+          {bulkPreview.length > 0 && (
+            <p className="tab-summary" style={{ flexBasis: '100%' }}>
+              Will create: {bulkPreview.join(' · ')}
+            </p>
+          )}
         </div>
       )}
 
@@ -157,17 +295,26 @@ export function WorkshopSessions({ workshopId, canEdit }: Props) {
           <thead>
             <tr>
               <th scope="col">Date</th>
-              <th scope="col">Presenter</th>
+              <th scope="col">Start</th>
+              <th scope="col">End</th>
+              <th scope="col" className="num">Capacity</th>
+              <th scope="col" className="num">Workshop regs</th>
               <th scope="col" className="num">Attended</th>
               <th scope="col" className="num">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((s) => (
+            {sorted.map((s: WorkshopSessionRow) => (
               <tr key={s.WorkshopSessionID}>
                 <td data-label="Date">{fmtDate(s.SessionDate)}</td>
-                <td data-label="Presenter" className="muted">
-                  {s.PresenterName ?? '—'}
+                <td data-label="Start">{fmtTime(s.StartTime)}</td>
+                <td data-label="End">{fmtTime(s.EndTime)}</td>
+                <td data-label="Capacity" className="num">
+                  {s.EffectiveCapacity ?? '—'}
+                  {s.CapacityInherited && <span className="muted"> (from workshop)</span>}
+                </td>
+                <td data-label="Workshop regs" className="num">
+                  {s.WorkshopRegistered}
                 </td>
                 <td data-label="Attended" className="num">
                   {s.RegAttend ?? 0}

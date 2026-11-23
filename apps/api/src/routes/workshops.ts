@@ -1,10 +1,100 @@
 ﻿import { Router } from 'express';
 import { z } from 'zod';
-import { query, sql, type SqlParam } from '../db.js';
+import { getPool, query, sql, type SqlParam } from '../db.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { checkWorkshopCapacity } from '../services/notifications.js';
+import {
+  MAX_BULK_SESSIONS,
+  planBulkSessions,
+  sessionCapacity,
+  validateSession,
+} from '../services/sessions.js';
 
 export const workshopsRouter = Router();
+
+/** Writable session fields. Shared by POST (required date) and PATCH (partial). */
+const sessionWriteSchema = z.object({
+  sessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:mm').nullable().optional(),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:mm').nullable().optional(),
+  maxEnrollment: z.number().int().nonnegative().nullable().optional(),
+  minEnrollment: z.number().int().nonnegative().nullable().optional(),
+  notes: z.string().max(400).nullable().optional(),
+});
+
+/**
+ * A session's date must fall inside the workshop's own range.
+ *
+ * A workshop with no dates cannot constrain anything, so this returns null
+ * rather than blocking — legacy workshops often have one date and not the
+ * other.
+ */
+async function checkSessionDateInWorkshop(
+  workshopId: number,
+  sessionDate: string,
+): Promise<string | null> {
+  const r = await query<{ StartDate: Date | null; EndDate: Date | null }>(
+    `SELECT StartDate, EndDate FROM core.Workshop WHERE WorkshopID = @id`,
+    { id: { type: sql.Int, value: workshopId } },
+  );
+
+  const w = r.recordset[0];
+  if (!w) return 'Workshop not found';
+
+  const day = sessionDate;
+  if (w.StartDate && day < w.StartDate.toISOString().slice(0, 10)) {
+    return `Session date cannot be before the workshop starts (${w.StartDate.toISOString().slice(0, 10)})`;
+  }
+  if (w.EndDate && day > w.EndDate.toISOString().slice(0, 10)) {
+    return `Session date cannot be after the workshop ends (${w.EndDate.toISOString().slice(0, 10)})`;
+  }
+  return null;
+}
+
+/**
+ * A session on a single-day workshop should sit inside the workshop's own
+ * time window.
+ *
+ * This is a warning, not a rejection: a workshop's times are often just the
+ * first session's, and staff may legitimately add an afternoon session to a
+ * workshop whose time field was never widened. Returning the message lets
+ * the UI explain rather than silently accepting a session that looks wrong.
+ */
+async function sessionTimeWarning(
+  workshopId: number,
+  startTime: string | null | undefined,
+  endTime: string | null | undefined,
+): Promise<string | null> {
+  if (!startTime && !endTime) return null;
+
+  const r = await query<{
+    StartDate: Date | null;
+    EndDate: Date | null;
+    StartTime: string | null;
+    EndTime: string | null;
+  }>(
+    `SELECT StartDate, EndDate,
+            CONVERT(NVARCHAR(5), StartTime, 108) AS StartTime,
+            CONVERT(NVARCHAR(5), EndTime, 108)   AS EndTime
+       FROM core.Workshop WHERE WorkshopID = @id`,
+    { id: { type: sql.Int, value: workshopId } },
+  );
+
+  const w = r.recordset[0];
+  if (!w || !w.StartTime || !w.EndTime) return null;
+
+  // Only meaningful for a workshop that runs on one day; a multi-day series
+  // has no single window to compare against.
+  const singleDay =
+    w.StartDate && w.EndDate && w.StartDate.toISOString().slice(0, 10) === w.EndDate.toISOString().slice(0, 10);
+  if (!singleDay) return null;
+
+  const outsideStart = startTime ? startTime < w.StartTime : false;
+  const outsideEnd = endTime ? endTime > w.EndTime : false;
+  if (!outsideStart && !outsideEnd) return null;
+
+  return `This session runs outside the workshop's own time (${w.StartTime}–${w.EndTime}). Update the workshop's times, or confirm the session is correct.`;
+}
 
 const listQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -727,17 +817,57 @@ workshopsRouter.get('/:id/sessions', requireAuth, async (req, res, next) => {
       return;
     }
 
-    const result = await query(
-      `SELECT s.WorkshopSessionID, s.SessionDate, s.RegAttend, s.ESchoolAttend, s.StaffID,
-              CONCAT(p.FirstName, ' ', p.LastName) AS PresenterName
+    // Capacity is resolved here rather than in the UI so the fallback rule
+    // lives in one place. WorkshopRegistered is the workshop's own count,
+    // repeated per row — sessions are descriptive, so there is no per-session
+    // roster to report.
+    const result = await query<{
+      WorkshopSessionID: number;
+      SessionDate: Date | null;
+      StartTime: string | null;
+      EndTime: string | null;
+      MaxEnrollment: number | null;
+      MinEnrollment: number | null;
+      Notes: string | null;
+      RegAttend: number | null;
+      ESchoolAttend: number | null;
+      WorkshopMax: number | null;
+      WorkshopRegistered: number;
+    }>(
+      `SELECT s.WorkshopSessionID, s.SessionDate,
+              CONVERT(NVARCHAR(5), s.StartTime, 108) AS StartTime,
+              CONVERT(NVARCHAR(5), s.EndTime, 108)   AS EndTime,
+              s.MaxEnrollment, s.MinEnrollment, s.Notes,
+              s.RegAttend, s.ESchoolAttend,
+              w.MaxEnrollment AS WorkshopMax,
+              ISNULL(c.WorkshopRegistered, 0) AS WorkshopRegistered
          FROM core.WorkshopSession s
-         LEFT JOIN core.PresenterStaff p ON p.PresenterStaffID = s.StaffID
+         LEFT JOIN core.Workshop w ON w.WorkshopID = s.WorkshopID
+         LEFT JOIN core.vw_WorkshopSessionCounts c ON c.WorkshopSessionID = s.WorkshopSessionID
         WHERE s.WorkshopID = @id
-        ORDER BY s.SessionDate`,
+        ORDER BY s.SessionDate, s.StartTime`,
       { id: { type: sql.Int, value: id } },
     );
 
-    res.json({ data: result.recordset });
+    const data = result.recordset.map((r) => {
+      const effective = sessionCapacity(r.MaxEnrollment, r.WorkshopMax);
+      return {
+        WorkshopSessionID: r.WorkshopSessionID,
+        SessionDate: r.SessionDate ? r.SessionDate.toISOString().slice(0, 10) : null,
+        StartTime: r.StartTime,
+        EndTime: r.EndTime,
+        MaxEnrollment: r.MaxEnrollment,
+        MinEnrollment: r.MinEnrollment,
+        Notes: r.Notes,
+        EffectiveCapacity: effective,
+        CapacityInherited: r.MaxEnrollment === null && effective !== null,
+        WorkshopRegistered: r.WorkshopRegistered,
+        RegAttend: r.RegAttend,
+        ESchoolAttend: r.ESchoolAttend,
+      };
+    });
+
+    res.json({ data });
   } catch (err) {
     next(err);
   }
@@ -950,12 +1080,7 @@ workshopsRouter.post(
   async (req, res, next) => {
     try {
       const id = Number(req.params.id);
-      const parsed = z
-        .object({
-          sessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
-          staffId: z.number().int().nullable().optional(),
-        })
-        .safeParse(req.body);
+      const parsed = sessionWriteSchema.safeParse(req.body);
 
       if (!Number.isInteger(id)) {
         res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
@@ -970,20 +1095,174 @@ workshopsRouter.post(
         return;
       }
 
+      const problem = validateSession(parsed.data);
+      if (problem) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: problem.message,
+          details: [problem],
+        });
+        return;
+      }
+
+      const rangeProblem = await checkSessionDateInWorkshop(id, parsed.data.sessionDate);
+      if (rangeProblem) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: rangeProblem,
+          details: [{ path: 'sessionDate', message: rangeProblem }],
+        });
+        return;
+      }
+
       // WorkshopSessionID is not IDENTITY (legacy key preserved by the ETL).
+      // StaffID is deliberately not written: a workshop almost always has the
+      // same presenter for every session, and that is recorded on the
+      // workshop's Presenters tab. The column stays for legacy rows.
       const created = await query<{ id: number }>(
-        `INSERT INTO core.WorkshopSession (WorkshopSessionID, WorkshopID, StaffID, SessionDate)
+        `INSERT INTO core.WorkshopSession
+                (WorkshopSessionID, WorkshopID, SessionDate,
+                 StartTime, EndTime, MaxEnrollment, MinEnrollment, Notes)
          OUTPUT INSERTED.WorkshopSessionID AS id
          VALUES ((SELECT ISNULL(MAX(WorkshopSessionID), 0) + 1 FROM core.WorkshopSession),
-                 @w, @staff, @date)`,
+                 @w, @date, @start, @end, @max, @min, @notes)`,
         {
           w: { type: sql.Int, value: id },
-          staff: { type: sql.Int, value: parsed.data.staffId ?? null },
           date: { type: sql.Date, value: parsed.data.sessionDate },
+          start: { type: sql.VarChar(8), value: parsed.data.startTime ?? null },
+          end: { type: sql.VarChar(8), value: parsed.data.endTime ?? null },
+          max: { type: sql.Int, value: parsed.data.maxEnrollment ?? null },
+          min: { type: sql.Int, value: parsed.data.minEnrollment ?? null },
+          notes: { type: sql.NVarChar(400), value: parsed.data.notes ?? null },
         },
       );
 
-      res.status(201).json({ workshopSessionId: created.recordset[0]!.id });
+      const warning = await sessionTimeWarning(id, parsed.data.startTime, parsed.data.endTime);
+
+      res.status(201).json({ workshopSessionId: created.recordset[0]!.id, warning });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/workshops/{id}/sessions/bulk:
+ *   post:
+ *     tags: [Workshops]
+ *     summary: Add several back-to-back sessions in one action
+ *     description: >
+ *       Creates `count` sessions starting at `startTime`, each
+ *       `durationMinutes` long. Each row is a normal, independent session —
+ *       this is a pre-fill, not a template. `count` is capped at 12.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *     responses:
+ *       201: { description: Created }
+ *       422: { description: Validation failed }
+ */
+workshopsRouter.post(
+  '/:id/sessions/bulk',
+  requireAuth,
+  requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EDITOR'),
+  async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      const parsed = z
+        .object({
+          sessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+          startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:mm'),
+          count: z.number().int().min(1).max(MAX_BULK_SESSIONS),
+          durationMinutes: z.number().int().min(5).max(600),
+          maxEnrollment: z.number().int().nonnegative().nullable().optional(),
+        })
+        .safeParse(req.body);
+
+      if (!Number.isInteger(id)) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+        return;
+      }
+      if (!parsed.success) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: 'Invalid bulk session request',
+          details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+        });
+        return;
+      }
+
+      const { sessionDate, startTime, count, durationMinutes } = parsed.data;
+
+      const rangeProblem = await checkSessionDateInWorkshop(id, sessionDate);
+      if (rangeProblem) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: rangeProblem,
+          details: [{ path: 'sessionDate', message: rangeProblem }],
+        });
+        return;
+      }
+
+      const plan = planBulkSessions(startTime, count, durationMinutes);
+      if (plan.length === 0) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: 'Start time must be HH:mm',
+          details: [{ path: 'startTime', message: 'Start time must be HH:mm' }],
+        });
+        return;
+      }
+
+      // One transaction so a failure part-way leaves nothing behind. The
+      // ids are allocated from the current maximum, then incremented.
+      const pool = await getPool();
+      const tx = pool.transaction();
+      await tx.begin();
+
+      try {
+        const maxRow = await tx
+          .request()
+          .query<{ NextId: number }>(
+            'SELECT ISNULL(MAX(WorkshopSessionID), 0) + 1 AS NextId FROM core.WorkshopSession',
+          );
+        let nextId = maxRow.recordset[0]!.NextId;
+
+        const created: Array<{ workshopSessionId: number; startTime: string; endTime: string }> = [];
+
+        for (const slot of plan) {
+          const r = await tx
+            .request()
+            .input('id', sql.Int, nextId)
+            .input('w', sql.Int, id)
+            .input('date', sql.Date, sessionDate)
+            .input('start', sql.VarChar(8), slot.startTime)
+            .input('end', sql.VarChar(8), slot.endTime)
+            .input('max', sql.Int, parsed.data.maxEnrollment ?? null)
+            .query<{ id: number }>(
+              `INSERT INTO core.WorkshopSession
+                      (WorkshopSessionID, WorkshopID, SessionDate,
+                       StartTime, EndTime, MaxEnrollment)
+               OUTPUT INSERTED.WorkshopSessionID AS id
+               VALUES (@id, @w, @date, @start, @end, @max)`,
+            );
+
+          created.push({
+            workshopSessionId: r.recordset[0]!.id,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+          });
+          nextId += 1;
+        }
+
+        await tx.commit();
+        const warning = await sessionTimeWarning(id, plan[0]!.startTime, plan[plan.length - 1]!.endTime);
+        res.status(201).json({ created, warning });
+      } catch (err) {
+        await tx.rollback();
+        throw err;
+      }
     } catch (err) {
       next(err);
     }
@@ -1011,20 +1290,78 @@ workshopsRouter.patch(
     try {
       const id = Number(req.params.id);
       const sessionId = Number(req.params.sessionId);
-      const parsed = z
-        .object({
-          sessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-          staffId: z.number().int().nullable().optional(),
-        })
-        .safeParse(req.body);
+      const parsed = sessionWriteSchema.partial().safeParse(req.body);
 
       if (!Number.isInteger(id) || !Number.isInteger(sessionId)) {
         res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
         return;
       }
       if (!parsed.success) {
-        res.status(422).json({ error: 'validation_failed', message: 'Invalid session' });
+        res.status(422).json({
+          error: 'validation_failed',
+          message: 'Invalid session',
+          details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+        });
         return;
+      }
+
+      // Cross-field rules need the merged state, not just the fields sent —
+      // patching only EndTime must still be checked against the stored
+      // StartTime.
+      const current = await query<{
+        SessionDate: Date | null;
+        StartTime: string | null;
+        EndTime: string | null;
+        MinEnrollment: number | null;
+        MaxEnrollment: number | null;
+      }>(
+        `SELECT SessionDate,
+                CONVERT(NVARCHAR(5), StartTime, 108) AS StartTime,
+                CONVERT(NVARCHAR(5), EndTime, 108)   AS EndTime,
+                MinEnrollment, MaxEnrollment
+           FROM core.WorkshopSession
+          WHERE WorkshopSessionID = @sid AND WorkshopID = @w`,
+        {
+          sid: { type: sql.Int, value: sessionId },
+          w: { type: sql.Int, value: id },
+        },
+      );
+
+      const existing = current.recordset[0];
+      if (!existing) {
+        res.status(404).json({ error: 'not_found', message: 'Session not found' });
+        return;
+      }
+
+      const merged = {
+        startTime: parsed.data.startTime !== undefined ? parsed.data.startTime : existing.StartTime,
+        endTime: parsed.data.endTime !== undefined ? parsed.data.endTime : existing.EndTime,
+        minEnrollment:
+          parsed.data.minEnrollment !== undefined ? parsed.data.minEnrollment : existing.MinEnrollment,
+        maxEnrollment:
+          parsed.data.maxEnrollment !== undefined ? parsed.data.maxEnrollment : existing.MaxEnrollment,
+      };
+
+      const problem = validateSession(merged);
+      if (problem) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: problem.message,
+          details: [problem],
+        });
+        return;
+      }
+
+      if (parsed.data.sessionDate !== undefined) {
+        const rangeProblem = await checkSessionDateInWorkshop(id, parsed.data.sessionDate);
+        if (rangeProblem) {
+          res.status(422).json({
+            error: 'validation_failed',
+            message: rangeProblem,
+            details: [{ path: 'sessionDate', message: rangeProblem }],
+          });
+          return;
+        }
       }
 
       const sets: string[] = [];
@@ -1036,9 +1373,25 @@ workshopsRouter.patch(
         sets.push('SessionDate = @date');
         params.date = { type: sql.Date, value: parsed.data.sessionDate };
       }
-      if (parsed.data.staffId !== undefined) {
-        sets.push('StaffID = @staff');
-        params.staff = { type: sql.Int, value: parsed.data.staffId };
+      if (parsed.data.startTime !== undefined) {
+        sets.push('StartTime = @start');
+        params.start = { type: sql.VarChar(8), value: parsed.data.startTime };
+      }
+      if (parsed.data.endTime !== undefined) {
+        sets.push('EndTime = @end');
+        params.end = { type: sql.VarChar(8), value: parsed.data.endTime };
+      }
+      if (parsed.data.maxEnrollment !== undefined) {
+        sets.push('MaxEnrollment = @max');
+        params.max = { type: sql.Int, value: parsed.data.maxEnrollment };
+      }
+      if (parsed.data.minEnrollment !== undefined) {
+        sets.push('MinEnrollment = @min');
+        params.min = { type: sql.Int, value: parsed.data.minEnrollment };
+      }
+      if (parsed.data.notes !== undefined) {
+        sets.push('Notes = @notes');
+        params.notes = { type: sql.NVarChar(400), value: parsed.data.notes };
       }
       if (sets.length === 0) {
         res.status(422).json({ error: 'validation_failed', message: 'No fields supplied' });
@@ -1055,7 +1408,9 @@ workshopsRouter.patch(
         res.status(404).json({ error: 'not_found', message: 'Session not found' });
         return;
       }
-      res.status(204).end();
+
+      const warning = await sessionTimeWarning(id, merged.startTime, merged.endTime);
+      res.status(200).json({ warning });
     } catch (err) {
       next(err);
     }

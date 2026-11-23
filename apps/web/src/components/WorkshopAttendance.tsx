@@ -85,7 +85,8 @@ export function WorkshopAttendance({ workshopId, canEdit }: Props) {
             {sessionRows.map((s) => (
               <option key={s.WorkshopSessionID} value={s.WorkshopSessionID}>
                 {fmtDate(s.SessionDate)}
-                {s.PresenterName ? ` · ${s.PresenterName}` : ''}
+                {s.StartTime ? ` · ${s.StartTime}` : ''}
+                {s.EndTime ? `–${s.EndTime}` : ''}
               </option>
             ))}
           </select>

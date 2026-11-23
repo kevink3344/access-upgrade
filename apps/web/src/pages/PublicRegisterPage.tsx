@@ -616,6 +616,22 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
                         <option key={o} value={o}>{o}</option>
                       ))}
                     </select>
+                  ) : q.fieldType === 'session' ? (
+                    <select
+                      id={`q-${q.questionKey}`}
+                      value={typeof value === 'string' ? value : ''}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
+                      aria-invalid={!!err}
+                      aria-required={q.isRequired}
+                    >
+                      <option value="">Select a session…</option>
+                      {(data?.sessions ?? []).map((s) => (
+                        <option key={s.workshopSessionId} value={s.label}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
                   ) : q.fieldType === 'radio' ? (
                     <div className="q-choices" role="radiogroup" aria-required={q.isRequired}>
                       {q.options.map((o) => (

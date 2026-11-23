@@ -150,6 +150,60 @@ function seatsRemaining(l: ResolvedLink): number | null {
   return Math.max(0, Math.min(byWorkshop, byWeb));
 }
 
+/** One session as the public form sees it. */
+export interface PublicSessionOption {
+  workshopSessionId: number;
+  /** The value stored as the answer, e.g. "10:00 AM – 11:00 AM". */
+  label: string;
+  startTime: string | null;
+  endTime: string | null;
+}
+
+/**
+ * The workshop's sessions, formatted for a `session` form question.
+ *
+ * The label is what gets stored as the answer, so it must be readable on its
+ * own years later — a bare session id would be meaningless once the row is
+ * edited or deleted. Sessions with no time are skipped: there is nothing to
+ * choose between them and they would all read the same.
+ */
+async function listSessionsForPublic(workshopId: number): Promise<PublicSessionOption[]> {
+  const r = await query<{
+    WorkshopSessionID: number;
+    SessionDate: Date | null;
+    StartTime: string | null;
+    EndTime: string | null;
+  }>(
+    `SELECT WorkshopSessionID, SessionDate,
+            CONVERT(NVARCHAR(5), StartTime, 108) AS StartTime,
+            CONVERT(NVARCHAR(5), EndTime, 108)   AS EndTime
+       FROM core.WorkshopSession
+      WHERE WorkshopID = @id AND StartTime IS NOT NULL
+      ORDER BY SessionDate, StartTime`,
+    { id: { type: sql.Int, value: workshopId } },
+  );
+
+  return r.recordset.map((s) => {
+    const start = fmtTimeForPublic(s.StartTime);
+    const end = fmtTimeForPublic(s.EndTime);
+    return {
+      workshopSessionId: s.WorkshopSessionID,
+      label: end ? `${start} – ${end}` : start,
+      startTime: s.StartTime,
+      endTime: s.EndTime,
+    };
+  });
+}
+
+/** "13:00" -> "1:00 PM". Matches how the page renders the workshop's own time. */
+function fmtTimeForPublic(time: string | null): string {
+  if (!time) return '';
+  const [h, m] = time.split(':').map(Number);
+  const suffix = (h ?? 0) >= 12 ? 'PM' : 'AM';
+  const hour = (h ?? 0) % 12 || 12;
+  return `${hour}:${String(m ?? 0).padStart(2, '0')} ${suffix}`;
+}
+
 async function logSubmission(
   linkId: number | null,
   ip: string,
@@ -247,10 +301,18 @@ publicRouter.get('/registration-links/:slug', async (req, res, next) => {
     // falls back to the built-in form the page has always rendered.
     const form = await getVersionForLink(link.RegistrationLinkID);
 
+    // A `session` question renders the workshop's own sessions, so they are
+    // sent only when the pinned form actually asks for one. Sessions are
+    // descriptive — this does not change what the registration records
+    // beyond the answer text.
+    const wantsSessions = form?.questions.some((q) => q.fieldType === 'session') ?? false;
+    const sessions = wantsSessions ? await listSessionsForPublic(link.WorkshopID) : [];
+
     res.json({
       state,
       seatsRemaining: seatsRemaining(link),
       form,
+      sessions,
       opensAt: link.OpensAt?.toISOString() ?? null,
       // Sent to the browser so the confirmation screen can forward the
       // registrant to payment. Only exposed while the link is actually open.
