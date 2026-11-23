@@ -44,6 +44,14 @@ SQL Server database, a documented REST API, and a responsive web application.
 | Web | React 19, Vite, TanStack Query, Recharts |
 | Auth | JWT access token + httpOnly refresh cookie, role-based access |
 
+### Stylesheets
+
+`apps/web/src/styles/ui.css` is an index only — it `@import`s one file per screen
+area (`ui-roster.css`, `ui-calendar.css`, `ui-form-designer.css`, …). Add rules to
+the section that owns the screen rather than to the index. Import order is the
+cascade order, so a new section belongs where its rules would have sat in the
+original single file.
+
 ## Getting started
 
 ### Prerequisites
@@ -122,6 +130,24 @@ powershell -File db/etl/compare-schema.ps1
 `db/schema.sql` is idempotent and non-destructive — it creates objects only when absent, so
 it is safe to run against a populated database. To change an existing object, add a guarded
 `ALTER` in `db/migrations/` and apply it to both databases.
+
+## Tests
+
+```bash
+npm test                     # API suite (Vitest + Supertest)
+npm run test --workspace=@pe/api -- --watch   # watch mode
+```
+
+The suite drives the real Express app through Supertest — no server needs to be
+running. It reads `apps/api/.env`, so it exercises the **test** database.
+
+**Every test is read-only.** Nothing in the suite inserts, updates or deletes
+rows, so a failed or interrupted run cannot leave data behind. Keep it that way:
+a test that writes must clean up after itself even when it throws, and the shared
+test database is used by staff for training.
+
+Tests live in `apps/api/test/` and are typechecked by `tsconfig.test.json`, which
+is separate from the build config so the shipped `dist/` never includes them.
 
 ## Documentation
 

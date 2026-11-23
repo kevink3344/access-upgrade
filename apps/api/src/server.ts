@@ -6,7 +6,7 @@ import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { env, isProd } from './env.js';
 import { getPool, closePool } from './db.js';
@@ -282,22 +282,32 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 // ---- Boot ----------------------------------------------------------------
-const server = app.listen(env.PORT, async () => {
-  console.log(`\n  API      http://localhost:${env.PORT}`);
-  console.log(`  Swagger  http://localhost:${env.PORT}/swagger`);
-  console.log(`  Spec     http://localhost:${env.PORT}/openapi.json\n`);
+// Only listen when this file is the process entry point. Tests import `app`
+// and drive it with supertest, which must not bind a port.
+const isEntryPoint = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
-  try {
-    await getPool();
-    console.log('  SQL      connected');
-    await seedSuperAdmin();
-  } catch (err) {
-    console.error('  SQL      connection failed:', (err as Error).message);
-  }
-});
+const server = isEntryPoint
+  ? app.listen(env.PORT, async () => {
+      console.log(`\n  API      http://localhost:${env.PORT}`);
+      console.log(`  Swagger  http://localhost:${env.PORT}/swagger`);
+      console.log(`  Spec     http://localhost:${env.PORT}/openapi.json\n`);
+
+      try {
+        await getPool();
+        console.log('  SQL      connected');
+        await seedSuperAdmin();
+      } catch (err) {
+        console.error('  SQL      connection failed:', (err as Error).message);
+      }
+    })
+  : null;
 
 async function shutdown(signal: string) {
   console.log(`\n[api] ${signal} received, shutting down`);
+  if (!server) {
+    await closePool();
+    process.exit(0);
+  }
   server.close(async () => {
     await closePool();
     process.exit(0);
