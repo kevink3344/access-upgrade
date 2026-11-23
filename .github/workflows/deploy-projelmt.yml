@@ -95,14 +95,18 @@ jobs:
           # the app searches (see apps/api/src/services/pdf.ts). The system
           # libraries Chrome needs are installed by the startup command, since
           # the build runner is not the machine that will run the app.
-          npm install --no-save --no-audit --no-fund puppeteer
-          PUPPETEER_CACHE_DIR="$OUT/.cache/puppeteer" npx puppeteer browsers install chrome
-          du -sh .cache/puppeteer
+          #
+          # Installed into $OUT explicitly rather than relying on npx to find
+          # puppeteer: --omit=dev removed it, and --no-save leaves no lockfile
+          # entry for npx to resolve.
+          PUPPETEER_CACHE_DIR="$OUT/.cache/puppeteer" \
+            npx --yes @puppeteer/browsers install chrome@stable --path "$OUT/.cache/puppeteer"
+          du -sh "$OUT/.cache/puppeteer"
 
           # Fail here rather than shipping a package with no browser: the app
           # would start and quietly report PDF downloads as unavailable.
-          CHROME_BIN=$(find .cache/puppeteer -type f -name chrome -print -quit)
-          test -n "$CHROME_BIN" || { echo "::error::puppeteer install produced no chrome binary"; exit 1; }
+          CHROME_BIN=$(find "$OUT/.cache/puppeteer" -type f -name chrome -print -quit)
+          test -n "$CHROME_BIN" || { echo "::error::no chrome binary was installed"; exit 1; }
           echo "chromium: $CHROME_BIN"
 
           echo "--- package contents ---"
