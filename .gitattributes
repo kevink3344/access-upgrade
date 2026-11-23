@@ -1,0 +1,4 @@
+# Shell scripts must keep LF endings. They run on the Linux App Service, and
+# bash cannot parse a shebang or command line that ends in CRLF — the script
+# fails with "$'\r': command not found" and the app never starts.
+*.sh text eol=lf
