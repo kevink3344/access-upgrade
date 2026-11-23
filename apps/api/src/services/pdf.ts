@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const execFileAsync = promisify(execFile);
 
@@ -23,9 +24,28 @@ const execFileAsync = promisify(execFile);
  * the same output for a fixed 8.5x11 layout.
  */
 
-/** Where the deploy step installs the managed Chromium. */
-const MANAGED_CACHE =
-  process.env.PUPPETEER_CACHE_DIR ?? path.join(os.homedir(), '.cache', 'puppeteer');
+/**
+ * Where a managed Chromium may live.
+ *
+ * The deploy workflow installs it into the package's own `.cache/puppeteer`,
+ * which lands beside `dist/` on App Service. Puppeteer's default is under the
+ * home directory, which is a *different* place on App Service (`/home` vs
+ * `/home/site/wwwroot`), so both are searched. PUPPETEER_CACHE_DIR wins if set.
+ */
+function managedCacheDirs(): string[] {
+  if (process.env.PUPPETEER_CACHE_DIR) return [process.env.PUPPETEER_CACHE_DIR];
+
+  // dist/services/pdf.js -> dist -> package root
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const packageRoot = path.resolve(here, '..', '..');
+
+  return [
+    path.join(packageRoot, '.cache', 'puppeteer'),
+    path.join(os.homedir(), '.cache', 'puppeteer'),
+  ];
+}
+
+const MANAGED_CACHE = managedCacheDirs()[0]!;
 
 const CANDIDATES = [
   // Explicit override wins, for environments with an unusual install path.
@@ -79,7 +99,11 @@ async function findManagedChromium(): Promise<string | null> {
     return null;
   }
 
-  return walk(MANAGED_CACHE, 0);
+  for (const dir of managedCacheDirs()) {
+    const found = await walk(dir, 0);
+    if (found) return found;
+  }
+  return null;
 }
 
 export async function findBrowser(): Promise<string | null> {
@@ -159,8 +183,8 @@ export interface PdfCapability {
   available: boolean;
   /** The executable in use, or null. Safe to expose: it is a path, not a secret. */
   browserPath: string | null;
-  /** Where a managed Chromium would be found, for the setup instructions. */
-  managedCacheDir: string;
+  /** Every directory searched for a managed browser, for troubleshooting. */
+  searchedDirs: string[];
 }
 
 export async function pdfCapability(): Promise<PdfCapability> {
@@ -168,6 +192,6 @@ export async function pdfCapability(): Promise<PdfCapability> {
   return {
     available: browser !== null,
     browserPath: browser,
-    managedCacheDir: MANAGED_CACHE,
+    searchedDirs: managedCacheDirs(),
   };
 }

@@ -99,6 +99,12 @@ jobs:
           PUPPETEER_CACHE_DIR="$OUT/.cache/puppeteer" npx puppeteer browsers install chrome
           du -sh .cache/puppeteer
 
+          # Fail here rather than shipping a package with no browser: the app
+          # would start and quietly report PDF downloads as unavailable.
+          CHROME_BIN=$(find .cache/puppeteer -type f -name chrome -print -quit)
+          test -n "$CHROME_BIN" || { echo "::error::puppeteer install produced no chrome binary"; exit 1; }
+          echo "chromium: $CHROME_BIN"
+
           echo "--- package contents ---"
           ls -la
           du -sh node_modules
@@ -135,6 +141,10 @@ jobs:
           # executable bit has to be restored here rather than asserted.
           chmod +x startup.sh
           test -x startup.sh || { echo "::error::startup.sh is not executable"; exit 1; }
+          # The browser must survive the artifact round-trip, or the app starts
+          # and silently reports PDF downloads as unavailable.
+          test -n "$(find .cache/puppeteer -type f -name chrome -print -quit 2>/dev/null)" \
+            || { echo "::error::no chrome binary in the deployed package"; exit 1; }
           echo "Package looks complete."
 
       - name: Deploy to Azure Web App

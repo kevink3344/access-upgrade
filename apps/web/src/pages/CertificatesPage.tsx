@@ -324,8 +324,7 @@ export function CertificatesPage() {
           <span>
             PDF downloads are unavailable — no Chromium browser was found on the server. Previews
             still work. An administrator can fix this by setting <code>CHROME_PATH</code> to a
-            browser executable, or by running{' '}
-            <code>npx puppeteer browsers install chrome</code> on the server.
+            browser executable on the host.
           </span>
         </div>
       )}
