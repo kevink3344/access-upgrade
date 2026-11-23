@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { query, sql, type SqlParam } from '../db.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
-import { renderPdf, findBrowser, PdfUnavailableError } from '../services/pdf.js';
+import { renderPdf, findBrowser, pdfCapability, PdfUnavailableError } from '../services/pdf.js';
 import {
   renderCertificateHtml,
   DEFAULT_VISIBLE_FIELDS,
@@ -925,8 +925,8 @@ certificatesRouter.get('/pdf/:participantId', requireAuth, async (req, res, next
 /** Reports whether PDF rendering is available, for the UI to warn early. */
 certificatesRouter.get('/capabilities', requireAuth, async (_req, res, next) => {
   try {
-    const browser = await findBrowser();
-    res.json({ pdfRendering: browser !== null });
+    const cap = await pdfCapability();
+    res.json({ pdfRendering: cap.available, browserPath: cap.browserPath });
   } catch (err) {
     next(err);
   }

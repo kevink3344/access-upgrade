@@ -322,9 +322,10 @@ export function CertificatesPage() {
       {caps && !caps.pdfRendering && (
         <div className="alert alert-error" role="alert">
           <span>
-            PDF rendering is unavailable — no Chromium browser was found on the server. Previews
-            still work, but downloads will fail. Set <code>CHROME_PATH</code> to the browser
-            executable.
+            PDF downloads are unavailable — no Chromium browser was found on the server. Previews
+            still work. An administrator can fix this by setting <code>CHROME_PATH</code> to a
+            browser executable, or by running{' '}
+            <code>npx puppeteer browsers install chrome</code> on the server.
           </span>
         </div>
       )}

@@ -83,11 +83,42 @@ Generate a JWT secret:
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
-Also set the **Startup Command** to `npm start`, or rely on `package.json`'s `start` script.
+Also set the **Startup Command** to `bash startup.sh`. It installs the Chromium
+runtime libraries the certificate PDFs need, then starts the API — see
+[Certificate PDF rendering](#certificate-pdf-rendering) below.
 
 ### `WEBSITE_NODE_DEFAULT_VERSION`
 
 Set to `~22` so the App Service matches the build.
+
+## Certificate PDF rendering
+
+PDF downloads are rendered by headless Chromium. The Linux App Service image
+ships **no browser and not the shared libraries Chrome needs**, so both are
+provisioned by the pipeline:
+
+| What | Where | Why |
+| --- | --- | --- |
+| Chromium binary | Deploy workflow: `npx puppeteer browsers install chrome` into `.cache/puppeteer` | The app searches that cache when no system browser exists |
+| Runtime libraries | `scripts/startup.sh`, run on the host at boot | `apt-get` must run on the machine that runs the app, not the build runner |
+
+**Startup Command** must therefore be `bash startup.sh`, not `npm start`. The
+wrapper installs the libraries (best-effort), then `exec`s `node dist/server.js`.
+
+Every step is best-effort: if the libraries cannot be installed the site still
+starts, and the Certificates page reports that PDF downloads are unavailable
+rather than the whole app failing to boot. Previews never depend on the browser.
+
+To confirm on a deployed environment:
+
+```bash
+curl -H "Authorization: Bearer <token>" https://projelmt-dev.azurewebsites.net/api/certificates/capabilities
+# {"pdfRendering":true,"browserPath":"/home/site/wwwroot/.cache/puppeteer/chrome/..."}
+```
+
+If `pdfRendering` is `false`, either set `CHROME_PATH` to a browser on the host
+or check the startup log for the `[startup]` lines.
+
 
 ## Notes on behaviour in production
 
