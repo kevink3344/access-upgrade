@@ -9,6 +9,7 @@ import {
   type CertificateModel,
   type CertificateFieldVisibility,
 } from '../services/certificate-template.js';
+import { deriveTemplateName, pickTemplate } from '../services/certificate-templates.js';
 import crypto from 'node:crypto';
 
 export const certificatesRouter = Router();
@@ -259,7 +260,7 @@ certificatesRouter.post(
         },
       );
       const ordinal = (count.recordset[0]?.n ?? 0) + 1;
-      const name = d.name?.trim() || `${d.certificateType} ${ordinal}`;
+      const name = deriveTemplateName(d.name, d.certificateType, ordinal - 1);
 
       // Copy the logos from the most recent template so a new certificate is
       // usable immediately rather than starting blank. Staff can still replace
@@ -756,26 +757,16 @@ async function buildModel(
   const e = elig.recordset[0];
   if (!e) return null;
 
-  // Several templates may exist per year and type. An explicit id wins;
-  // otherwise the oldest is used, which is the one that existed before
-  // multiple templates were allowed, so existing behaviour is unchanged.
-  const tpl = templateId
-    ? await query<Record<string, unknown>>(
-        `SELECT * FROM core.CertificateTemplate
-          WHERE CertificateTemplateID = @tid AND SchoolYearID = @sy AND CertificateType = @type`,
-        {
-          tid: { type: sql.Int, value: templateId },
-          sy: { type: sql.Int, value: schoolYearId },
-          type: { type: sql.NVarChar(10), value: type },
-        },
-      )
-    : await query<Record<string, unknown>>(
-        `SELECT TOP 1 * FROM core.CertificateTemplate
-          WHERE SchoolYearID = @sy AND CertificateType = @type
-          ORDER BY CertificateTemplateID`,
-        { sy: { type: sql.Int, value: schoolYearId }, type: { type: sql.NVarChar(10), value: type } },
-      );
-  const t = tpl.recordset[0];
+  // Several templates may exist per year and type. All candidates are fetched
+  // and pickTemplate decides, so the "explicit id wins, otherwise the oldest"
+  // rule lives in one tested place rather than being restated in SQL.
+  const tpl = await query<{ CertificateTemplateID: number }>(
+    `SELECT * FROM core.CertificateTemplate
+      WHERE SchoolYearID = @sy AND CertificateType = @type
+      ORDER BY CertificateTemplateID`,
+    { sy: { type: sql.Int, value: schoolYearId }, type: { type: sql.NVarChar(10), value: type } },
+  );
+  const t = pickTemplate(tpl.recordset, templateId ?? null) as Record<string, unknown> | null;
   if (!t) return null;
 
   const ovr = await query<Record<string, unknown>>(

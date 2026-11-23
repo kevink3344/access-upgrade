@@ -26,15 +26,28 @@ ELSE
     PRINT 'core.CertificateTemplate.Name already exists';
 GO
 
--- Backfill a readable name for the rows that predate the column. SQL Server
--- does not allow an alias on the UPDATE target, so the table is named and the
--- join aliased instead.
+-- Backfill a readable name for the rows that predate the column.
+--
+-- A correlated subquery rather than UPDATE ... FROM. SQL Server rejects a
+-- statement that names the target table and also aliases it in a FROM clause
+-- (the alias shadows the target, and `t.ID = core.Table.ID` in the WHERE is
+-- not a resolvable reference). Expressing the join inside SET avoids that
+-- entirely and is valid on every SQL Server version.
+--
+-- ref.SchoolYear.SchoolYear is nullable, so the fallback keeps the name from
+-- becoming "CEU " with a trailing space.
 UPDATE core.CertificateTemplate
-   SET Name = CONCAT(t.CertificateType, ' ', sy.SchoolYear)
-  FROM core.CertificateTemplate t
-  JOIN ref.SchoolYear sy ON sy.SchoolYearID = t.SchoolYearID
- WHERE t.CertificateTemplateID = core.CertificateTemplate.CertificateTemplateID
-   AND t.Name IS NULL;
+   SET Name = CONCAT(
+         CertificateType,
+         ' ',
+         ISNULL(
+           (SELECT sy.SchoolYear
+              FROM ref.SchoolYear sy
+             WHERE sy.SchoolYearID = core.CertificateTemplate.SchoolYearID),
+           CAST(SchoolYearID AS NVARCHAR(10))
+         )
+       )
+ WHERE Name IS NULL;
 
 PRINT 'template names backfilled: ' + CAST(@@ROWCOUNT AS NVARCHAR(10));
 GO

@@ -894,9 +894,10 @@ CREATE TABLE core.CertificateTemplate (
     CreditUnitLabel       NVARCHAR(100) NULL,
     FooterText            NVARCHAR(500) NULL,
     VisibleFields         NVARCHAR(MAX) NULL,       -- JSON array of field keys
-    UpdatedBy             NVARCHAR(100) NULL,
-    UpdatedAt             DATETIME2(0)   NOT NULL DEFAULT SYSUTCDATETIME(),
-    CONSTRAINT UQ_CertificateTemplate UNIQUE (SchoolYearID, CertificateType)
+    UpdatedAt             DATETIME2(0)   NOT NULL DEFAULT SYSUTCDATETIME()
+    -- No unique constraint on (SchoolYearID, CertificateType): a year may have
+    -- several templates of the same type (migration 014). A Name column tells
+    -- them apart.
 );
 ```
 
