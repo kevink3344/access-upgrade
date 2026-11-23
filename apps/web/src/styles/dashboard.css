@@ -694,11 +694,14 @@
   .data-table td.num { text-align: left; }
 
   /* The workshop name is the card's heading, not a labelled field: it spans
-     the full width and drops the "WORKSHOP" label above it. */
+     the full width and drops the "WORKSHOP" label above it. The per-cell
+     border-top is dropped too — on a stacked card it drew a rule above the
+     title, which read as a separator between the card edge and its heading. */
   .data-table td.workshop-cell {
     display: block;
     padding: 0 0 8px;
     font-size: 15px;
+    border-top: 0;
   }
   .data-table td.workshop-cell::before { content: none; }
   .data-table td.workshop-cell .link-button {
