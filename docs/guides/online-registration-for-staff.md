@@ -1,4 +1,4 @@
-# Online Registration: What Families See
+# Project Enlightenment: New Form Solution
 
 **A guide for Project Enlightenment staff**
 
