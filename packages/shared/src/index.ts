@@ -1051,6 +1051,8 @@ export interface CertificateTemplateRow {
   SchoolYearID: number;
   SchoolYear: string | null;
   CertificateType: CertificateType;
+  /** How staff tell several templates of the same type apart. */
+  Name: string | null;
   Title: string | null;
   Subtitle: string | null;
   LogoPath: string | null;
@@ -1070,6 +1072,7 @@ export interface CertificateTemplateRow {
 }
 
 export interface CertificateTemplateWrite {
+  name?: string | null;
   title?: string | null;
   subtitle?: string | null;
   programDirectorName?: string | null;

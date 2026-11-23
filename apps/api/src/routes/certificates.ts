@@ -197,6 +197,7 @@ certificatesRouter.get('/templates', requireAuth, async (req, res, next) => {
 });
 
 const templatePatch = z.object({
+  name: z.string().max(100).nullable().optional(),
   title: z.string().max(200).nullable().optional(),
   subtitle: z.string().max(500).nullable().optional(),
   programDirectorName: z.string().max(100).nullable().optional(),
@@ -212,6 +213,7 @@ const templatePatch = z.object({
 const templateCreate = templatePatch.extend({
   schoolYearId: z.number().int(),
   certificateType: certType,
+  name: z.string().max(100).nullable().optional(),
 });
 
 /**
@@ -221,13 +223,12 @@ const templateCreate = templatePatch.extend({
  *     tags: [Certificates]
  *     summary: Create a certificate template
  *     description: >
- *       Creates a template for a school year and certificate type. Refuses if
- *       one already exists for that pair, since the unique constraint would
- *       otherwise surface as an opaque SQL error.
+ *       Creates a template for a school year and certificate type. Several
+ *       templates may exist per year and type, so this never refuses on
+ *       duplication — a Name is what distinguishes them.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: Created }
- *       409: { description: A template already exists for that year and type }
  */
 certificatesRouter.post(
   '/templates',
@@ -247,24 +248,18 @@ certificatesRouter.post(
 
       const d = parsed.data;
 
-      const existing = await query<{ id: number }>(
-        `SELECT TOP 1 CertificateTemplateID AS id
-           FROM core.CertificateTemplate
+      // Name is optional, but several unnamed templates of the same type would
+      // be indistinguishable in the picker, so fall back to a numbered one.
+      const count = await query<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM core.CertificateTemplate
           WHERE SchoolYearID = @sy AND CertificateType = @type`,
         {
           sy: { type: sql.Int, value: d.schoolYearId },
           type: { type: sql.NVarChar(10), value: d.certificateType },
         },
       );
-
-      if (existing.recordset[0]) {
-        res.status(409).json({
-          error: 'already_exists',
-          message: `A ${d.certificateType} template already exists for that school year.`,
-          certificateTemplateId: existing.recordset[0].id,
-        });
-        return;
-      }
+      const ordinal = (count.recordset[0]?.n ?? 0) + 1;
+      const name = d.name?.trim() || `${d.certificateType} ${ordinal}`;
 
       // Copy the logos from the most recent template so a new certificate is
       // usable immediately rather than starting blank. Staff can still replace
@@ -279,17 +274,18 @@ certificatesRouter.post(
 
       const created = await query<{ id: number }>(
         `INSERT INTO core.CertificateTemplate
-           (SchoolYearID, CertificateType, Title, Subtitle,
+           (SchoolYearID, CertificateType, Name, Title, Subtitle,
             ProgramDirectorName, ProgramDirectorTitle,
             ApprovingDirectorName, ApprovingDirectorTitle,
             CreditUnitLabel, FooterText, VisibleFields, Layout,
             LogoAssetID, SecondaryLogoAssetID, UpdatedBy)
          OUTPUT INSERTED.CertificateTemplateID AS id
-         VALUES (@sy, @type, @title, @subtitle, @pdn, @pdt, @adn, @adt,
+         VALUES (@sy, @type, @name, @title, @subtitle, @pdn, @pdt, @adn, @adt,
                  @unit, @footer, @vf, @layout, @logo, @logo2, @by)`,
         {
           sy: { type: sql.Int, value: d.schoolYearId },
           type: { type: sql.NVarChar(10), value: d.certificateType },
+          name: { type: sql.NVarChar(100), value: name },
           title: { type: sql.NVarChar(200), value: d.title ?? 'Certificate' },
           subtitle: { type: sql.NVarChar(500), value: d.subtitle ?? 'of Attendance' },
           pdn: { type: sql.NVarChar(100), value: d.programDirectorName ?? null },
@@ -361,6 +357,7 @@ certificatesRouter.patch(
       const params: Record<string, SqlParam> = { id: { type: sql.Int, value: id } };
 
       const map: [keyof typeof d, string, number][] = [
+        ['name', 'Name', 100],
         ['title', 'Title', 200],
         ['subtitle', 'Subtitle', 500],
         ['programDirectorName', 'ProgramDirectorName', 100],
@@ -597,7 +594,14 @@ certificatesRouter.get('/eligible', requireAuth, async (req, res, next) => {
 certificatesRouter.get('/overrides/:participantId', requireAuth, async (req, res, next) => {
   try {
     const parsed = z
-      .object({ schoolYearId: z.coerce.number().int(), certificateType: certType })
+      .object({
+        schoolYearId: z.coerce.number().int(),
+        certificateType: certType,
+        // Optional: with several templates per year and type, a caller can
+        // ask for a specific one. Absent means the oldest, which is what
+        // existed before multiple templates were allowed.
+        templateId: z.coerce.number().int().optional(),
+      })
       .safeParse(req.query);
 
     if (!parsed.success) {
@@ -740,6 +744,7 @@ async function buildModel(
   participantId: number,
   schoolYearId: number,
   type: 'CEU' | 'CHC',
+  templateId?: number | null,
 ): Promise<CertificateModel | null> {
   const elig = await query<Record<string, unknown>>(
     `SELECT e.*, sy.SchoolYear
@@ -751,10 +756,25 @@ async function buildModel(
   const e = elig.recordset[0];
   if (!e) return null;
 
-  const tpl = await query<Record<string, unknown>>(
-    `SELECT * FROM core.CertificateTemplate WHERE SchoolYearID = @sy AND CertificateType = @type`,
-    { sy: { type: sql.Int, value: schoolYearId }, type: { type: sql.NVarChar(10), value: type } },
-  );
+  // Several templates may exist per year and type. An explicit id wins;
+  // otherwise the oldest is used, which is the one that existed before
+  // multiple templates were allowed, so existing behaviour is unchanged.
+  const tpl = templateId
+    ? await query<Record<string, unknown>>(
+        `SELECT * FROM core.CertificateTemplate
+          WHERE CertificateTemplateID = @tid AND SchoolYearID = @sy AND CertificateType = @type`,
+        {
+          tid: { type: sql.Int, value: templateId },
+          sy: { type: sql.Int, value: schoolYearId },
+          type: { type: sql.NVarChar(10), value: type },
+        },
+      )
+    : await query<Record<string, unknown>>(
+        `SELECT TOP 1 * FROM core.CertificateTemplate
+          WHERE SchoolYearID = @sy AND CertificateType = @type
+          ORDER BY CertificateTemplateID`,
+        { sy: { type: sql.Int, value: schoolYearId }, type: { type: sql.NVarChar(10), value: type } },
+      );
   const t = tpl.recordset[0];
   if (!t) return null;
 
@@ -848,7 +868,14 @@ async function buildModel(
 certificatesRouter.get('/preview/:participantId', requireAuth, async (req, res, next) => {
   try {
     const parsed = z
-      .object({ schoolYearId: z.coerce.number().int(), certificateType: certType })
+      .object({
+        schoolYearId: z.coerce.number().int(),
+        certificateType: certType,
+        // Optional: with several templates per year and type, a caller can
+        // ask for a specific one. Absent means the oldest, which is what
+        // existed before multiple templates were allowed.
+        templateId: z.coerce.number().int().optional(),
+      })
       .safeParse(req.query);
 
     if (!parsed.success) {
@@ -860,6 +887,7 @@ certificatesRouter.get('/preview/:participantId', requireAuth, async (req, res, 
       Number(req.params.participantId),
       parsed.data.schoolYearId,
       parsed.data.certificateType,
+      parsed.data.templateId ?? null,
     );
 
     if (!model) {
@@ -887,7 +915,14 @@ certificatesRouter.get('/preview/:participantId', requireAuth, async (req, res, 
 certificatesRouter.get('/pdf/:participantId', requireAuth, async (req, res, next) => {
   try {
     const parsed = z
-      .object({ schoolYearId: z.coerce.number().int(), certificateType: certType })
+      .object({
+        schoolYearId: z.coerce.number().int(),
+        certificateType: certType,
+        // Optional: with several templates per year and type, a caller can
+        // ask for a specific one. Absent means the oldest, which is what
+        // existed before multiple templates were allowed.
+        templateId: z.coerce.number().int().optional(),
+      })
       .safeParse(req.query);
 
     if (!parsed.success) {
@@ -896,7 +931,12 @@ certificatesRouter.get('/pdf/:participantId', requireAuth, async (req, res, next
     }
 
     const participantId = Number(req.params.participantId);
-    const model = await buildModel(participantId, parsed.data.schoolYearId, parsed.data.certificateType);
+    const model = await buildModel(
+      participantId,
+      parsed.data.schoolYearId,
+      parsed.data.certificateType,
+      parsed.data.templateId ?? null,
+    );
 
     if (!model) {
       res.status(404).json({ error: 'not_found', message: 'Participant is not eligible for this certificate' });

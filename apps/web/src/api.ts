@@ -699,6 +699,7 @@ export const api = {
     createTemplate: (body: {
       schoolYearId: number;
       certificateType: 'CEU' | 'CHC';
+      name?: string | null;
       title?: string;
       subtitle?: string;
       layout?: 'portrait' | 'landscape';
@@ -742,11 +743,23 @@ export const api = {
       ),
 
     /** Returns a blob URL for the rendered PDF. */
-    pdfUrl: (participantId: number, schoolYearId: number, certificateType: 'CEU' | 'CHC') =>
-      `/api/certificates/pdf/${participantId}?schoolYearId=${schoolYearId}&certificateType=${certificateType}`,
+    pdfUrl: (
+      participantId: number,
+      schoolYearId: number,
+      certificateType: 'CEU' | 'CHC',
+      templateId?: number | null,
+    ) =>
+      `/api/certificates/pdf/${participantId}?schoolYearId=${schoolYearId}&certificateType=${certificateType}` +
+      (templateId ? `&templateId=${templateId}` : ''),
 
-    previewUrl: (participantId: number, schoolYearId: number, certificateType: 'CEU' | 'CHC') =>
-      `/api/certificates/preview/${participantId}?schoolYearId=${schoolYearId}&certificateType=${certificateType}`,
+    previewUrl: (
+      participantId: number,
+      schoolYearId: number,
+      certificateType: 'CEU' | 'CHC',
+      templateId?: number | null,
+    ) =>
+      `/api/certificates/preview/${participantId}?schoolYearId=${schoolYearId}&certificateType=${certificateType}` +
+      (templateId ? `&templateId=${templateId}` : ''),
   },
 
   registrations: {

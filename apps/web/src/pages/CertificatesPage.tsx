@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';import type { CertificateEligibleRow, CertificateType } from '@pe/shared';
 import { api } from '../api';
-import { useAuth } from '../auth';
 import { AppShell } from '../components/AppShell';
 import { IconReports } from '../components/icons';
 import { CertificateOverrideDrawer } from '../components/CertificateOverrideDrawer';
-import { CreateCertificateDialog } from '../components/CreateCertificateDialog';
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -22,8 +20,6 @@ function fullName(r: CertificateEligibleRow): string {
 
 
 export function CertificatesPage() {
-  const { user } = useAuth();
-  const canEdit = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.role === 'MANAGER';
   const qc = useQueryClient();
 
   const [schoolYearId, setSchoolYearId] = useState<number | null>(null);
@@ -37,7 +33,6 @@ export function CertificatesPage() {
   const [overrideFor, setOverrideFor] = useState<CertificateEligibleRow | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
 
   const { data: years } = useQuery({
     queryKey: ['lookup', 'school-years'],
@@ -68,14 +63,6 @@ export function CertificatesPage() {
 
   // Which certificate types already exist for this year, so the create dialog
   // can disable the ones that would be rejected.
-  const { data: templates } = useQuery({
-    queryKey: ['certificates', 'templates', schoolYearId],
-    queryFn: () => api.certificates.templates(schoolYearId!),
-    enabled: schoolYearId !== null,
-  });
-
-  const existingTypes = (templates?.data ?? []).map((t) => t.CertificateType);
-
   const { data, isLoading } = useQuery({
     queryKey: ['certificates', 'eligible', schoolYearId, debounced, page],
     queryFn: () =>
@@ -152,33 +139,7 @@ export function CertificatesPage() {
           <h2>Certificates</h2>
           <p>Issue CEU and CHC certificates. To change what they look like, use the Certificate Designer.</p>
         </div>
-        {canEdit && (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setCreateOpen(true)}
-            disabled={schoolYearId === null}
-          >
-            + Certificate
-          </button>
-        )}
       </div>
-
-      {createOpen && schoolYearId !== null && (
-        <CreateCertificateDialog
-          schoolYearId={schoolYearId}
-          existingTypes={existingTypes}
-          onClose={() => setCreateOpen(false)}
-          onCreated={(id) => {
-            setCreateOpen(false);
-            setNotice(
-              'Certificate template created. Edit its layout and fields in the Certificate Designer.',
-            );
-            qc.invalidateQueries({ queryKey: ['certificates', 'templates', schoolYearId] });
-            void id;
-          }}
-        />
-      )}
 
       {caps && !caps.pdfRendering && (
         <div className="alert alert-error" role="alert">

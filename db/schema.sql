@@ -896,6 +896,9 @@ CREATE TABLE core.CertificateTemplate (
     CertificateTemplateID  INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CertificateTemplate PRIMARY KEY,
     SchoolYearID           INT           NOT NULL REFERENCES ref.SchoolYear(SchoolYearID),
     CertificateType        NVARCHAR(10)  NOT NULL,   -- 'CEU' | 'CHC'
+    -- Several templates may exist per year and type (migration 014), so a
+    -- name is what tells them apart in the designer and the issue picker.
+    Name                   NVARCHAR(100) NULL,
     Title                  NVARCHAR(200) NULL,
     Subtitle               NVARCHAR(500) NULL,
     LogoPath               NVARCHAR(400) NULL,
@@ -908,11 +911,12 @@ CREATE TABLE core.CertificateTemplate (
     VisibleFields          NVARCHAR(MAX) NULL,       -- JSON array of field keys
     UpdatedBy              NVARCHAR(100) NULL,
     UpdatedAt              DATETIME2(0)  NOT NULL CONSTRAINT DF_CertificateTemplate_UpdatedAt DEFAULT SYSUTCDATETIME(),
-    CONSTRAINT UQ_CertificateTemplate UNIQUE (SchoolYearID, CertificateType),
     CONSTRAINT CK_CertificateTemplate_Type CHECK (CertificateType IN ('CEU','CHC'))
 );
 END
 GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_CertificateTemplate_Year_Type' AND object_id = OBJECT_ID('core.CertificateTemplate'))
+    CREATE INDEX IX_CertificateTemplate_Year_Type ON core.CertificateTemplate(SchoolYearID, CertificateType);
 
 -- =====================================================================
 --  Certificates: image assets, per-participant overrides, issued PDFs

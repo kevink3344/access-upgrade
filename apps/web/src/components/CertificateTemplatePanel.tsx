@@ -30,11 +30,14 @@ export function CertificateTemplatePanel({
   certificateType,
   canEdit,
   sampleParticipantId,
+  templateId,
 }: {
   schoolYearId: number;
   certificateType: CertificateType;
   canEdit: boolean;
   sampleParticipantId: number | null;
+  /** Which template to edit when a year has several of this type. */
+  templateId?: number | null;
 }) {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -44,7 +47,13 @@ export function CertificateTemplatePanel({
     queryFn: () => api.certificates.templates(schoolYearId),
   });
 
-  const template = data?.data.find((t) => t.CertificateType === certificateType) ?? null;
+  // Several templates may exist per year and type. An explicit id wins;
+  // otherwise the first is used, which is what existed before multiple
+  // templates were allowed.
+  const template =
+    (templateId
+      ? data?.data.find((t) => t.CertificateTemplateID === templateId)
+      : data?.data.find((t) => t.CertificateType === certificateType)) ?? null;
 
   const [form, setForm] = useState({
     title: '',
@@ -107,7 +116,12 @@ export function CertificateTemplatePanel({
       setPreviewHtml('');
       return;
     }
-    const url = api.certificates.previewUrl(sampleParticipantId, schoolYearId, certificateType);
+    const url = api.certificates.previewUrl(
+      sampleParticipantId,
+      schoolYearId,
+      certificateType,
+      template?.CertificateTemplateID ?? null,
+    );
     let cancelled = false;
     fetch(url, {
       headers: {

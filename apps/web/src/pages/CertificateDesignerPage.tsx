@@ -22,6 +22,7 @@ export function CertificateDesignerPage() {
 
   const [schoolYearId, setSchoolYearId] = useState<number | null>(null);
   const [certType, setCertType] = useState<CertificateType>('CEU');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -55,8 +56,13 @@ export function CertificateDesignerPage() {
 
   const sampleParticipantId = sample?.data?.[0]?.ParticipantID ?? null;
 
-  const existingTypes = (templates?.data ?? []).map((t) => t.CertificateType);
-  const bothExist = existingTypes.includes('CEU') && existingTypes.includes('CHC');
+  // Several templates may exist per type, so the designer needs to know which
+  // one is being edited. Default to the first for the selected type.
+  const forType = (templates?.data ?? []).filter((t) => t.CertificateType === certType);
+  const activeTemplateId =
+    forType.find((t) => t.CertificateTemplateID === selectedTemplateId)?.CertificateTemplateID ??
+    forType[0]?.CertificateTemplateID ??
+    null;
 
   return (
     <AppShell currentPath="/admin/certificates" title="Certificate Designer">
@@ -64,17 +70,15 @@ export function CertificateDesignerPage() {
         <div>
           <h2>Certificate Designer</h2>
           <p>
-            Design the CEU and CHC certificates staff issue. Changes here apply to every
-            certificate printed for the selected school year.
+            Design the CEU and CHC certificates staff issue. A school year can have more than
+            one of each — for example a director's certificate and a teacher's.
           </p>
         </div>
-        {canEdit && (
+        {canEdit && schoolYearId !== null && (
           <button
             type="button"
             className="btn btn-primary"
             onClick={() => setCreateOpen(true)}
-            disabled={schoolYearId === null || bothExist}
-            title={bothExist ? 'Both certificate types already exist for this year' : undefined}
           >
             + Certificate
           </button>
@@ -93,7 +97,10 @@ export function CertificateDesignerPage() {
           <select
             id="cd-year"
             value={schoolYearId ?? ''}
-            onChange={(e) => setSchoolYearId(Number(e.target.value))}
+            onChange={(e) => {
+              setSchoolYearId(Number(e.target.value));
+              setSelectedTemplateId(null);
+            }}
           >
             {(years?.data ?? []).map((y) => (
               <option key={y.id} value={y.id}>{y.label}</option>
@@ -106,17 +113,40 @@ export function CertificateDesignerPage() {
           <select
             id="cd-type"
             value={certType}
-            onChange={(e) => setCertType(e.target.value as CertificateType)}
+            onChange={(e) => {
+              setCertType(e.target.value as CertificateType);
+              setSelectedTemplateId(null);
+            }}
           >
             <option value="CEU">CEU — Units of Renewal Credit</option>
             <option value="CHC">CHC — Child Care Hours</option>
           </select>
         </div>
 
+        <div className="toolbar-field">
+          <label htmlFor="cd-template">Template</label>
+          <select
+            id="cd-template"
+            value={activeTemplateId ?? ''}
+            onChange={(e) => setSelectedTemplateId(Number(e.target.value))}
+            disabled={forType.length === 0}
+          >
+            {forType.length === 0 ? (
+              <option value="">None yet</option>
+            ) : (
+              forType.map((t) => (
+                <option key={t.CertificateTemplateID} value={t.CertificateTemplateID}>
+                  {t.Name ?? `${t.CertificateType} ${t.CertificateTemplateID}`}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+
         <span className="toolbar-count">
-          {existingTypes.length === 0
-            ? 'No template for this year yet'
-            : `${existingTypes.length} template${existingTypes.length === 1 ? '' : 's'} for this year`}
+          {forType.length === 0
+            ? `No ${certType} template for this year yet`
+            : `${forType.length} ${certType} template${forType.length === 1 ? '' : 's'} for this year`}
         </span>
       </div>
 
@@ -135,6 +165,7 @@ export function CertificateDesignerPage() {
             certificateType={certType}
             canEdit={!!canEdit}
             sampleParticipantId={sampleParticipantId}
+            templateId={activeTemplateId}
           />
         </>
       )}
@@ -142,10 +173,11 @@ export function CertificateDesignerPage() {
       {createOpen && schoolYearId !== null && (
         <CreateCertificateDialog
           schoolYearId={schoolYearId}
-          existingTypes={existingTypes}
+          existingTypes={(templates?.data ?? []).map((t) => t.CertificateType)}
           onClose={() => setCreateOpen(false)}
-          onCreated={() => {
+          onCreated={(id) => {
             setCreateOpen(false);
+            setSelectedTemplateId(id);
             setNotice('Certificate template created.');
             qc.invalidateQueries({ queryKey: ['certificates', 'templates', schoolYearId] });
           }}
