@@ -87,6 +87,13 @@ Also set the **Startup Command** to `bash startup.sh`. It installs the Chromium
 runtime libraries the certificate PDFs need, then starts the API — see
 [Certificate PDF rendering](#certificate-pdf-rendering) below.
 
+On a Linux App Service the field is under **Configuration → Stack → Settings**
+(not the Windows "General settings" blade):
+
+```
+Startup Command:  bash startup.sh
+```
+
 ### `WEBSITE_NODE_DEFAULT_VERSION`
 
 Set to `~22` so the App Service matches the build.
@@ -104,6 +111,7 @@ provisioned by the pipeline:
 
 **Startup Command** must therefore be `bash startup.sh`, not `npm start`. The
 wrapper installs the libraries (best-effort), then `exec`s `node dist/server.js`.
+It is set under **Configuration → Stack → Settings**.
 
 Every step is best-effort: if the libraries cannot be installed the site still
 starts, and the Certificates page reports that PDF downloads are unavailable
