@@ -130,7 +130,11 @@ jobs:
           test -f dist/server.js || { echo "::error::dist/server.js missing"; exit 1; }
           test -f web/dist/index.html || { echo "::error::web/dist/index.html missing"; exit 1; }
           test -d node_modules || { echo "::error::node_modules missing"; exit 1; }
-          test -x startup.sh || { echo "::error::startup.sh missing or not executable"; exit 1; }
+          test -f startup.sh || { echo "::error::startup.sh missing"; exit 1; }
+          # actions/download-artifact does not preserve file modes, so the
+          # executable bit has to be restored here rather than asserted.
+          chmod +x startup.sh
+          test -x startup.sh || { echo "::error::startup.sh is not executable"; exit 1; }
           echo "Package looks complete."
 
       - name: Deploy to Azure Web App
