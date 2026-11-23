@@ -301,6 +301,70 @@ export interface WorkshopWrite {
   specialNotes?: string | null;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Credit slips                                                       */
+/* ------------------------------------------------------------------ */
+
+/** One row on the Credit slips list. */
+export interface CreditSlipRow {
+  CreditSlipID: number;
+  CreditSlipsCategoryID: number | null;
+  CreditSlipsCategory: string | null;
+  ParticipantID: number | null;
+  ParticipantName: string | null;
+  ParticipantEmail: string | null;
+  WorkshopID: number | null;
+  WorkshopName: string | null;
+  DateIssued: string | null;
+  /** Non-null means the slip has been redeemed. */
+  DateUsed: string | null;
+  /** The redeemer, which may differ from ParticipantID when transferred. */
+  UsedParticipantID: number | null;
+  UsedParticipantName: string | null;
+  UsedWorkshopID: number | null;
+  Amount: number | null;
+  TrackingYear: number | null;
+  Email: boolean;
+}
+
+export interface CreditSlipListResponse {
+  data: CreditSlipRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  counts: {
+    all: number;
+    unused: number;
+    used: number;
+    /** Amount still outstanding, i.e. the sum of unused slips. */
+    totalAmount: number;
+  };
+}
+
+/** Full slip, as returned by GET /api/credit-slips/:id. */
+export interface CreditSlipDetail extends CreditSlipRow {
+  WorkshopCode: string | null;
+  UsedWorkshopCode: string | null;
+  UsedWorkshopName: string | null;
+}
+
+/** Writable fields — camelCase, matches the API contract. */
+export interface CreditSlipWrite {
+  categoryId?: number | null;
+  participantId?: number | null;
+  workshopId?: number | null;
+  dateIssued?: string | null;
+  amount?: number | null;
+  trackingYear?: number | null;
+  email?: boolean;
+}
+
+export interface CreditSlipRedeem {
+  usedParticipantId?: number | null;
+  usedWorkshopId?: number | null;
+  dateUsed?: string | null;
+}
+
 export interface LookupOption {
   id: number;
   label: string;

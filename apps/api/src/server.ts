@@ -31,6 +31,7 @@ import { notificationsRouter } from './routes/notifications.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { formsRouter } from './routes/forms.js';
 import { trainingRequestsRouter } from './routes/training-requests.js';
+import { creditSlipsRouter } from './routes/credit-slips.js';
 
 const app = express();
 
@@ -192,6 +193,7 @@ const openapiSpec = swaggerJsdoc({
       { name: 'Public registration', description: 'Shareable links and the public form' },
       { name: 'Lookups', description: 'Reference data' },
       { name: 'Training requests', description: 'On-site training requests, quotes and invoicing' },
+      { name: 'Credit slips', description: 'Vouchers issued for cancellations and overpayments' },
     ],
   },
   apis: ['./src/routes/*.ts', './dist/routes/*.js'],
@@ -222,6 +224,7 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/forms', formsRouter);
 app.use('/api/training-requests', trainingRequestsRouter);
+app.use('/api/credit-slips', creditSlipsRouter);
 
 // Public surface — no auth. Must be mounted before the auth-guarded routes
 // would ever apply; it has its own rate limits and audit logging.

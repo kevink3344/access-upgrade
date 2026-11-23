@@ -21,6 +21,7 @@ import { PresentersPage } from './pages/PresentersPage';
 import { WorkshopNamesPage } from './pages/WorkshopNamesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { TrainingRequestsPage } from './pages/TrainingRequestsPage';
+import { CreditSlipsPage } from './pages/CreditSlipsPage';
 import { CertificatesPage } from './pages/CertificatesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { WebhooksPage } from './pages/WebhooksPage';
@@ -130,6 +131,7 @@ function Router() {
 
   if (path === '/payments') return <PaymentsPage />;
   if (path === '/training-requests') return <TrainingRequestsPage />;
+  if (path === '/credit-slips') return <CreditSlipsPage />;
   if (path === '/certificates') return <CertificatesPage />;
   if (path === '/reports') return <ReportsPage />;
 

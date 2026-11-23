@@ -525,6 +525,47 @@ export const api = {
       }),
   },
 
+  creditSlips: {
+    list: (
+      params: {
+        page?: number;
+        pageSize?: number;
+        q?: string;
+        status?: 'all' | 'unused' | 'used';
+        categoryId?: number;
+        trackingYear?: number;
+        sort?: 'recent' | 'oldest' | 'amount' | 'participant';
+      } = {},
+    ) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<import('@pe/shared').CreditSlipListResponse>(`/api/credit-slips${suffix}`);
+    },
+    get: (id: number) =>
+      request<import('@pe/shared').CreditSlipDetail>(`/api/credit-slips/${id}`),
+    create: (body: import('@pe/shared').CreditSlipWrite) =>
+      request<{ creditSlipId: number }>('/api/credit-slips', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    update: (id: number, body: Partial<import('@pe/shared').CreditSlipWrite>) =>
+      request<void>(`/api/credit-slips/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    redeem: (id: number, body: import('@pe/shared').CreditSlipRedeem) =>
+      request<void>(`/api/credit-slips/${id}/redeem`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    undoRedeem: (id: number) =>
+      request<void>(`/api/credit-slips/${id}/redeem`, { method: 'DELETE' }),
+    remove: (id: number) => request<void>(`/api/credit-slips/${id}`, { method: 'DELETE' }),
+  },
+
   lookups: {
     list: () => request<{ data: string[] }>('/api/lookups'),    get: (name: string) =>
       request<{ data: { id: number; label: string }[] }>(`/api/lookups/${name}`),

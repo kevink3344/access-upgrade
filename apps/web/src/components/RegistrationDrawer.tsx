@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import type { RegistrationWrite } from '@pe/shared';
@@ -7,6 +7,7 @@ import { useScrollLock } from '../hooks/useScrollLock';
 import { useResizableDrawer } from '../hooks/useResizableDrawer';
 import { DrawerResizeHandle } from './DrawerResizeHandle';
 import { IconAlert } from './icons';
+import { Typeahead } from './Typeahead';
 
 type RegTab = 'who' | 'answers';
 
@@ -43,146 +44,6 @@ function str(v: string | undefined): string | null {
 
 function dateValue(v: string | null | undefined): string {
   return v ? v.slice(0, 10) : '';
-}
-
-/* ------------------------------------------------------------------ */
-/*  Type-ahead picker                                                  */
-/* ------------------------------------------------------------------ */
-
-function Typeahead({
-  id,
-  label,
-  placeholder,
-  value,
-  selectedLabel,
-  onSelect,
-  search,
-  required,
-  error,
-}: {
-  id: string;
-  label: string;
-  placeholder: string;
-  value: string;
-  selectedLabel: string | null;
-  onSelect: (id: number, label: string) => void;
-  search: (q: string) => Promise<{ data: { id: number; label: string }[] }>;
-  required?: boolean;
-  error?: string;
-}) {
-  const [query, setQuery] = useState('');
-  const [open, setOpen] = useState(false);
-  const [options, setOptions] = useState<{ id: number; label: string }[]>([]);
-  const [loading, setLoading] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open || query.trim().length < 2) {
-      setOptions([]);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-
-    const t = setTimeout(() => {
-      search(query)
-        .then((r) => {
-          if (!cancelled) setOptions(r.data);
-        })
-        .catch(() => {
-          if (!cancelled) setOptions([]);
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-    }, 250);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [query, open, search]);
-
-  // Close on outside click.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
-
-  return (
-    <div className="field" ref={boxRef} style={{ position: 'relative' }}>
-      <label htmlFor={id}>
-        {label}
-        {required && <span aria-hidden="true"> *</span>}
-      </label>
-
-      {value && selectedLabel ? (
-        <div className="typeahead-selected">
-          <span>{selectedLabel}</span>
-          <button
-            type="button"
-            className="typeahead-clear"
-            onClick={() => {
-              onSelect(0, '');
-              setQuery('');
-            }}
-            aria-label={`Clear ${label}`}
-          >
-            ×
-          </button>
-        </div>
-      ) : (
-        <input
-          id={id}
-          type="search"
-          value={query}
-          placeholder={placeholder}
-          autoComplete="off"
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          aria-invalid={error ? 'true' : undefined}
-          aria-expanded={open}
-          aria-controls={`${id}-list`}
-          role="combobox"
-        />
-      )}
-
-      {open && !value && query.trim().length >= 2 && (
-        <ul className="typeahead-list" id={`${id}-list`} role="listbox">
-          {loading && <li className="typeahead-empty">Searching…</li>}
-          {!loading && options.length === 0 && (
-            <li className="typeahead-empty">No matches</li>
-          )}
-          {options.map((o) => (
-            <li key={o.id}>
-              <button
-                type="button"
-                role="option"
-                aria-selected="false"
-                onClick={() => {
-                  onSelect(o.id, o.label);
-                  setOpen(false);
-                  setQuery('');
-                }}
-              >
-                {o.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {error && <span className="error" role="alert">{error}</span>}
-    </div>
-  );
 }
 
 /* ------------------------------------------------------------------ */
