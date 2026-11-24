@@ -4,7 +4,7 @@ import type { ScoImportRow, ScoImportStatus } from '@pe/shared';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { AppShell } from '../components/AppShell';
-import { IconSchoolCash } from '../components/icons';
+import { IconSchoolCash, IconTrash } from '../components/icons';
 import { SchoolCashReview } from '../components/SchoolCashReview';
 
 /**
@@ -83,6 +83,21 @@ export function SchoolCashPage() {
     },
     onError: (err: unknown) => {
       setUploadError(err instanceof Error ? err.message : 'The upload failed.');
+    },
+  });
+
+  /**
+   * Deleting from the list, so an unwanted upload can be cleared without
+   * opening it first. The server refuses if any payment came from the upload.
+   */
+  const remove = useMutation({
+    mutationFn: (id: number) => api.schoolCash.discard(id),
+    onSuccess: () => {
+      setUploadError(null);
+      qc.invalidateQueries({ queryKey: ['school-cash'] });
+    },
+    onError: (err: unknown) => {
+      setUploadError(err instanceof Error ? err.message : 'The upload could not be deleted.');
     },
   });
 
@@ -235,6 +250,26 @@ export function SchoolCashPage() {
                         >
                           {r.Status === 'Staged' && canAdmin ? 'Review' : 'View'}
                         </button>
+                        {canAdmin && r.AppliedCount === 0 && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm btn-icon"
+                            aria-label={`Delete ${r.FileName}`}
+                            title="Delete this upload"
+                            disabled={remove.isPending}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Delete "${r.FileName}"? The file and its ${r.TotalRows} staged rows are removed. Nothing has been paid from this upload.`,
+                                )
+                              ) {
+                                remove.mutate(r.ScoImportID);
+                              }
+                            }}
+                          >
+                            <IconTrash width={15} height={15} />
+                          </button>
+                        )}
                       </span>
                     </td>
                   </tr>
