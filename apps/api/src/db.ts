@@ -53,21 +53,41 @@ export type SqlParam = {
   value: unknown;
 };
 
+/** Binds named parameters onto a request or transaction request. */
+export function bindParams(
+  request: sql.Request,
+  params?: Record<string, SqlParam>,
+): sql.Request {
+  if (params) {
+    for (const [name, { type, value }] of Object.entries(params)) {
+      request.input(name, type as sql.ISqlType, value);
+    }
+  }
+  return request;
+}
+
 /** Convenience wrapper for a single query. */
 export async function query<T = unknown>(
   text: string,
   params?: Record<string, SqlParam>,
 ): Promise<sql.IResult<T>> {
   const p = await getPool();
-  const request = p.request();
+  return bindParams(p.request(), params).query<T>(text);
+}
 
-  if (params) {
-    for (const [name, { type, value }] of Object.entries(params)) {
-      request.input(name, type as sql.ISqlType, value);
-    }
-  }
-
-  return request.query<T>(text);
+/**
+ * Convenience wrapper for a single query inside an open transaction.
+ *
+ * Exists so callers do not have to re-implement parameter binding for
+ * `tx.request()`; the transaction itself stays explicit at the call site,
+ * which keeps commit/rollback visible where the work happens.
+ */
+export async function txQuery<T = unknown>(
+  tx: sql.Transaction,
+  text: string,
+  params?: Record<string, SqlParam>,
+): Promise<sql.IResult<T>> {
+  return bindParams(tx.request(), params).query<T>(text);
 }
 
 export { sql };

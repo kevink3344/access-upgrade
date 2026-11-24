@@ -32,6 +32,7 @@ import { webhooksRouter } from './routes/webhooks.js';
 import { formsRouter } from './routes/forms.js';
 import { trainingRequestsRouter } from './routes/training-requests.js';
 import { creditSlipsRouter } from './routes/credit-slips.js';
+import { schoolCashRouter } from './routes/schoolcash.js';
 
 const app = express();
 
@@ -225,6 +226,14 @@ app.use('/api/webhooks', webhooksRouter);
 app.use('/api/forms', formsRouter);
 app.use('/api/training-requests', trainingRequestsRouter);
 app.use('/api/credit-slips', creditSlipsRouter);
+// The School Cash upload is the raw CSV as text/plain, not multipart, so it
+// needs its own body parser. Mounted before the router so only this path is
+// affected.
+app.use(
+  '/api/school-cash',
+  express.text({ type: ['text/plain', 'text/csv', 'application/csv'], limit: '8mb' }),
+  schoolCashRouter,
+);
 
 // Public surface — no auth. Must be mounted before the auth-guarded routes
 // would ever apply; it has its own rate limits and audit logging.

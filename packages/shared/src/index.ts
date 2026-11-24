@@ -1420,3 +1420,146 @@ export interface WebhookDeliveryRow {
   DurationMs: number | null;
   AttemptedAt: string;
 }
+
+/* ------------------------------------------------------------------ */
+/*  School Cash Online matching                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * How sure the matcher is about a row.
+ *
+ *  - `High`      the row resolves to exactly one registration
+ *  - `Low`       the purchaser has several unpaid registrations and the amount
+ *                did not settle which one — an admin must choose
+ *  - `None`      the purchaser email is unknown or has nothing unpaid
+ *  - `Duplicate` this vendor row became a payment in an earlier upload
+ *  - `Ignored`   an admin dismissed the row (e.g. a refund or a non-workshop item)
+ */
+export type ScoMatchConfidence = 'High' | 'Low' | 'None' | 'Duplicate' | 'Ignored';
+
+export type ScoMatchMethod = 'email' | 'email+amount' | 'manual' | 'duplicate' | 'none';
+
+export type ScoImportStatus = 'Staged' | 'Applied' | 'Discarded';
+
+/** One uploaded Item Order Report. */
+export interface ScoImportRow {
+  ScoImportID: number;
+  FileName: string;
+  RowCount: number;
+  MatchedCount: number;
+  ReviewCount: number;
+  IgnoredCount: number;
+  AppliedCount: number;
+  Status: ScoImportStatus;
+  UploadedBy: string;
+  UploadedAt: string;
+  AppliedBy: string | null;
+  AppliedAt: string | null;
+}
+
+export interface ScoImportListResponse {
+  rows: ScoImportRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * A registration an admin can pick from when matching by hand.
+ *
+ * The PascalCase names are the SQL column names, passed through unchanged —
+ * the same convention the older row types use.
+ */
+export interface ScoCandidate {
+  RegistrationID: number;
+  ParticipantID: number;
+  ParticipantName: string;
+  WorkshopID: number;
+  WorkshopName: string | null;
+  WorkshopCode: string | null;
+  WorkshopDate: string | null;
+  WorkshopPrice: number | null;
+  PaidAmount: number | null;
+  Owed: number | null;
+  isCurrent: boolean;
+}
+
+/** One line of the uploaded file, with what the matcher decided. */
+export interface ScoRowRow {
+  ScoRowID: number;
+  ScoImportID: number;
+  RowNumber: number;
+  PurchaserEmail: string | null;
+  PurchaserName: string | null;
+  ItemId: string | null;
+  ItemName: string | null;
+  /** The item price — what the matcher compares against. */
+  ItemBalance: number | null;
+  /** The gross charge, item price plus the online fee. */
+  PaidAmount: number | null;
+  TransactionFee: number | null;
+  PurchasedDate: string | null;
+  Owing: number | null;
+  Refunded: number | null;
+
+  MatchedRegistrationID: number | null;
+  MatchConfidence: ScoMatchConfidence | null;
+  MatchMethod: ScoMatchMethod | null;
+  MatchNote: string | null;
+  IgnoreReason: string | null;
+  AppliedPaymentID: number | null;
+
+  /** Context for the matched registration, when there is one. */
+  ParticipantID: number | null;
+  ParticipantName: string | null;
+  WorkshopID: number | null;
+  WorkshopName: string | null;
+  WorkshopCode: string | null;
+  WorkshopDate: string | null;
+  RegistrationOwed: number | null;
+}
+
+export interface ScoImportDetail extends ScoImportRow {
+  rows: ScoRowRow[];
+  /** Counts by confidence, so the header can render without re-counting. */
+  counts: Record<ScoMatchConfidence, number>;
+}
+
+/** Result of applying a staged import. */
+export interface ScoApplyResult {
+  importId: number;
+  applied: number;
+  skipped: number;
+  /** Rows that were matched to a registration that is no longer unpaid. */
+  conflicts: { rowNumber: number; itemName: string | null; reason: string }[];
+}
+
+/** One entry in the permanent history of what was applied, for staff review. */
+export interface ScoHistoryRow {
+  ScoRowID: number;
+  ScoImportID: number;
+  FileName: string;
+  AppliedAt: string | null;
+  AppliedBy: string | null;
+  RowNumber: number;
+  PurchaserEmail: string | null;
+  PurchaserName: string | null;
+  ItemName: string | null;
+  ItemBalance: number | null;
+  TransactionFee: number | null;
+  PurchasedDate: string | null;
+  ParticipantName: string | null;
+  WorkshopName: string | null;
+  WorkshopCode: string | null;
+  PaymentID: number | null;
+  MatchMethod: ScoMatchMethod | null;
+}
+
+export interface ScoHistoryResponse {
+  rows: ScoHistoryRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalAmount: number;
+  totalFees: number;
+}

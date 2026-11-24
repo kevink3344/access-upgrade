@@ -87,3 +87,33 @@
   .recent-chip-title { max-width: 180px; }
   .recent-chip { font-size: 12.5px; padding: 6px 11px; }
 }
+
+/* ---------- School Cash matching ---------- */
+
+/* Candidate registrations in the manual-match drawer. A plain radio list
+   rather than a table: there are rarely more than a handful, and each row
+   carries two lines of context that a table would crowd. */
+.pick-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.pick-list li + li { border-top: 1px solid var(--border-color); }
+
+.pick-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.pick-row:hover { background: hsl(var(--primary-color-hsl) / .04); }
+
+.pick-row input { margin-top: 3px; flex: none; }
+.pick-row > span { min-width: 0; }

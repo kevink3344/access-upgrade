@@ -20,7 +20,7 @@
 [CmdletBinding()]
 param(
     [string]$SourceEnv = '',
-    [string]$TargetEnv = '_TEST'
+    [string]$TargetEnv = '_PROD'
 )
 
 $ErrorActionPreference = 'Stop'

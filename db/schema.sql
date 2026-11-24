@@ -435,11 +435,77 @@ CREATE TABLE core.Payment (
     ReceiptNumber   INT            NULL,
     PaymentTotal    DECIMAL(19,4)  NULL,
     PaidDate        DATETIME2(0)   NULL,
-    Notes           NVARCHAR(255)  NULL    -- legacy PaymentNotes
+    Notes           NVARCHAR(255)  NULL,   -- legacy PaymentNotes
+    -- Provenance for payments created outside this app (see migration 016).
+    Source          NVARCHAR(20)   NOT NULL CONSTRAINT DF_Payment_Source DEFAULT 'Manual',
+    ExternalReceipt   NVARCHAR(100) NULL,
+    ExternalPaymentId NVARCHAR(100) NULL,
+    -- The online transaction fee, kept apart from the item price so revenue
+    -- reports do not overstate income.
+    FeeAmount       DECIMAL(19,4)  NULL
 );
 END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Payment_Payee' AND object_id = OBJECT_ID('core.Payment'))
     CREATE INDEX IX_Payment_Payee ON core.Payment(PayeeID);
+-- Idempotency for imported payments: the same vendor row can never become
+-- two payments. Filtered, so manually entered payments are unaffected.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Payment_External' AND object_id = OBJECT_ID('core.Payment'))
+    CREATE UNIQUE INDEX UX_Payment_External
+        ON core.Payment(ExternalReceipt, ExternalPaymentId)
+        WHERE ExternalReceipt IS NOT NULL;
+
+-- School Cash Online matching. These hold staged uploads, not authoritative
+-- data; applying an import is what creates core.Payment rows.
+IF OBJECT_ID('core.ScoImport', 'U') IS NULL
+BEGIN
+CREATE TABLE core.ScoImport (
+    ScoImportID  INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ScoImport PRIMARY KEY,
+    FileName     NVARCHAR(260) NOT NULL,
+    FileHash     VARBINARY(32) NOT NULL,
+    TotalRows    INT           NOT NULL CONSTRAINT DF_ScoImport_TotalRows DEFAULT 0,
+    MatchedCount INT           NOT NULL CONSTRAINT DF_ScoImport_Matched DEFAULT 0,
+    ReviewCount  INT           NOT NULL CONSTRAINT DF_ScoImport_Review  DEFAULT 0,
+    IgnoredCount INT           NOT NULL CONSTRAINT DF_ScoImport_Ignored DEFAULT 0,
+    AppliedCount INT           NOT NULL CONSTRAINT DF_ScoImport_Applied DEFAULT 0,
+    Status       NVARCHAR(20)  NOT NULL CONSTRAINT DF_ScoImport_Status DEFAULT 'Staged',
+    UploadedBy   NVARCHAR(200) NOT NULL,
+    UploadedAt   DATETIME2(0)  NOT NULL CONSTRAINT DF_ScoImport_UploadedAt DEFAULT SYSUTCDATETIME(),
+    AppliedBy    NVARCHAR(200) NULL,
+    AppliedAt    DATETIME2(0)  NULL,
+    CONSTRAINT CK_ScoImport_Status CHECK (Status IN ('Staged','Applied','Discarded'))
+);
+    CREATE UNIQUE INDEX UX_ScoImport_Hash ON core.ScoImport(FileHash);
+END
+
+IF OBJECT_ID('core.ScoRow', 'U') IS NULL
+BEGIN
+CREATE TABLE core.ScoRow (
+    ScoRowID      BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ScoRow PRIMARY KEY,
+    ScoImportID   INT           NOT NULL
+        CONSTRAINT FK_ScoRow_Import REFERENCES core.ScoImport(ScoImportID) ON DELETE CASCADE,
+    RowNumber     INT           NOT NULL,
+    PurchaserEmail NVARCHAR(255) NULL,
+    PurchaserName  NVARCHAR(255) NULL,
+    RecipientName  NVARCHAR(255) NULL,
+    ItemId         NVARCHAR(50)  NULL,
+    ItemName       NVARCHAR(255) NULL,
+    PaidAmount     NVARCHAR(50)  NULL,   -- gross charge, e.g. $312.00
+    ItemBalance    NVARCHAR(50)  NULL,   -- item price, e.g. $300.00
+    TransactionFee NVARCHAR(50)  NULL,   -- online fee, e.g. $12.00
+    PurchasedDate  NVARCHAR(50)  NULL,
+    Owing          NVARCHAR(50)  NULL,
+    Refunded       NVARCHAR(50)  NULL,
+    RawJson        NVARCHAR(MAX) NULL,
+    MatchedRegistrationID INT NULL,
+    MatchConfidence NVARCHAR(10) NULL,
+    MatchMethod     NVARCHAR(20) NULL,
+    MatchNote       NVARCHAR(255) NULL,
+    IgnoreReason    NVARCHAR(255) NULL,
+    AppliedPaymentID INT NULL,
+    CONSTRAINT UQ_ScoRow_Import_Row UNIQUE (ScoImportID, RowNumber)
+);
+    CREATE INDEX IX_ScoRow_Import ON core.ScoRow(ScoImportID, MatchConfidence);
+END
 
 IF OBJECT_ID('core.WorkshopName', 'U') IS NULL
 BEGIN

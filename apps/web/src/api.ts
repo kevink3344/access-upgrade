@@ -566,6 +566,75 @@ export const api = {
     remove: (id: number) => request<void>(`/api/credit-slips/${id}`, { method: 'DELETE' }),
   },
 
+  schoolCash: {
+    /**
+     * Uploads the CSV as raw text rather than multipart: it is a single text
+     * file, and the API reads it with express.text. The file name travels in
+     * a header so the history can show what was uploaded.
+     */
+    upload: (fileName: string, csv: string) =>
+      request<{ importId: number; rowCount: number; matched: number; review: number; ignored: number }>(
+        '/api/school-cash/imports',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain', 'X-File-Name': fileName },
+          body: csv,
+        },
+      ),
+
+    imports: (params: { page?: number; pageSize?: number } = {}) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined) qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<import('@pe/shared').ScoImportListResponse>(`/api/school-cash/imports${suffix}`);
+    },
+
+    import: (id: number) =>
+      request<import('@pe/shared').ScoImportDetail>(`/api/school-cash/imports/${id}`),
+
+    matchRow: (rowId: number, body: { registrationId?: number | null; ignore?: boolean; ignoreReason?: string | null }) =>
+      request<Record<string, unknown>>(`/api/school-cash/rows/${rowId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+
+    candidates: (importId: number, params: { rowId?: number; q?: string }) => {
+      const qs = new URLSearchParams();
+      if (params.rowId !== undefined) qs.set('rowId', String(params.rowId));
+      if (params.q) qs.set('q', params.q);
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<{ rows: import('@pe/shared').ScoCandidate[] }>(
+        `/api/school-cash/imports/${importId}/candidates${suffix}`,
+      );
+    },
+
+    apply: (id: number) =>
+      request<import('@pe/shared').ScoApplyResult>(`/api/school-cash/imports/${id}/apply`, {
+        method: 'POST',
+      }),
+
+    discard: (id: number) =>
+      request<void>(`/api/school-cash/imports/${id}/discard`, { method: 'POST' }),
+
+    history: (params: {
+      page?: number;
+      pageSize?: number;
+      q?: string;
+      importId?: number;
+      from?: string;
+      to?: string;
+    } = {}) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<import('@pe/shared').ScoHistoryResponse>(`/api/school-cash/history${suffix}`);
+    },
+  },
+
   lookups: {
     list: () => request<{ data: string[] }>('/api/lookups'),    get: (name: string) =>
       request<{ data: { id: number; label: string }[] }>(`/api/lookups/${name}`),

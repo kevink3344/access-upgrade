@@ -22,6 +22,7 @@ import { WorkshopNamesPage } from './pages/WorkshopNamesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { TrainingRequestsPage } from './pages/TrainingRequestsPage';
 import { CreditSlipsPage } from './pages/CreditSlipsPage';
+import { SchoolCashPage } from './pages/SchoolCashPage';
 import { CertificateDesignerPage } from './pages/CertificateDesignerPage';
 import { CertificatesPage } from './pages/CertificatesPage';
 import { ReportsPage } from './pages/ReportsPage';
@@ -91,6 +92,7 @@ const ROUTES: Record<string, string> = {
   '/payments': 'Payments & receipts',
   '/certificates': 'Certificates',
   '/credit-slips': 'Credit slips',
+  '/school-cash': 'School Cash matching',
   '/training-requests': 'Training requests',
   '/folders': 'Folder builder',
   '/reports': 'Reports hub',
@@ -142,6 +144,7 @@ function Router() {
   if (path === '/payments') return <PaymentsPage />;
   if (path === '/training-requests') return <TrainingRequestsPage />;
   if (path === '/credit-slips') return <CreditSlipsPage />;
+  if (path === '/school-cash') return <SchoolCashPage />;
   if (path === '/certificates') return <CertificatesPage />;
   if (path === '/reports') return <ReportsPage />;
   if (path === '/reports/visual') {

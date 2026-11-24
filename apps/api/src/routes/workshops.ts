@@ -843,7 +843,14 @@ workshopsRouter.get('/:id/sessions', requireAuth, async (req, res, next) => {
               ISNULL(c.WorkshopRegistered, 0) AS WorkshopRegistered
          FROM core.WorkshopSession s
          LEFT JOIN core.Workshop w ON w.WorkshopID = s.WorkshopID
-         LEFT JOIN core.vw_WorkshopSessionCounts c ON c.WorkshopSessionID = s.WorkshopSessionID
+         -- Counted inline rather than through core.vw_WorkshopSessionCounts:
+         -- the application login cannot CREATE VIEW in production, so the
+         -- view is absent there and the LEFT JOIN would silently report 0.
+         OUTER APPLY (
+             SELECT COUNT(*) AS WorkshopRegistered
+               FROM core.Registration r
+              WHERE r.WorkshopID = s.WorkshopID AND r.IsCancelled = 0
+         ) c
         WHERE s.WorkshopID = @id
         ORDER BY s.SessionDate, s.StartTime`,
       { id: { type: sql.Int, value: id } },

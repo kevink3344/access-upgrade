@@ -7,8 +7,9 @@ There are two databases and **both must be kept in step**:
 | Production | `wcpsssqlelasticpool` | `project-enlightenment` | Live data, staff's real records |
 | Test | `wcpss-sql-serverless-freetier` | `project-enlightenment-test` | Staff training and testing |
 
-Connection details live in `apps/api/.env` — production under `AZURE_SQL_*`, test under
-`AZURE_SQL_*_TEST`. Both files are gitignored.
+Connection details live in `apps/api/.env` — the unsuffixed `AZURE_SQL_*` keys point at the
+**test** database, `AZURE_SQL_*_PROD` at **production** (matching the app's own `MODE`
+switch). The file is gitignored.
 
 ---
 
@@ -18,6 +19,35 @@ Connection details live in `apps/api/.env` — production under `AZURE_SQL_*`, t
 
 A change that lands in only one place is drift, and drift is how the two environments stop
 being comparable — which defeats the point of having a test database at all.
+
+## Applying a migration
+
+`db/etl/apply-migration.ps1` reads `apps/api/.env` and runs one file against a chosen
+environment:
+
+```powershell
+# Test first, then production
+powershell -File db/etl/apply-migration.ps1 -File db/migrations/016-schoolcash-matching.sql -Env test
+powershell -File db/etl/apply-migration.ps1 -File db/migrations/016-schoolcash-matching.sql -Env prod
+```
+
+The migration files are guarded, so re-running one is a no-op.
+
+## What the application login may not do in production
+
+`wcpss-sql-writer` has `ALTER` on `core` and `CREATE TABLE` database-wide, but **not**:
+
+| Missing permission | Consequence |
+| --- | --- |
+| `CREATE VIEW` | `core.vw_WorkshopSessionCounts` (migration 012) could not be created |
+| `ALTER` on `staging` | New tables cannot be created in `staging`; migration 016 puts its tables in `core` instead |
+| `CREATE SCHEMA` | A migration cannot create a new schema |
+
+Granted 2026-11-24: `GRANT CREATE VIEW TO [wcpss-sql-writer]` on production.
+
+Where a permission is missing, prefer changing the code over blocking on a grant — the
+sessions endpoint now counts registrations inline rather than joining the view, so it is
+correct whether or not the view exists.
 
 ## `db/schema.sql` is safe to run anywhere
 

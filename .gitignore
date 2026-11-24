@@ -21,6 +21,9 @@ database/*.accdb
 database/*.laccdb
 database/*.mdb
 
+# Sample School Cash exports carry real purchaser names and email addresses.
+database/*.csv
+
 # =====================================================================
 #  Node / TypeScript
 # =====================================================================

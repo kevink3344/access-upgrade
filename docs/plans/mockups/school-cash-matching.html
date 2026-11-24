@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>School Cash matching — sample screen · Project Enlightenment</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Solway:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ===================================================================
+   The design tokens and component classes below are copied from the
+   running app (packages/shared/src/tokens.css and apps/web/src/styles),
+   so this mockup looks like the real screen rather than an
+   approximation. Only the app shell chrome is simplified.
+   =================================================================== */
+
+:root {
+  --primary-color-h: 205.79;
+  --primary-color-s: 72.15%;
+  --primary-color-l: 30.98%;
+  --primary-color: #165788;
+  --primary-color-hsl: 205.79, 72.15%, 30.98%;
+  --primary-dark: #0f3f61;
+  --secondary-color: #df6d1c;
+
+  --text-body: #525252;
+  --text-heading: #262626;
+  --text-muted: #737373;
+  --text-faint: #a3a3a3;
+
+  --surface-card: #ffffff;
+  --surface-neutral: #e5e5e5;
+  --surface-subtle: #f7f9fb;
+  --surface-zebra: #fafbfc;
+
+  --border-color: #d4d4d4;
+  --border-subtle: #e8ebef;
+
+  --radius: 8px;
+  --font-primary: 'Open Sans', system-ui, sans-serif;
+  --font-display: 'Solway', Georgia, serif;
+
+  --badge-amber-text: #8a5b00;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-body);
+  background: #f2f4f7;
+}
+
+h1, h2, h3 { font-family: var(--font-display); color: var(--text-heading); margin: 0; }
+
+/* ---------- page frame (simplified app shell) ---------- */
+.frame { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+
+.side {
+  background: var(--surface-card);
+  border-right: 1px solid var(--surface-neutral);
+  padding: 20px 0;
+}
+.side-brand { display: flex; align-items: center; gap: 10px; padding: 0 20px 16px; border-bottom: 1px solid var(--surface-neutral); }
+.side-mark {
+  width: 34px; height: 30px; border-radius: 4px;
+  background: radial-gradient(circle at 50% 50%, #fed100 0 22%, #df6d1c 22% 42%, #165788 42% 62%, transparent 62%);
+}
+.side-brand b { display: block; font-size: 14px; color: var(--text-heading); }
+.side-brand small { display: block; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); }
+.side-title { padding: 16px 20px 6px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); font-weight: 700; }
+.side-link { display: block; padding: 8px 20px; font-size: 13px; color: var(--text-body); text-decoration: none; border-left: 3px solid transparent; }
+.side-link.active { color: var(--primary-color); font-weight: 700; border-left-color: var(--primary-color); background: hsl(var(--primary-color-hsl) / .08); }
+
+.main { padding: 28px; min-width: 0; }
+
+/* ---------- page head / toolbar ---------- */
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.page-head h2 { font-size: 24px; }
+.page-head p { margin: 4px 0 0; font-size: 13.5px; color: var(--text-muted); }
+
+.toolbar {
+  display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; background: var(--surface-card);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius); margin-bottom: 16px;
+}
+.toolbar-field { display: flex; flex-direction: column; gap: 4px; }
+.toolbar-field label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); font-weight: 700; }
+.toolbar-count { margin-left: auto; font-size: 13px; color: var(--text-muted); }
+
+/* ---------- panels, tables ---------- */
+.panel { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius); overflow: hidden; }
+.panel-body { padding: 0; }
+
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table thead th {
+  text-align: left; padding: 10px 16px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-faint); font-weight: 700;
+  border-bottom: 1px solid var(--border-subtle); white-space: nowrap;
+}
+.data-table tbody td { padding: 11px 16px; border-top: 1px solid var(--border-subtle); vertical-align: middle; }
+.data-table tbody tr:nth-child(even) { background: var(--surface-zebra); }
+.data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.data-table .muted { color: var(--text-muted); }
+
+/* ---------- pills / badges ---------- */
+.pill {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; letter-spacing: .02em; white-space: nowrap;
+}
+.pill-open { background: #e7f4ec; color: #1f6b40; }
+.pill-closed { background: #eef1f4; color: #4a5560; }
+.pill-full { background: #fdf3e2; color: var(--badge-amber-text); }
+.pill-info { background: hsl(var(--primary-color-hsl) / .1); color: var(--primary-dark); }
+.pill-muted { background: #f0f0f0; color: #6b7280; }
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  padding: 7px 14px; border-radius: var(--radius); cursor: pointer;
+  border: 1px solid transparent; background: transparent; color: inherit;
+}
+.btn-primary { background: var(--primary-color); color: #fff; }
+.btn-ghost { border-color: var(--border-color); background: var(--surface-card); color: var(--text-body); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.row-actions { display: inline-flex; gap: 6px; }
+
+/* ---------- alerts ---------- */
+.alert {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px 14px; border-radius: var(--radius);
+  font-size: 13.5px; margin-bottom: 18px; line-height: 1.5;
+}
+.alert-info { background: hsl(var(--primary-color-hsl) / .06); border: 1px solid hsl(var(--primary-color-hsl) / .18); color: var(--primary-dark); }
+.alert-warn { background: #fff8e6; border: 1px solid #f0dfb0; color: #6b4e00; }
+
+/* ---------- tabs (from the drawer/segmented pattern) ---------- */
+.segmented { display: inline-flex; border: 1px solid var(--border-color); border-radius: var(--radius); overflow: hidden; }
+.segmented button {
+  font-family: inherit; font-size: 13px; font-weight: 600; padding: 7px 14px;
+  background: var(--surface-card); border: 0; border-right: 1px solid var(--border-color);
+  color: var(--text-muted); cursor: pointer;
+}
+.segmented button:last-child { border-right: 0; }
+.segmented button.is-active { background: hsl(var(--primary-color-hsl) / .1); color: var(--primary-color); }
+
+/* ---------- the mockup-only bits ---------- */
+.mock-note {
+  max-width: 1180px; margin: 0 auto 18px; padding: 10px 14px;
+  background: #1f2937; color: #e5e7eb; border-radius: var(--radius);
+  font-size: 12.5px; line-height: 1.55;
+}
+.mock-note b { color: #fff; }
+.fee { font-size: 11.5px; color: var(--text-faint); display: block; }
+.gap { margin-bottom: 16px; }
+.summary-bar { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
+.summary-bar strong { color: var(--text-heading); }
+</style>
+</head>
+<body>
+
+<div class="frame">
+  <aside class="side">
+    <div class="side-brand">
+      <div class="side-mark"></div>
+      <div>
+        <b>Project Enlightenment</b>
+        <small>Training Database</small>
+      </div>
+    </div>
+    <div class="side-title">Data</div>
+    <a class="side-link" href="#">Workshops</a>
+    <a class="side-link" href="#">Participants</a>
+    <a class="side-link" href="#">Registrations</a>
+    <a class="side-link" href="#">Payments &amp; receipts</a>
+    <div class="side-title">Administration</div>
+    <a class="side-link" href="#">Users</a>
+    <a class="side-link" href="#">Certificate Designer</a>
+    <a class="side-link" href="#">Form Designer</a>
+    <a class="side-link active" href="#">School Cash matching</a>
+  </aside>
+
+  <main class="main">
+    <div class="mock-note">
+      <b>Sample screen — not live.</b> This shows the review step of the School Cash matching
+      workflow described in <i>docs/plans/school-cash-matching.md</i>. It uses the app's own
+      design tokens and component classes. Amounts are from the real
+      <i>ItemOrderReport_1793719554413.csv</i>.
+    </div>
+
+    <div class="page-head">
+      <div>
+        <h2>School Cash matching</h2>
+        <p>Upload 24 Nov 2026 10:25 by Kevin Key · 98 rows in this file</p>
+      </div>
+      <div class="row-actions">
+        <button class="btn btn-ghost">Discard upload</button>
+        <button class="btn btn-primary" disabled>Apply 44 payments</button>
+      </div>
+    </div>
+
+    <div class="alert alert-warn" role="status">
+      <span>
+        <strong>8 rows still need review.</strong> Match or ignore each one before applying —
+        applying now would leave those payments unrecorded.
+      </span>
+    </div>
+
+    <div class="toolbar">
+      <div class="toolbar-field">
+        <label for="f-search">Search</label>
+        <input id="f-search" type="search" placeholder="Purchaser, item or email…"
+               style="padding:7px 10px;border:1px solid var(--border-color);border-radius:var(--radius);font-family:inherit;font-size:13px;min-width:240px">
+      </div>
+      <div class="segmented" role="group" aria-label="Filter rows">
+        <button class="is-active">All (98)</button>
+        <button>Matched (44)</button>
+        <button>Needs review (8)</button>
+        <button>Ignored (2)</button>
+        <button>Duplicates (44)</button>
+      </div>
+      <span class="toolbar-count">$14,286.00 item value · $571.44 fees</span>
+    </div>
+
+    <div class="panel">
+      <div class="summary-bar">
+        <span><strong>44</strong> matched automatically</span>
+        <span><strong>8</strong> need review</span>
+        <span><strong>2</strong> ignored</span>
+        <span><strong>44</strong> already applied in an earlier upload</span>
+      </div>
+
+      <div class="panel-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Purchaser</th>
+              <th scope="col">Item</th>
+              <th scope="col" class="num">Item price</th>
+              <th scope="col" class="num">Fee</th>
+              <th scope="col">Matched to</th>
+              <th scope="col">Confidence</th>
+              <th scope="col" class="num">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- High confidence: email + exactly one unpaid registration -->
+            <tr>
+              <td>
+                Bria Barber
+                <span class="fee">bria@appleseedspreschool.org</span>
+              </td>
+              <td>
+                A Full Center Guided Observation - Appleseeds
+                <span class="fee">Item 48692 · purchased 15 Sep 2026</span>
+              </td>
+              <td class="num">$300.00</td>
+              <td class="num">$12.00</td>
+              <td>
+                <strong>TPB2600</strong>
+                <span class="fee">Guided Observation · 4 May 2027</span>
+              </td>
+              <td><span class="pill pill-open">High</span></td>
+              <td class="num">
+                <span class="row-actions">
+                  <button class="btn btn-ghost btn-sm">Change</button>
+                </span>
+              </td>
+            </tr>
+
+            <!-- High confidence via amount: two unpaid registrations, one matches -->
+            <tr>
+              <td>
+                Denelle Manley
+                <span class="fee">denelle@wakeforestumc.org</span>
+              </td>
+              <td>
+                A Full Center Guided Observation - Little Chapel
+                <span class="fee">Item 48256 · purchased 28 Aug 2026</span>
+              </td>
+              <td class="num">$300.00</td>
+              <td class="num">$12.00</td>
+              <td>
+                <strong>TPB2601</strong>
+                <span class="fee">2 unpaid registrations · amount picked this one</span>
+              </td>
+              <td><span class="pill pill-open">High</span></td>
+              <td class="num">
+                <span class="row-actions">
+                  <button class="btn btn-ghost btn-sm">Change</button>
+                </span>
+              </td>
+            </tr>
+
+            <!-- Needs review: email matches, but several candidates and no amount match -->
+            <tr>
+              <td>
+                Jill Glenwekwinkel
+                <span class="fee">director@northsidepreschool.org</span>
+              </td>
+              <td>
+                A Full Center Guided Observation - Northside Preschool
+                <span class="fee">Item 48242 · purchased 9 Sep 2026</span>
+              </td>
+              <td class="num">$450.00</td>
+              <td class="num">$18.00</td>
+              <td class="muted">3 unpaid registrations, none at $450</td>
+              <td><span class="pill pill-full">Needs review</span></td>
+              <td class="num">
+                <span class="row-actions">
+                  <button class="btn btn-primary btn-sm">Match…</button>
+                </span>
+              </td>
+            </tr>
+
+            <!-- Needs review: no participant for this email -->
+            <tr>
+              <td>
+                Unknown purchaser
+                <span class="fee">accounts@brightbeginnings.example</span>
+              </td>
+              <td>
+                Positive Solutions for Families - Behavior has Meaning
+                <span class="fee">Item 48110 · purchased 2 Oct 2026</span>
+              </td>
+              <td class="num">$100.00</td>
+              <td class="num">$4.00</td>
+              <td class="muted">No participant with this email</td>
+              <td><span class="pill pill-full">Needs review</span></td>
+              <td class="num">
+                <span class="row-actions">
+                  <button class="btn btn-primary btn-sm">Match…</button>
+                </span>
+              </td>
+            </tr>
+
+            <!-- Ignored -->
+            <tr>
+              <td>
+                Marcus Webb
+                <span class="fee">mwebb@example.org</span>
+              </td>
+              <td>
+                A Full Center Guided Observation - Appleseeds
+                <span class="fee">Item 48692 · purchased 3 Oct 2026</span>
+              </td>
+              <td class="num">$0.00</td>
+              <td class="num">$0.00</td>
+              <td class="muted">Refunded in full — outside this system</td>
+              <td><span class="pill pill-muted">Ignored</span></td>
+              <td class="num">
+                <span class="row-actions">
+                  <button class="btn btn-ghost btn-sm">Undo</button>
+                </span>
+              </td>
+            </tr>
+
+            <!-- Duplicate: already applied in an earlier upload -->
+            <tr>
+              <td>
+                Bria Barber
+                <span class="fee">bria@appleseedspreschool.org</span>
+              </td>
+              <td>
+                A Full Center Guided Observation - Appleseeds
+                <span class="fee">Item 48692 · purchased 15 Sep 2026</span>
+              </td>
+              <td class="num">$300.00</td>
+              <td class="num">$12.00</td>
+              <td>
+                <strong>TPB2600</strong>
+                <span class="fee">Applied 23 Nov 2026 by Kevin Key</span>
+              </td>
+              <td><span class="pill pill-info">Already applied</span></td>
+              <td class="num">
+                <span class="row-actions">
+                  <button class="btn btn-ghost btn-sm">View</button>
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <p style="font-size:12px;color:var(--text-faint);margin-top:14px">
+      Item price is the amount charged for the item; the fee is the online transaction charge.
+      Revenue reports use the item price, so a $312 charge does not overstate income.
+    </p>
+  </main>
+</div>
+
+</body>
+</html>
