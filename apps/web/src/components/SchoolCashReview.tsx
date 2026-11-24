@@ -384,6 +384,9 @@ export function SchoolCashReview({
                     <td data-label="Purchaser">
                       {r.PurchaserName ?? 'Unknown purchaser'}
                       <div className="muted" style={{ fontSize: 12 }}>{r.PurchaserEmail ?? '—'}</div>
+                      {r.PurchaserFound === 0 && (
+                        <span className="pill pill-full" style={{ marginTop: 4 }}>Not found</span>
+                      )}
                     </td>
                     <td data-label="Item">
                       {r.ItemName ?? '—'}

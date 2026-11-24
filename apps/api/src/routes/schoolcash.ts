@@ -862,7 +862,14 @@ schoolCashRouter.get(
                 w.WorkshopCode,
                 CONVERT(NVARCHAR(10), w.StartDate, 23) AS WorkshopDate,
                 CASE WHEN w.Cost1 IS NULL THEN NULL
-                     ELSE w.Cost1 - ISNULL(r.PaidAmount, 0) END AS RegistrationOwed
+                     ELSE w.Cost1 - ISNULL(r.PaidAmount, 0) END AS RegistrationOwed,
+                -- Whether this purchaser exists at all, independent of whether
+                -- a registration has been matched. The badge under the name
+                -- means "we looked and found nobody", not "not matched yet".
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM core.Participant p
+                     WHERE LOWER(LTRIM(RTRIM(p.Email))) = LOWER(LTRIM(RTRIM(s.PurchaserEmail)))
+                ) THEN 1 ELSE 0 END AS PurchaserFound
            FROM core.ScoRow s
            LEFT JOIN core.Registration r ON r.RegistrationID = s.MatchedRegistrationID
            LEFT JOIN core.Participant  pt ON pt.ParticipantID = r.ParticipantID

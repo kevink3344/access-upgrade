@@ -1536,6 +1536,14 @@ export interface ScoRowRow {
   RowNumber: number;
   PurchaserEmail: string | null;
   PurchaserName: string | null;
+  /**
+   * 1 when a participant exists for the purchaser's email, 0 when none does.
+   *
+   * Deliberately independent of `ParticipantID`, which is only populated once
+   * a registration has been matched. The "Not found" badge means we looked and
+   * found nobody, not that matching has yet to run.
+   */
+  PurchaserFound: number;
   ItemId: string | null;
   ItemName: string | null;
   /** The item price — what the matcher compares against. */
