@@ -114,15 +114,18 @@ async function participantForEmail(email: string): Promise<number | null> {
  * Every unpaid, uncancelled registration for a participant, with what is
  * still owed on each.
  *
- * "Owed" is the workshop price less whatever has already been paid. Where the
- * price is unknown the registration still counts as a candidate — an admin
- * can match it by hand — but it cannot win the amount rule.
+ * "Owed" is the workshop price less whatever has already been paid. The price
+ * is `core.Workshop.Cost1` — the same column the public registration form
+ * quotes as the cost. There is no `Price` column on Workshop.
+ *
+ * Where the price is unknown the registration still counts as a candidate —
+ * an admin can match it by hand — but it cannot win the amount rule.
  */
 async function unpaidCandidates(participantId: number): Promise<MatchCandidate[]> {
   const r = await query<{ RegistrationID: number; Owed: number | null }>(
     `SELECT r.RegistrationID,
-            CASE WHEN w.Price IS NULL THEN NULL
-                 ELSE w.Price - ISNULL(r.PaidAmount, 0)
+            CASE WHEN w.Cost1 IS NULL THEN NULL
+                 ELSE w.Cost1 - ISNULL(r.PaidAmount, 0)
             END AS Owed
        FROM core.Registration r
        JOIN core.Workshop w ON w.WorkshopID = r.WorkshopID
@@ -490,8 +493,8 @@ schoolCashRouter.get(
                 n.WorkshopName,
                 w.WorkshopCode,
                 CONVERT(NVARCHAR(10), w.StartDate, 23) AS WorkshopDate,
-                CASE WHEN w.Price IS NULL THEN NULL
-                     ELSE w.Price - ISNULL(r.PaidAmount, 0) END AS RegistrationOwed
+                CASE WHEN w.Cost1 IS NULL THEN NULL
+                     ELSE w.Cost1 - ISNULL(r.PaidAmount, 0) END AS RegistrationOwed
            FROM core.ScoRow s
            LEFT JOIN core.Registration r ON r.RegistrationID = s.MatchedRegistrationID
            LEFT JOIN core.Participant  pt ON pt.ParticipantID = r.ParticipantID
@@ -736,10 +739,10 @@ schoolCashRouter.get(
                 CONCAT(pt.FirstName, ' ', pt.LastName) AS ParticipantName,
                 r.WorkshopID, n.WorkshopName, w.WorkshopCode,
                 CONVERT(NVARCHAR(10), w.StartDate, 23) AS WorkshopDate,
-                w.Price AS WorkshopPrice,
+                w.Cost1 AS WorkshopPrice,
                 r.PaidAmount,
-                CASE WHEN w.Price IS NULL THEN NULL
-                     ELSE w.Price - ISNULL(r.PaidAmount, 0) END AS Owed
+                CASE WHEN w.Cost1 IS NULL THEN NULL
+                     ELSE w.Cost1 - ISNULL(r.PaidAmount, 0) END AS Owed
            FROM core.Registration r
            JOIN core.Participant  pt ON pt.ParticipantID = r.ParticipantID
            JOIN core.Workshop    w  ON w.WorkshopID = r.WorkshopID
