@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { NotificationView } from '@pe/shared';
 import { api } from '../api';
 import { AppShell } from '../components/AppShell';
-import { IconBell } from '../components/icons';
+import { IconBell, IconMailOpen, IconMailUnread } from '../components/icons';
 
 const PAGE_SIZE = 25;
 
@@ -68,6 +68,11 @@ export function NotificationsPage() {
 
   const markOne = useMutation({
     mutationFn: (id: number) => api.notifications.markRead(id),
+    onSuccess: invalidate,
+  });
+
+  const markUnreadOne = useMutation({
+    mutationFn: (id: number) => api.notifications.markUnread(id),
     onSuccess: invalidate,
   });
 
@@ -194,16 +199,27 @@ export function NotificationsPage() {
                     </span>
                   </div>
                   <div className="row-actions">
-                    {!n.IsRead && !n.IsArchived && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => markOne.mutate(n.NotificationID)}
-                        disabled={markOne.isPending}
-                      >
-                        Mark read
-                      </button>
-                    )}
+                    {/* One icon that toggles, rather than two buttons that
+                        are each hidden half the time — the row keeps the same
+                        shape whether it is read or not. */}
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm btn-icon"
+                      onClick={() =>
+                        n.IsRead
+                          ? markUnreadOne.mutate(n.NotificationID)
+                          : markOne.mutate(n.NotificationID)
+                      }
+                      disabled={markOne.isPending || markUnreadOne.isPending}
+                      title={n.IsRead ? 'Mark as unread' : 'Mark as read'}
+                      aria-label={n.IsRead ? 'Mark as unread' : 'Mark as read'}
+                    >
+                      {n.IsRead ? (
+                        <IconMailUnread width={16} height={16} />
+                      ) : (
+                        <IconMailOpen width={16} height={16} />
+                      )}
+                    </button>
                     {n.IsArchived ? (
                       <button
                         type="button"

@@ -191,3 +191,19 @@ export const IconLayoutSidebar = (p: Props) => (
     <path d="M9 4v16" />
   </svg>
 );
+
+/** An open envelope — "mark as read". */
+export const IconMailOpen = (p: Props) => (
+  <svg {...base(p)}>
+    <path d="M3 9.5 12 4l9 5.5V19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
+    <path d="m3 9.5 9 6 9-6" />
+  </svg>
+);
+
+/** A sealed envelope — "mark as unread". */
+export const IconMailUnread = (p: Props) => (
+  <svg {...base(p)}>
+    <rect x="3" y="5" width="18" height="14" rx="1" />
+    <path d="m3 6 9 6 9-6" />
+  </svg>
+);

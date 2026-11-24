@@ -139,6 +139,45 @@ notificationsRouter.post('/:id/read', requireAuth, async (req, res, next) => {
 
 /**
  * @openapi
+ * /api/notifications/{id}/unread:
+ *   post:
+ *     tags: [Notifications]
+ *     summary: Mark one notification as unread
+ *     description: >
+ *       Clears ReadAt so the row shows as unread again and the bell badge
+ *       counts it. An archived row is left archived — unread and archived are
+ *       independent, and "mark unread" should not silently restore something
+ *       the user deliberately hid.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       204: { description: Marked }
+ */
+notificationsRouter.post('/:id/unread', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+
+    await query(
+      `UPDATE core.NotificationRecipient
+          SET ReadAt = NULL
+        WHERE NotificationID = @nid AND UserID = @uid`,
+      {
+        nid: { type: sql.Int, value: id },
+        uid: { type: sql.Int, value: req.user!.userId },
+      },
+    );
+
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
  * /api/notifications/{id}/archive:
  *   post:
  *     tags: [Notifications]

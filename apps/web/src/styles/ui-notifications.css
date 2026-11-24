@@ -302,6 +302,17 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
   outline-offset: 1px;
 }
 
+/* Square icon-only button. Used for the read/unread toggle so the row keeps
+   the same shape whether the notification is read or not. */
+.btn.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  min-width: 30px;
+  line-height: 0;
+}
+
 /* Touch targets: the desktop-sized switch is too short to tap reliably. */
 @media (max-width: 640px) {
   .segmented { width: 100%; }
@@ -319,6 +330,12 @@ a.notif-page-title:hover { color: var(--primary-dark); text-decoration: underlin
   .notif-page-list .row-actions .btn {
     min-height: 44px;
     padding: 0 14px;
+  }
+
+  /* An icon button has no text to widen for, so keep it square. */
+  .notif-page-list .row-actions .btn.btn-icon {
+    min-width: 44px;
+    padding: 0;
   }
 }
 

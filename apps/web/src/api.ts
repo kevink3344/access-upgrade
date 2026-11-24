@@ -657,6 +657,8 @@ export const api = {
     },
     markRead: (id: number) =>
       request<void>(`/api/notifications/${id}/read`, { method: 'POST' }),
+    markUnread: (id: number) =>
+      request<void>(`/api/notifications/${id}/unread`, { method: 'POST' }),
     markAllRead: () =>
       request<{ updated: number }>('/api/notifications/read-all', { method: 'POST' }),
     archive: (id: number) =>
