@@ -89,4 +89,40 @@ describe('School Cash endpoints', () => {
       expect(row).toHaveProperty('WorkshopPrice');
     }
   });
+
+  it('stages an unknown purchaser as matched, not as needing review', async () => {
+    // A purchaser with no participant record is not a failure: applying the
+    // import creates the participant and registration. This asserts the row
+    // is staged High so it needs no manual work.
+    const token = await authToken();
+    // The email is unique per run: the import is keyed on a hash of the whole
+    // file, so a byte-identical CSV would be refused as already imported.
+    const unique = `no-such-purchaser-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.invalid`;
+    const csv = [
+      'Purchaser Email,Item Name,Item Id,Paid Item Balance,Paid Transaction Fee,Purchased,Paid Amount,Payments',
+      `${unique},Some Item,99999,$25.00,$1.10,09/15/2026,$26.10,paid`,
+    ].join('\n');
+
+    const res = await api
+      .post('/api/school-cash/imports')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'text/plain')
+      .set('X-File-Name', `unknown-purchaser-${Date.now()}.csv`)
+      .send(csv);
+
+    expect(res.status).toBe(201);
+    expect(res.body.matched).toBe(1);
+    expect(res.body.review).toBe(0);
+
+    // Clean up so the test leaves no staged rows behind.
+    const detail = await authed(`/api/school-cash/imports/${res.body.importId}`);
+    expect(detail.status).toBe(200);
+    const row = detail.body.rows[0];
+    expect(row.MatchConfidence).toBe('High');
+    expect(row.MatchNote).toContain('New purchaser');
+
+    await api
+      .post(`/api/school-cash/imports/${res.body.importId}/discard`)
+      .set('Authorization', `Bearer ${token}`);
+  });
 });

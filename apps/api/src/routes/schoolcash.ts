@@ -122,11 +122,16 @@ async function participantForEmail(email: string): Promise<number | null> {
  * an admin can match it by hand — but it cannot win the amount rule.
  */
 async function unpaidCandidates(participantId: number): Promise<MatchCandidate[]> {
-  const r = await query<{ RegistrationID: number; Owed: number | null }>(
+  const r = await query<{
+    RegistrationID: number;
+    Owed: number | null;
+    RegisteredOn: string | null;
+  }>(
     `SELECT r.RegistrationID,
             CASE WHEN w.Cost1 IS NULL THEN NULL
                  ELSE w.Cost1 - ISNULL(r.PaidAmount, 0)
-            END AS Owed
+            END AS Owed,
+            CONVERT(NVARCHAR(10), COALESCE(r.RegistrationDate, w.StartDate), 23) AS RegisteredOn
        FROM core.Registration r
        JOIN core.Workshop w ON w.WorkshopID = r.WorkshopID
       WHERE r.ParticipantID = @pid
@@ -135,7 +140,11 @@ async function unpaidCandidates(participantId: number): Promise<MatchCandidate[]
       ORDER BY r.RegistrationID`,
     { pid: { type: sql.Int, value: participantId } },
   );
-  return r.recordset.map((row) => ({ registrationId: row.RegistrationID, owed: row.Owed }));
+  return r.recordset.map((row) => ({
+    registrationId: row.RegistrationID,
+    owed: row.Owed,
+    registeredOn: row.RegisteredOn,
+  }));
 }
 
 /**
@@ -151,6 +160,121 @@ async function alreadyApplied(identity: string): Promise<boolean> {
     { identity: { type: sql.NVarChar(400), value: identity } },
   );
   return (r.recordset[0]?.n ?? 0) > 0;
+}
+
+/**
+ * Creates the participant and registration a School Cash row needs when the
+ * purchaser has never registered before.
+ *
+ * Follows the same shapes the public registration form uses: ids allocated
+ * from the current maximum (the legacy tables are not IDENTITY), and the
+ * participant carrying the purchaser's email so the row can be matched by it.
+ *
+ * The workshop is found from the item name. Item names are free text and only
+ * about a third match a workshop name exactly, so this is deliberately
+ * conservative: no match means no registration, and the row is reported as a
+ * conflict for an admin to resolve rather than being filed against a guess.
+ */
+async function createRegistrationFor(
+  row: {
+    PurchaserEmail: string | null;
+    PurchaserName: string | null;
+    ItemName: string | null;
+    PurchasedDate: string | null;
+  },
+  tx: sql.Transaction,
+): Promise<{ ok: true; registrationId: number } | { ok: false; reason: string }> {
+  const email = row.PurchaserEmail;
+  if (!email) return { ok: false, reason: 'No purchaser email, so no participant can be created.' };
+
+  // Reuse a participant created by an earlier row in the same file.
+  const existing = await txQuery<{ ParticipantID: number }>(
+    tx,
+    `SELECT TOP 1 ParticipantID FROM core.Participant
+      WHERE LOWER(LTRIM(RTRIM(Email))) = @email ORDER BY ParticipantID`,
+    { email: { type: sql.NVarChar(100), value: email.toLowerCase() } },
+  );
+
+  let participantId = existing.recordset[0]?.ParticipantID ?? null;
+
+  if (participantId === null) {
+    const name = splitName(row.PurchaserName);
+    const seq = await txQuery<{ NextId: number }>(
+      tx,
+      'SELECT ISNULL(MAX(ParticipantID), 0) + 1 AS NextId FROM core.Participant WITH (TABLOCKX)',
+    );
+    const created = await txQuery<{ ParticipantID: number }>(
+      tx,
+      `INSERT INTO core.Participant
+              (ParticipantID, FirstName, LastName, Email, DateOfEntry)
+       OUTPUT INSERTED.ParticipantID AS ParticipantID
+       VALUES (@id, @fn, @ln, @email, SYSUTCDATETIME())`,
+      {
+        id: { type: sql.Int, value: seq.recordset[0]!.NextId },
+        fn: { type: sql.NVarChar(30), value: name.first },
+        ln: { type: sql.NVarChar(30), value: name.last },
+        email: { type: sql.NVarChar(100), value: email },
+      },
+    );
+    participantId = created.recordset[0]!.ParticipantID;
+  }
+
+  // The workshop the item refers to. Exact name match only — see above.
+  const workshop = await txQuery<{ WorkshopID: number }>(
+    tx,
+    `SELECT TOP 1 w.WorkshopID
+       FROM core.Workshop w
+       JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
+      WHERE LTRIM(RTRIM(n.WorkshopName)) = @item
+      ORDER BY w.StartDate DESC, w.WorkshopID DESC`,
+    { item: { type: sql.NVarChar(255), value: (row.ItemName ?? '').trim() } },
+  );
+
+  const workshopId = workshop.recordset[0]?.WorkshopID;
+  if (!workshopId) {
+    return {
+      ok: false,
+      reason: `No workshop matches the item "${row.ItemName ?? '(unnamed)'}", so no registration could be created.`,
+    };
+  }
+
+  const seq = await txQuery<{ NextId: number }>(
+    tx,
+    'SELECT ISNULL(MAX(RegistrationID), 0) + 1 AS NextId FROM core.Registration WITH (TABLOCKX)',
+  );
+
+  const created = await txQuery<{ RegistrationID: number }>(
+    tx,
+    `INSERT INTO core.Registration
+            (RegistrationID, ParticipantID, WorkshopID, RegistrationDate, IsCancelled,
+             Attended, EmailConfirmation, Source)
+     OUTPUT INSERTED.RegistrationID AS RegistrationID
+     VALUES (@id, @pid, @wid, @date, 0, 0, 0, 'SchoolCash')`,
+    {
+      id: { type: sql.Int, value: seq.recordset[0]!.NextId },
+      pid: { type: sql.Int, value: participantId },
+      wid: { type: sql.Int, value: workshopId },
+      date: { type: sql.Date, value: isoDate(row.PurchasedDate) },
+    },
+  );
+
+  return { ok: true, registrationId: created.recordset[0]!.RegistrationID };
+}
+
+/** "Barber, Bria" -> { last: 'Barber', first: 'Bria' }; both capped to the column width. */
+function splitName(name: string | null): { first: string | null; last: string | null } {
+  if (!name) return { first: null, last: null };
+  const trimmed = name.trim();
+  const comma = trimmed.indexOf(',');
+  const parts =
+    comma >= 0
+      ? { last: trimmed.slice(0, comma).trim(), first: trimmed.slice(comma + 1).trim() }
+      : (() => {
+          const bits = trimmed.split(/\s+/);
+          return { first: bits[0] ?? '', last: bits.slice(1).join(' ') };
+        })();
+  const cap = (s: string) => (s === '' ? null : s.slice(0, 30));
+  return { first: cap(parts.first), last: cap(parts.last) };
 }
 
 /** The School Cash payment method, created on first use so a fresh database works. */
@@ -200,6 +324,7 @@ async function evaluateRow(row: ScoCsvRow, identity: string): Promise<{
 
   const email = row.purchaserEmail;
   const itemBalance = parseMoney(row.itemBalance);
+  const purchasedOn = isoDate(row.purchasedDate);
 
   if (!email) {
     return {
@@ -211,17 +336,24 @@ async function evaluateRow(row: ScoCsvRow, identity: string): Promise<{
   }
 
   const participantId = await participantForEmail(email);
+
+  // An unknown email is not a failure — it means this purchaser has never
+  // registered. Applying the import creates the participant and a
+  // registration, so the row is matched by email and needs no manual work.
   if (participantId === null) {
     return {
       matchedRegistrationId: null,
-      confidence: 'None',
-      method: 'none',
-      note: 'No participant uses this email address.',
+      confidence: 'High',
+      method: 'email',
+      note: 'New purchaser — a participant and registration will be created on apply.',
     };
   }
 
   const candidates = await unpaidCandidates(participantId);
-  const outcome = matchRow({ purchaserEmail: email, itemBalance, alreadyApplied: false }, candidates);
+  const outcome = matchRow(
+    { purchaserEmail: email, itemBalance, alreadyApplied: false, purchasedOn },
+    candidates,
+  );
 
   return {
     matchedRegistrationId: outcome.registrationId,
@@ -229,6 +361,24 @@ async function evaluateRow(row: ScoCsvRow, identity: string): Promise<{
     method: outcome.method,
     note: outcome.note,
   };
+}
+
+/**
+ * "09/15/2026" -> "2026-09-15". Returns null when the text is not a date.
+ *
+ * The vendor export uses US month-first dates, which `new Date()` parses
+ * inconsistently across engines, so the parts are read explicitly.
+ */
+function isoDate(text: string | null): string | null {
+  if (!text) return null;
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(text.trim());
+  if (m) {
+    const [, mm, dd, yyyy] = m;
+    return `${yyyy}-${mm!.padStart(2, '0')}-${dd!.padStart(2, '0')}`;
+  }
+  // Some exports use ISO already.
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(text.trim());
+  return iso ? iso[0] : null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -810,17 +960,18 @@ schoolCashRouter.post(
         ScoRowID: number;
         RowNumber: number;
         PurchaserEmail: string | null;
+        PurchaserName: string | null;
         ItemId: string | null;
         ItemName: string | null;
         PaidAmount: string | null;
         ItemBalance: string | null;
         TransactionFee: string | null;
         PurchasedDate: string | null;
-        MatchedRegistrationID: number;
+        MatchedRegistrationID: number | null;
         ParticipantName: string | null;
         WorkshopName: string | null;
       }>(
-        `SELECT s.ScoRowID, s.RowNumber, s.PurchaserEmail, s.ItemId, s.ItemName,
+        `SELECT s.ScoRowID, s.RowNumber, s.PurchaserEmail, s.PurchaserName, s.ItemId, s.ItemName,
                 s.PaidAmount, s.ItemBalance, s.TransactionFee,
                 s.PurchasedDate, s.MatchedRegistrationID,
                 CONCAT(pt.FirstName, ' ', pt.LastName) AS ParticipantName,
@@ -832,7 +983,6 @@ schoolCashRouter.post(
            LEFT JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
           WHERE s.ScoImportID = @id
             AND s.MatchConfidence = 'High'
-            AND s.MatchedRegistrationID IS NOT NULL
             AND s.AppliedPaymentID IS NULL
           ORDER BY s.RowNumber`,
         { id: { type: sql.Int, value: importId } },
@@ -862,30 +1012,52 @@ schoolCashRouter.post(
         let nextPaymentId = seq.recordset[0]!.NextPayment;
 
         for (const row of ready.recordset) {
-          // Re-check inside the transaction: the registration may have been
-          // paid by someone else between staging and apply.
-          const reg = await txQuery<{ PaidAmount: number | null; IsCancelled: boolean; PaymentID: number | null }>(
-            tx,
-            `SELECT PaidAmount, IsCancelled, PaymentID
-               FROM core.Registration WITH (UPDLOCK) WHERE RegistrationID = @id`,
-            { id: { type: sql.Int, value: row.MatchedRegistrationID } },
-          );
-          const current = reg.recordset[0];
-          if (!current) {
-            conflicts.push({ rowNumber: row.RowNumber, itemName: row.ItemName, reason: 'Registration no longer exists.' });
-            continue;
-          }
-          if (current.IsCancelled) {
-            conflicts.push({ rowNumber: row.RowNumber, itemName: row.ItemName, reason: 'Registration is cancelled.' });
-            continue;
-          }
-          if ((current.PaidAmount ?? 0) > 0) {
-            conflicts.push({ rowNumber: row.RowNumber, itemName: row.ItemName, reason: 'Registration has already been paid.' });
-            continue;
-          }
-
           const amount = parseMoney(row.ItemBalance) ?? 0;
           const fee = parseMoney(row.TransactionFee) ?? 0;
+
+          // A row whose purchaser had no participant at upload time is
+          // matched by email and needs its participant and registration
+          // created here. Done inside the transaction so a failure leaves
+          // nothing behind.
+          let registrationId = row.MatchedRegistrationID;
+          if (registrationId === null) {
+            const created = await createRegistrationFor(row, tx);
+            if (!created.ok) {
+              conflicts.push({ rowNumber: row.RowNumber, itemName: row.ItemName, reason: created.reason });
+              continue;
+            }
+            registrationId = created.registrationId;
+            await txQuery(
+              tx,
+              `UPDATE core.ScoRow SET MatchedRegistrationID = @regId WHERE ScoRowID = @rowId`,
+              {
+                rowId: { type: sql.BigInt, value: row.ScoRowID },
+                regId: { type: sql.Int, value: registrationId },
+              },
+            );
+          } else {
+            // Re-check inside the transaction: the registration may have been
+            // paid by someone else between staging and apply.
+            const reg = await txQuery<{ PaidAmount: number | null; IsCancelled: boolean; PaymentID: number | null }>(
+              tx,
+              `SELECT PaidAmount, IsCancelled, PaymentID
+                 FROM core.Registration WITH (UPDLOCK) WHERE RegistrationID = @id`,
+              { id: { type: sql.Int, value: registrationId } },
+            );
+            const current = reg.recordset[0];
+            if (!current) {
+              conflicts.push({ rowNumber: row.RowNumber, itemName: row.ItemName, reason: 'Registration no longer exists.' });
+              continue;
+            }
+            if (current.IsCancelled) {
+              conflicts.push({ rowNumber: row.RowNumber, itemName: row.ItemName, reason: 'Registration is cancelled.' });
+              continue;
+            }
+            if ((current.PaidAmount ?? 0) > 0) {
+              conflicts.push({ rowNumber: row.RowNumber, itemName: row.ItemName, reason: 'Registration has already been paid.' });
+              continue;
+            }
+          }
 
           // Read the identity computed at upload, so apply writes exactly what
           // the duplicate check compared against.

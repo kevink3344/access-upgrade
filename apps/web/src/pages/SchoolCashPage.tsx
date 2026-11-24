@@ -205,7 +205,7 @@ export function SchoolCashPage() {
                       <div className="muted" style={{ fontSize: 12 }}>by {r.UploadedBy}</div>
                     </td>
                     <td data-label="Uploaded">{fmtDate(r.UploadedAt)}</td>
-                    <td data-label="Rows" className="num">{r.RowCount.toLocaleString()}</td>
+                    <td data-label="Rows" className="num">{r.TotalRows.toLocaleString()}</td>
                     <td data-label="Matched" className="num">{r.MatchedCount.toLocaleString()}</td>
                     <td data-label="To review" className="num">
                       {r.ReviewCount > 0 ? (
@@ -371,7 +371,13 @@ function SchoolCashHistory() {
                     <td data-label="Item price" className="num">{money(r.ItemBalance)}</td>
                     <td data-label="Fee" className="num">{money(r.TransactionFee)}</td>
                     <td data-label="Method" className="muted">
-                      {r.MatchMethod === 'manual' ? 'Manual' : 'Automatic'}
+                      {r.MatchMethod === 'manual'
+                        ? 'Manual'
+                        : r.MatchMethod === 'email+recent'
+                          ? 'Automatic (newest)'
+                          : r.MatchMethod === 'email+amount'
+                            ? 'Automatic (amount)'
+                            : 'Automatic'}
                     </td>
                   </tr>
                 ))}

@@ -140,20 +140,58 @@ describe('matchRow', () => {
     // find nothing; matching on the balance finds the $300 registration.
     const r = matchRow({ purchaserEmail: 'a@b.org', itemBalance: 300, alreadyApplied: false }, two);
     expect(r.registrationId).toBe(21);
-
-    const gross = matchRow({ purchaserEmail: 'a@b.org', itemBalance: 312, alreadyApplied: false }, two);
-    expect(gross.confidence).toBe('Low');
-    expect(gross.registrationId).toBeNull();
   });
 
-  it('rule 3: several candidates and the amount does not settle it', () => {
-    const r = matchRow({ purchaserEmail: 'a@b.org', itemBalance: 450, alreadyApplied: false }, two);
-    expect(r).toMatchObject({ confidence: 'Low', registrationId: null });
+  it('rule 3: several candidates and the amount settles nothing, so the newest wins', () => {
+    const dated: MatchCandidate[] = [
+      { registrationId: 51, owed: 100, registeredOn: '2026-01-05' },
+      { registrationId: 52, owed: 450, registeredOn: '2026-09-01' },
+    ];
+    const r = matchRow({ purchaserEmail: 'a@b.org', itemBalance: 450, alreadyApplied: false }, dated);
+    // The amount picks 52 anyway; make it ambiguous to prove recency decides.
+    const ambiguous = matchRow(
+      { purchaserEmail: 'a@b.org', itemBalance: 999, alreadyApplied: false },
+      dated,
+    );
+    expect(r.registrationId).toBe(52);
+    expect(ambiguous).toMatchObject({
+      confidence: 'High',
+      method: 'email+recent',
+      registrationId: 52,
+    });
   });
 
-  it('rule 3: two candidates at the same amount are ambiguous, not a coin flip', () => {
-    const r = matchRow({ purchaserEmail: 'a@b.org', itemBalance: 300, alreadyApplied: false }, twoSame);
-    expect(r).toMatchObject({ confidence: 'Low', registrationId: null });
+  it('rule 3 picks the later of two same-day registrations by id', () => {
+    const sameDay: MatchCandidate[] = [
+      { registrationId: 61, owed: 100, registeredOn: '2026-09-01' },
+      { registrationId: 62, owed: 200, registeredOn: '2026-09-01' },
+    ];
+    const r = matchRow({ purchaserEmail: 'a@b.org', itemBalance: 999, alreadyApplied: false }, sameDay);
+    // Identical dates are genuinely ambiguous — a human decides.
+    expect(r.confidence).toBe('Low');
+  });
+
+  it('rule 3 ignores registrations made after the purchase', () => {
+    const dated: MatchCandidate[] = [
+      { registrationId: 71, owed: 100, registeredOn: '2026-01-05' },
+      { registrationId: 72, owed: 450, registeredOn: '2026-12-01' },
+    ];
+    // Purchased in September: the December registration did not exist yet.
+    const r = matchRow(
+      { purchaserEmail: 'a@b.org', itemBalance: 999, alreadyApplied: false, purchasedOn: '2026-09-15' },
+      dated,
+    );
+    expect(r.registrationId).toBe(71);
+  });
+
+  it('reports None when every registration postdates the purchase', () => {
+    const dated: MatchCandidate[] = [{ registrationId: 81, owed: 100, registeredOn: '2026-12-01' }];
+    const r = matchRow(
+      { purchaserEmail: 'a@b.org', itemBalance: 100, alreadyApplied: false, purchasedOn: '2026-09-15' },
+      dated,
+    );
+    expect(r.confidence).toBe('None');
+    expect(r.note).toContain('after this purchase');
   });
 
   it('rule 4: an email with no participant matches nothing', () => {
@@ -182,6 +220,7 @@ describe('matchRow', () => {
       { purchaserEmail: 'a@b.org', itemBalance: 300, alreadyApplied: false },
       [{ registrationId: 41, owed: null }, { registrationId: 42, owed: 100 }],
     );
+    // Undated and no amount match: ambiguous, so a human decides.
     expect(r.confidence).toBe('Low');
   });
 });

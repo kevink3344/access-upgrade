@@ -244,13 +244,24 @@ export function identityOf(row: ScoCsvRow): string {
 /* ------------------------------------------------------------------ */
 
 export type MatchConfidence = 'High' | 'Low' | 'None' | 'Duplicate' | 'Ignored';
-export type MatchMethod = 'email' | 'email+amount' | 'manual' | 'duplicate' | 'none';
+export type MatchMethod =
+  | 'email'
+  | 'email+amount'
+  | 'email+recent'
+  | 'manual'
+  | 'duplicate'
+  | 'none';
 
 /** A candidate registration the matcher may choose between. */
 export interface MatchCandidate {
   registrationId: number;
   /** The amount still owed on this registration, for the amount rule. */
   owed: number | null;
+  /**
+   * When the registration was made, ISO `YYYY-MM-DD`. Used to pick the most
+   * recent when the amount does not settle which one a payment is for.
+   */
+  registeredOn?: string | null;
 }
 
 export interface MatchInput {
@@ -259,6 +270,14 @@ export interface MatchInput {
   itemBalance: number | null;
   /** True when this vendor row has already been applied. */
   alreadyApplied: boolean;
+  /**
+   * When the School Cash purchase was made, ISO `YYYY-MM-DD`.
+   *
+   * Only registrations made on or before this date are considered: a payment
+   * cannot be for a registration that did not exist yet. This is what keeps a
+   * re-registration from stealing an older purchase's match.
+   */
+  purchasedOn?: string | null;
 }
 
 export interface MatchOutcome {
@@ -268,13 +287,40 @@ export interface MatchOutcome {
   note: string | null;
 }
 
+/** Drops candidates that did not exist when the purchase was made. */
+function eligible(candidates: MatchCandidate[], purchasedOn?: string | null): MatchCandidate[] {
+  if (!purchasedOn) return candidates;
+  return candidates.filter((c) => !c.registeredOn || c.registeredOn <= purchasedOn);
+}
+
+/** Most recent first; undated registrations sort last. */
+function byMostRecent(a: MatchCandidate, b: MatchCandidate): number {
+  const da = a.registeredOn ?? '';
+  const db = b.registeredOn ?? '';
+  if (da === db) return b.registrationId - a.registrationId;
+  return db.localeCompare(da);
+}
+
 /**
- * Applies the five rules from §3.2, in order. The first rule that produces
- * exactly one candidate wins.
+ * Applies the matching rules in order. The first rule that produces exactly
+ * one candidate wins.
  *
  * `candidates` is every unpaid registration belonging to the participant who
  * owns `purchaserEmail` — the caller resolves the email, because that needs a
  * database and this function must stay pure.
+ *
+ * The rules, in order:
+ *
+ *  1. Only one eligible candidate — match it.
+ *  2. Several, but the item price matches exactly one — match that.
+ *  3. Several, and one is the most recent — match that.
+ *  4. Otherwise a human decides.
+ *
+ * Rule 3 exists because a purchaser often pays for the same workshop twice, or
+ * has several unpaid registrations of different values, and the amount alone
+ * leaves several candidates. The most recent unpaid registration is the one a
+ * new payment is for far more often than not, and the review screen shows the
+ * choice so an admin can overrule it.
  */
 export function matchRow(input: MatchInput, candidates: MatchCandidate[]): MatchOutcome {
   if (input.alreadyApplied) {
@@ -289,16 +335,27 @@ export function matchRow(input: MatchInput, candidates: MatchCandidate[]): Match
     return { confidence: 'None', method: 'none', registrationId: null, note: 'No unpaid registration for this purchaser.' };
   }
 
-  // Rule 1: exactly one candidate — nothing to choose between.
-  if (candidates.length === 1) {
-    return { confidence: 'High', method: 'email', registrationId: candidates[0]!.registrationId, note: null };
+  const pool = eligible(candidates, input.purchasedOn);
+
+  if (pool.length === 0) {
+    return {
+      confidence: 'None',
+      method: 'none',
+      registrationId: null,
+      note: 'Every unpaid registration was made after this purchase.',
+    };
+  }
+
+  // Rule 1: exactly one eligible candidate — nothing to choose between.
+  if (pool.length === 1) {
+    return { confidence: 'High', method: 'email', registrationId: pool[0]!.registrationId, note: null };
   }
 
   // Rule 2: several candidates, but the item price matches exactly one.
   // Compared against the item balance, not the gross charge — a $312 charge
   // against a $300 registration would match nothing.
   if (input.itemBalance !== null) {
-    const byAmount = candidates.filter(
+    const byAmount = pool.filter(
       (c) => c.owed !== null && Math.abs(c.owed - input.itemBalance!) < 0.005,
     );
     if (byAmount.length === 1) {
@@ -306,16 +363,31 @@ export function matchRow(input: MatchInput, candidates: MatchCandidate[]): Match
         confidence: 'High',
         method: 'email+amount',
         registrationId: byAmount[0]!.registrationId,
-        note: `${candidates.length} unpaid registrations; the amount picked this one.`,
+        note: `${pool.length} unpaid registrations; the amount picked this one.`,
       };
     }
+    // Several at the same amount is genuinely ambiguous, so fall through to
+    // the recency rule rather than guessing between them.
   }
 
-  // Rule 3: several candidates and the amount does not settle it.
+  // Rule 3: take the most recent, provided it is unambiguously the newest.
+  const sorted = [...pool].sort(byMostRecent);
+  const newest = sorted[0]!;
+  const runnerUp = sorted[1]!;
+  if (newest.registeredOn && newest.registeredOn !== runnerUp.registeredOn) {
+    return {
+      confidence: 'High',
+      method: 'email+recent',
+      registrationId: newest.registrationId,
+      note: `${pool.length} unpaid registrations; the most recent was picked.`,
+    };
+  }
+
+  // Rule 4: a human decides.
   return {
     confidence: 'Low',
     method: 'email',
     registrationId: null,
-    note: `${candidates.length} unpaid registrations, none matching the amount.`,
+    note: `${pool.length} unpaid registrations, none matching the amount or clearly newest.`,
   };
 }

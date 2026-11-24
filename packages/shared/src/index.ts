@@ -1437,7 +1437,13 @@ export interface WebhookDeliveryRow {
  */
 export type ScoMatchConfidence = 'High' | 'Low' | 'None' | 'Duplicate' | 'Ignored';
 
-export type ScoMatchMethod = 'email' | 'email+amount' | 'manual' | 'duplicate' | 'none';
+export type ScoMatchMethod =
+  | 'email'
+  | 'email+amount'
+  | 'email+recent'
+  | 'manual'
+  | 'duplicate'
+  | 'none';
 
 export type ScoImportStatus = 'Staged' | 'Applied' | 'Discarded';
 
@@ -1445,7 +1451,8 @@ export type ScoImportStatus = 'Staged' | 'Applied' | 'Discarded';
 export interface ScoImportRow {
   ScoImportID: number;
   FileName: string;
-  RowCount: number;
+  /** "RowCount" is a T-SQL keyword, so the column and this field are TotalRows. */
+  TotalRows: number;
   MatchedCount: number;
   ReviewCount: number;
   IgnoredCount: number;
