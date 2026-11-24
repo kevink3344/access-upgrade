@@ -21,11 +21,20 @@ import {
  * which matters because the matching rules are the part most likely to be
  * wrong in a way nobody notices until a payment lands on the wrong
  * registration.
+ *
+ * The fixture is committed. The real vendor exports live in database/ and are
+ * gitignored because they carry purchaser names and email addresses, so CI has
+ * never had them — reading one at module load took the whole suite down with
+ * ENOENT. Tests that need the real export check for it first and skip.
  */
 
-const FIXTURE = path.resolve(__dirname, '../../../database/ItemOrderReport_1793719554413.csv');
+const FIXTURE = path.resolve(__dirname, 'fixtures/sco-items.csv');
 const OLD_FIXTURE = FIXTURE;
-const NEW_FIXTURE = path.resolve(__dirname, '../../../database/ItemOrderReport_1795535397115.csv');
+
+/** The real exports, when running locally. Absent in CI. */
+const REAL_OLD = path.resolve(__dirname, '../../../database/ItemOrderReport_1793719554413.csv');
+const REAL_NEW = path.resolve(__dirname, '../../../database/ItemOrderReport_1795535397115.csv');
+const NEW_FIXTURE = fs.existsSync(REAL_NEW) ? REAL_NEW : FIXTURE;
 
 describe('splitCsvLine', () => {
   it('splits plain fields', () => {
@@ -61,27 +70,34 @@ describe('parseMoney', () => {
 });
 
 describe('parseScoCsv', () => {
-  it('parses the real Item Order Report', () => {
+  it('parses the committed fixture', () => {
     const text = fs.readFileSync(FIXTURE, 'utf8');
     const result = parseScoCsv(text);
 
     expect(result.ok).toBe(true);
-    expect(result.rows.length).toBeGreaterThan(90);
+    expect(result.rows.length).toBeGreaterThan(5);
 
     const first = result.rows[0]!;
-    expect(first.purchaserEmail).toBe('bria@appleseedspreschool.org');
+    expect(first.purchaserEmail).toBe('test.purchaser0@example.invalid');
     expect(first.itemName).toContain('Appleseeds');
     expect(parseMoney(first.itemBalance)).toBe(300);
     expect(parseMoney(first.transactionFee)).toBe(12);
     expect(parseMoney(first.paidAmount)).toBe(312);
   });
 
-  it('strips the BOM from the first header so the first column still matches', () => {
-    const text = fs.readFileSync(FIXTURE, 'utf8');
-    expect(text.charCodeAt(0)).toBe(0xfeff);
+  it('parses the real Item Order Report when it is present', () => {
+    if (!fs.existsSync(REAL_OLD)) return; // gitignored; absent in CI.
+    const result = parseScoCsv(fs.readFileSync(REAL_OLD, 'utf8'));
+    expect(result.ok).toBe(true);
+    expect(result.rows.length).toBeGreaterThan(90);
+  });
+
+  it('strips a BOM from the first header so the first column still matches', () => {
+    // The vendor file carries a UTF-8 BOM. A stale one turns the first header
+    // into "\uFEFFSchool Year" and the column silently stops matching.
+    const text = `\uFEFF${fs.readFileSync(FIXTURE, 'utf8')}`;
     const result = parseScoCsv(text);
     expect(result.ok).toBe(true);
-    // The first column is "School Year"; a stale BOM would make it "\uFEFFSchool Year".
     expect(Object.keys(result.rows[0]!.raw)).toContain('School Year');
   });
 
@@ -432,8 +448,11 @@ describe('rowIdentity', () => {
   it('produces the same identity from both real exports for shared rows', () => {
     // The 24 Nov file is the 15 Nov file plus 8 rows. Every row they share
     // must hash identically, or a re-upload would pay those rows again.
-    const oldRows = parseScoCsv(fs.readFileSync(OLD_FIXTURE, 'utf8')).rows;
-    const newRows = parseScoCsv(fs.readFileSync(NEW_FIXTURE, 'utf8')).rows;
+    // Skipped in CI, where the real exports are absent.
+    if (!fs.existsSync(REAL_OLD) || !fs.existsSync(REAL_NEW)) return;
+
+    const oldRows = parseScoCsv(fs.readFileSync(REAL_OLD, 'utf8')).rows;
+    const newRows = parseScoCsv(fs.readFileSync(REAL_NEW, 'utf8')).rows;
 
     const oldIds = identitiesFor(oldRows);
     const newIds = new Set(identitiesFor(newRows));

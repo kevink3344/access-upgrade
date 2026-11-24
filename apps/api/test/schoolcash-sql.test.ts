@@ -19,7 +19,8 @@ import { parseScoCsv } from '../src/services/schoolcash.js';
  * failures, which return before any insert.
  */
 
-const REAL_FIXTURE = path.resolve(__dirname, '../../../database/ItemOrderReport_1795535397115.csv');
+/** The committed fixture. The real exports are gitignored, so CI has none. */
+const REAL_FIXTURE = path.resolve(__dirname, 'fixtures/sco-items.csv');
 
 async function authed(pathname: string) {
   const token = await authToken();
