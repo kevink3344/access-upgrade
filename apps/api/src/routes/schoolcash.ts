@@ -4,13 +4,16 @@ import crypto from 'node:crypto';
 import { getPool, query, sql, txQuery, type SqlParam } from '../db.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import {
+  bestWorkshop,
   identitiesFor,
   matchRow,
   normaliseItemName,
   parseMoney,
   parseScoCsv,
+  NAME_MATCH_THRESHOLD,
   type MatchCandidate,
   type ScoCsvRow,
+  type WorkshopOption,
 } from '../services/schoolcash.js';
 
 /**
@@ -29,7 +32,7 @@ import {
  *    produced, so re-uploading the same file cannot pay twice.
  *  - `PaidAmount` gets the item price, not the gross charge. The online fee is
  *    stored separately on the payment so revenue reports do not overstate
- *    income. See docs/plans/school-cash-matching.md §11.2.
+ *    income. See docs/plans/school-cash-matching.md Â§11.2.
  */
 
 export const schoolCashRouter = Router();
@@ -92,6 +95,291 @@ function readBody(req: { body: unknown }): string | null {
 }
 
 /**
+ * Matches every staged row whose item has a resolved workshop, writing the
+ * result back to `core.ScoRow`. Rows whose item is unresolved are left alone.
+ *
+ * Runs inside the caller's transaction so an import is never half-matched.
+ * Returns the counts the upload response reports.
+ */
+async function matchImportRows(
+  tx: sql.Transaction,
+  importId: number,
+): Promise<{ matched: number; review: number; ignored: number }> {
+  const rows = await txQuery<{
+    ScoRowID: number;
+    PurchaserEmail: string | null;
+    ItemBalance: string | null;
+    PurchasedDate: string | null;
+    RowIdentity: string | null;
+    WorkshopID: number | null;
+  }>(
+    tx,
+    `SELECT s.ScoRowID, s.PurchaserEmail, s.ItemBalance, s.PurchasedDate,
+            s.RowIdentity, i.WorkshopID
+       FROM core.ScoRow s
+       JOIN core.ScoItem i ON i.ScoItemID = s.ScoItemID
+      WHERE s.ScoImportID = @id AND s.AppliedPaymentID IS NULL`,
+    { id: { type: sql.Int, value: importId } },
+  );
+
+  let matched = 0;
+  let review = 0;
+  let ignored = 0;
+
+  for (const row of rows.recordset) {
+    let outcome: { matchedRegistrationId: number | null; confidence: string; method: string; note: string | null };
+
+    if (!row.WorkshopID) {
+      outcome = {
+        matchedRegistrationId: null,
+        confidence: 'None',
+        method: 'none',
+        note: 'This item has no workshop resolved yet.',
+      };
+    } else {
+      outcome = await evaluateRowInTx(tx, row);
+    }
+
+    if (outcome.confidence === 'High') matched += 1;
+    else if (outcome.confidence === 'Duplicate') ignored += 1;
+    else review += 1;
+
+    await txQuery(
+      tx,
+      `UPDATE core.ScoRow
+          SET MatchedRegistrationID = @regId, MatchConfidence = @confidence,
+              MatchMethod = @method, MatchNote = @note
+        WHERE ScoRowID = @rowId`,
+      {
+        rowId: { type: sql.BigInt, value: row.ScoRowID },
+        regId: { type: sql.Int, value: outcome.matchedRegistrationId },
+        confidence: { type: sql.NVarChar(10), value: outcome.confidence },
+        method: { type: sql.NVarChar(20), value: outcome.method },
+        note: { type: sql.NVarChar(255), value: outcome.note },
+      },
+    );
+  }
+
+  await txQuery(
+    tx,
+    `UPDATE core.ScoImport
+        SET MatchedCount = @matched, ReviewCount = @review, IgnoredCount = @ignored
+      WHERE ScoImportID = @id`,
+    {
+      id: { type: sql.Int, value: importId },
+      matched: { type: sql.Int, value: matched },
+      review: { type: sql.Int, value: review },
+      ignored: { type: sql.Int, value: ignored },
+    },
+  );
+
+  return { matched, review, ignored };
+}
+
+/**
+ * Matches one row inside an open transaction.
+ *
+ * The same rules as `evaluateRow`, but reading through `tx` so it sees rows
+ * inserted moments ago in the same transaction.
+ */
+async function evaluateRowInTx(
+  tx: sql.Transaction,
+  row: {
+    ScoRowID: number;
+    PurchaserEmail: string | null;
+    ItemBalance: string | null;
+    PurchasedDate: string | null;
+    RowIdentity: string | null;
+    WorkshopID: number | null;
+  },
+): Promise<{ matchedRegistrationId: number | null; confidence: string; method: string; note: string | null }> {
+  const identity = row.RowIdentity;
+  if (identity) {
+    // Checked inside the transaction so a repeat within the same file is also
+    // caught: the first occurrence is already staged by the time the second
+    // is evaluated.
+    const dup = await txQuery<{ n: number }>(
+      tx,
+      `SELECT
+          (SELECT COUNT(*) FROM core.Payment WHERE ExternalPaymentId = @identity) +
+          (SELECT COUNT(*) FROM core.ScoRow
+            WHERE RowIdentity = @identity AND ScoRowID <> @rowId
+              AND AppliedPaymentID IS NULL) AS n`,
+      {
+        identity: { type: sql.NVarChar(400), value: identity },
+        rowId: { type: sql.BigInt, value: row.ScoRowID },
+      },
+    );
+    if ((dup.recordset[0]?.n ?? 0) > 0) {
+      return {
+        matchedRegistrationId: null,
+        confidence: 'Duplicate',
+        method: 'duplicate',
+        note: 'This purchase is already in another upload, or already paid.',
+      };
+    }
+  }
+
+  const email = row.PurchaserEmail;
+  if (!email) {
+    return {
+      matchedRegistrationId: null,
+      confidence: 'None',
+      method: 'none',
+      note: 'No purchaser email on this row.',
+    };
+  }
+
+  const who = await txQuery<{ ParticipantID: number }>(
+    tx,
+    `SELECT TOP 1 ParticipantID FROM core.Participant
+      WHERE LOWER(LTRIM(RTRIM(Email))) = @email ORDER BY ParticipantID`,
+    { email: { type: sql.NVarChar(255), value: email.toLowerCase() } },
+  );
+
+  if (!who.recordset[0]) {
+    return {
+      matchedRegistrationId: null,
+      confidence: 'Low',
+      method: 'none',
+      note: 'New purchaser - no participant uses this email. Applying will create one.',
+    };
+  }
+
+  const candidates = await txQuery<{ RegistrationID: number; Owed: number | null; RegisteredOn: string | null }>(
+    tx,
+    `SELECT r.RegistrationID,
+            CASE WHEN w.Cost1 IS NULL THEN NULL
+                 ELSE w.Cost1 - ISNULL(r.PaidAmount, 0) END AS Owed,
+            CONVERT(NVARCHAR(10), COALESCE(r.RegistrationDate, w.StartDate), 23) AS RegisteredOn
+       FROM core.Registration r
+       JOIN core.Workshop w ON w.WorkshopID = r.WorkshopID
+      WHERE r.ParticipantID = @pid AND r.WorkshopID = @wid
+        AND r.IsCancelled = 0 AND ISNULL(r.PaidAmount, 0) <= 0
+      ORDER BY r.RegistrationID`,
+    {
+      pid: { type: sql.Int, value: who.recordset[0].ParticipantID },
+      wid: { type: sql.Int, value: row.WorkshopID },
+    },
+  );
+
+  const outcome = matchRow(
+    {
+      purchaserEmail: email,
+      itemBalance: parseMoney(row.ItemBalance),
+      alreadyApplied: false,
+      purchasedOn: isoDate(row.PurchasedDate),
+    },
+    candidates.recordset.map((c) => ({
+      registrationId: c.RegistrationID,
+      owed: c.Owed,
+      registeredOn: c.RegisteredOn,
+    })),
+  );
+
+  return {
+    matchedRegistrationId: outcome.registrationId,
+    confidence: outcome.confidence,
+    method: outcome.method,
+    note: outcome.note,
+  };
+}
+
+/**
+ * Every workshop an admin can pick from, for the resolution screen. */
+async function allWorkshops(): Promise<Omit<WorkshopOption, 'score'>[]> {
+  const r = await query<{
+    WorkshopID: number;
+    WorkshopName: string | null;
+    WorkshopCode: string | null;
+    StartDate: string | null;
+    Price: number | null;
+  }>(
+    `SELECT w.WorkshopID, n.WorkshopName, w.WorkshopCode,
+            CONVERT(NVARCHAR(10), w.StartDate, 23) AS StartDate,
+            w.Cost1 AS Price
+       FROM core.Workshop w
+       LEFT JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
+      WHERE n.WorkshopName IS NOT NULL
+      ORDER BY w.StartDate DESC, w.WorkshopID DESC`,
+  );
+  return r.recordset.map((row) => ({
+    workshopId: row.WorkshopID,
+    workshopName: row.WorkshopName ?? '',
+    workshopCode: row.WorkshopCode,
+    startDate: row.StartDate,
+    price: row.Price,
+  }));
+}
+
+/**
+ * Splits an upload's rows into one record per distinct item name.
+ *
+ * Called at upload time. The item name is normalised first so the vendor's
+ * date suffix does not create a separate entry for every session.
+ */
+async function buildItems(tx: sql.Transaction, importId: number): Promise<void> {
+  const rows = await txQuery<{ ScoRowID: number; ItemName: string | null; ItemBalance: string | null }>(
+    tx,
+    `SELECT ScoRowID, ItemName, ItemBalance FROM core.ScoRow WHERE ScoImportID = @id`,
+    { id: { type: sql.Int, value: importId } },
+  );
+
+  const grouped = new Map<
+    string,
+    { rowIds: number[]; balance: string | null }
+  >();
+  for (const r of rows.recordset) {
+    const name = normaliseItemName(r.ItemName);
+    if (!name) continue;
+    const cur = grouped.get(name);
+    if (cur) cur.rowIds.push(r.ScoRowID);
+    else grouped.set(name, { rowIds: [r.ScoRowID], balance: r.ItemBalance });
+  }
+
+  const workshops = await allWorkshops();
+
+  for (const [name, info] of grouped) {
+    const suggestion = bestWorkshop(name, workshops);
+    // A suggestion at or above the auto-match threshold is accepted outright;
+    // anything lower is offered for an admin to confirm.
+    const autoResolve = suggestion !== null && suggestion.score >= NAME_MATCH_THRESHOLD;
+
+    const created = await txQuery<{ ScoItemID: number }>(
+      tx,
+      `INSERT INTO core.ScoItem
+              (ScoImportID, ItemName, TotalRows, ItemBalance,
+               WorkshopID, ResolvedBy, SuggestedWorkshopID, SuggestionScore,
+               ResolvedAt, ResolvedByUser)
+       OUTPUT INSERTED.ScoItemID AS ScoItemID
+       VALUES (@importId, @name, @total, @balance,
+               @workshopId, @resolvedBy, @suggestedId, @score,
+               @resolvedAt, NULL)`,
+      {
+        importId: { type: sql.Int, value: importId },
+        name: { type: sql.NVarChar(255), value: name },
+        total: { type: sql.Int, value: info.rowIds.length },
+        balance: { type: sql.NVarChar(50), value: info.balance },
+        workshopId: { type: sql.Int, value: autoResolve ? suggestion!.workshopId : null },
+        resolvedBy: { type: sql.NVarChar(20), value: autoResolve ? 'Auto' : null },
+        suggestedId: { type: sql.Int, value: suggestion?.workshopId ?? null },
+        score: { type: sql.Decimal(5, 4), value: suggestion?.score ?? null },
+        resolvedAt: { type: sql.DateTime2, value: autoResolve ? new Date() : null },
+      },
+    );
+
+    // Point the rows at their item so payment matching can read the workshop.
+    const itemId = created.recordset[0]!.ScoItemID;
+    for (const rowId of info.rowIds) {
+      await txQuery(tx, `UPDATE core.ScoRow SET ScoItemID = @itemId WHERE ScoRowID = @rowId`, {
+        itemId: { type: sql.Int, value: itemId },
+        rowId: { type: sql.BigInt, value: rowId },
+      });
+    }
+  }
+}
+
+/**
  * Finds the participant behind a purchaser email.
  *
  * Emails are stored on `core.Participant` in mixed case and occasionally with
@@ -116,55 +404,54 @@ async function participantForEmail(email: string): Promise<number | null> {
  * still owed on each.
  *
  * "Owed" is the workshop price less whatever has already been paid. The price
- * is `core.Workshop.Cost1` — the same column the public registration form
+ * is `core.Workshop.Cost1` - the same column the public registration form
  * quotes as the cost. There is no `Price` column on Workshop.
  *
- * Where the price is unknown the registration still counts as a candidate —
- * an admin can match it by hand — but it cannot win the amount rule.
+ * Where the price is unknown the registration still counts as a candidate -
+ * an admin can match it by hand - but it cannot win the amount rule.
  */
-async function unpaidCandidates(participantId: number): Promise<MatchCandidate[]> {
+/**
+ * Every unpaid, uncancelled registration for a participant **for one
+ * workshop**, with what is still owed on each.
+ *
+ * Scoped to the workshop on purpose. An earlier version looked at every
+ * unpaid registration the participant had, which put payments against
+ * workshops from 2011 because nothing tied them to the right one.
+ *
+ * The price is `core.Workshop.Cost1` - the same column the public
+ * registration form quotes as the cost. There is no `Price` column.
+ */
+async function unpaidCandidates(
+  participantId: number,
+  workshopId: number,
+): Promise<MatchCandidate[]> {
   const r = await query<{
     RegistrationID: number;
     Owed: number | null;
     RegisteredOn: string | null;
-    WorkshopName: string | null;
   }>(
     `SELECT r.RegistrationID,
             CASE WHEN w.Cost1 IS NULL THEN NULL
                  ELSE w.Cost1 - ISNULL(r.PaidAmount, 0)
             END AS Owed,
-            CONVERT(NVARCHAR(10), COALESCE(r.RegistrationDate, w.StartDate), 23) AS RegisteredOn,
-            n.WorkshopName
+            CONVERT(NVARCHAR(10), COALESCE(r.RegistrationDate, w.StartDate), 23) AS RegisteredOn
        FROM core.Registration r
        JOIN core.Workshop w ON w.WorkshopID = r.WorkshopID
-       LEFT JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
       WHERE r.ParticipantID = @pid
+        AND r.WorkshopID = @wid
         AND r.IsCancelled = 0
         AND ISNULL(r.PaidAmount, 0) <= 0
       ORDER BY r.RegistrationID`,
-    { pid: { type: sql.Int, value: participantId } },
+    {
+      pid: { type: sql.Int, value: participantId },
+      wid: { type: sql.Int, value: workshopId },
+    },
   );
   return r.recordset.map((row) => ({
     registrationId: row.RegistrationID,
     owed: row.Owed,
     registeredOn: row.RegisteredOn,
-    workshopName: row.WorkshopName,
   }));
-}
-
-/**
- * True when this vendor row already produced a payment.
- *
- * Keyed on the row's derived identity, which is stable across re-exports of
- * the same purchase. The export has no receipt or payment id, so there is
- * nothing else to key on.
- */
-async function alreadyApplied(identity: string): Promise<boolean> {
-  const r = await query<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM core.Payment WHERE ExternalPaymentId = @identity`,
-    { identity: { type: sql.NVarChar(400), value: identity } },
-  );
-  return (r.recordset[0]?.n ?? 0) > 0;
 }
 
 /**
@@ -175,22 +462,26 @@ async function alreadyApplied(identity: string): Promise<boolean> {
  * from the current maximum (the legacy tables are not IDENTITY), and the
  * participant carrying the purchaser's email so the row can be matched by it.
  *
- * The workshop is found from the item name. Item names are free text and only
- * about a third match a workshop name exactly, so this is deliberately
- * conservative: no match means no registration, and the row is reported as a
- * conflict for an admin to resolve rather than being filed against a guess.
+ * The workshop is the one the upload resolved for this item - already
+ * confirmed by an admin - so there is no guessing here. That is the whole
+ * point of resolving workshops first.
  */
 async function createRegistrationFor(
   row: {
     PurchaserEmail: string | null;
     PurchaserName: string | null;
-    ItemName: string | null;
     PurchasedDate: string | null;
+    WorkshopID: number | null;
   },
   tx: sql.Transaction,
 ): Promise<{ ok: true; registrationId: number } | { ok: false; reason: string }> {
   const email = row.PurchaserEmail;
   if (!email) return { ok: false, reason: 'No purchaser email, so no participant can be created.' };
+
+  const workshopId = row.WorkshopID;
+  if (!workshopId) {
+    return { ok: false, reason: 'This item has no workshop resolved, so no registration can be created.' };
+  }
 
   // Reuse a participant created by an earlier row in the same file.
   const existing = await txQuery<{ ParticipantID: number }>(
@@ -222,29 +513,6 @@ async function createRegistrationFor(
       },
     );
     participantId = created.recordset[0]!.ParticipantID;
-  }
-
-  // The workshop the item refers to. The vendor appends the session date to
-  // the item name, so both sides are normalised before comparing. Still an
-  // exact match after that: a fuzzy match would file payments against the
-  // wrong workshop, and a conflict is cheaper to resolve than a wrong payment.
-  const wanted = normaliseItemName(row.ItemName);
-  const workshop = await txQuery<{ WorkshopID: number }>(
-    tx,
-    `SELECT TOP 1 w.WorkshopID
-       FROM core.Workshop w
-       JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
-      WHERE LTRIM(RTRIM(n.WorkshopName)) = @item
-      ORDER BY w.StartDate DESC, w.WorkshopID DESC`,
-    { item: { type: sql.NVarChar(255), value: wanted } },
-  );
-
-  const workshopId = workshop.recordset[0]?.WorkshopID;
-  if (!workshopId) {
-    return {
-      ok: false,
-      reason: `No workshop matches the item "${row.ItemName ?? '(unnamed)'}", so no registration could be created.`,
-    };
   }
 
   const seq = await txQuery<{ NextId: number }>(
@@ -310,73 +578,6 @@ async function schoolCashMethodId(): Promise<number | null> {
   return id;
 }
 
-/**
- * Matches one parsed row and returns the staging columns to persist.
- *
- * Kept separate from the insert so the same logic can be reused when an admin
- * re-runs matching on an import.
- */
-async function evaluateRow(row: ScoCsvRow, identity: string): Promise<{
-  matchedRegistrationId: number | null;
-  confidence: string;
-  method: string;
-  note: string | null;
-}> {
-  if (await alreadyApplied(identity)) {
-    return {
-      matchedRegistrationId: null,
-      confidence: 'Duplicate',
-      method: 'duplicate',
-      note: 'This purchase already produced a payment.',
-    };
-  }
-
-  const email = row.purchaserEmail;
-  const itemBalance = parseMoney(row.itemBalance);
-  const purchasedOn = isoDate(row.purchasedDate);
-
-  if (!email) {
-    return {
-      matchedRegistrationId: null,
-      confidence: 'None',
-      method: 'none',
-      note: 'No purchaser email on this row.',
-    };
-  }
-
-  const participantId = await participantForEmail(email);
-
-  // An unknown email is not a failure — it means this purchaser has never
-  // registered. Applying the import creates the participant and a
-  // registration, so the row is matched by email and needs no manual work.
-  if (participantId === null) {
-    return {
-      matchedRegistrationId: null,
-      confidence: 'High',
-      method: 'email',
-      note: 'New purchaser — a participant and registration will be created on apply.',
-    };
-  }
-
-  const candidates = await unpaidCandidates(participantId);
-  const outcome = matchRow(
-    {
-      purchaserEmail: email,
-      itemBalance,
-      itemName: normaliseItemName(row.itemName),
-      alreadyApplied: false,
-      purchasedOn,
-    },
-    candidates,
-  );
-
-  return {
-    matchedRegistrationId: outcome.registrationId,
-    confidence: outcome.confidence,
-    method: outcome.method,
-    note: outcome.note,
-  };
-}
 
 /**
  * "09/15/2026" -> "2026-09-15". Returns null when the text is not a date.
@@ -408,7 +609,7 @@ function isoDate(text: string | null): string | null {
  *     summary: Upload an Item Order Report and stage the matches
  *     description: >
  *       Send the CSV as the raw request body with Content-Type text/plain.
- *       The file name goes in the X-File-Name header. Nothing is applied —
+ *       The file name goes in the X-File-Name header. Nothing is applied -
  *       the result is a staged import for review.
  *     security: [{ bearerAuth: [] }]
  *     responses:
@@ -448,16 +649,19 @@ schoolCashRouter.post(
       const fileName = String(req.header('x-file-name') ?? 'ItemOrderReport.csv').slice(0, 260);
       const hash = crypto.createHash('sha256').update(text, 'utf8').digest();
 
-      const existing = await query<{ ScoImportID: number; FileName: string; UploadedAt: string }>(
-        `SELECT ScoImportID, FileName, CONVERT(NVARCHAR(30), UploadedAt, 126) AS UploadedAt
+      const existing = await query<{ ScoImportID: number; FileName: string; UploadedAt: string; UploadedBy: string }>(
+        `SELECT ScoImportID, FileName, UploadedBy,
+                CONVERT(NVARCHAR(30), UploadedAt, 126) AS UploadedAt
            FROM core.ScoImport WHERE FileHash = @hash`,
         { hash: { type: sql.VarBinary(32), value: hash } },
       );
       if (existing.recordset[0]) {
+        // Byte-identical file. Say who has it and when, so a second staff
+        // member knows it is already in hand rather than thinking it failed.
         const prior = existing.recordset[0];
         res.status(409).json({
           error: 'already_imported',
-          message: `This exact file was already uploaded on ${prior.UploadedAt}.`,
+          message: `This exact file was already uploaded by ${prior.UploadedBy} on ${prior.UploadedAt}. Nothing has been duplicated.`,
           importId: prior.ScoImportID,
         });
         return;
@@ -470,22 +674,6 @@ schoolCashRouter.post(
       // Identities are computed for the whole file up front, because exact
       // repeats are numbered by occurrence and that needs the full row list.
       const identities = identitiesFor(parsed.rows);
-      const evaluated: Array<{
-        row: ScoCsvRow;
-        identity: string;
-        matchedRegistrationId: number | null;
-        confidence: string;
-        method: string;
-        note: string | null;
-      }> = [];
-      for (let i = 0; i < parsed.rows.length; i += 1) {
-        const row = parsed.rows[i]!;
-        evaluated.push({ row, identity: identities[i]!, ...(await evaluateRow(row, identities[i]!)) });
-      }
-
-      const matched = evaluated.filter((e) => e.confidence === 'High').length;
-      const review = evaluated.filter((e) => e.confidence === 'Low' || e.confidence === 'None').length;
-      const ignored = evaluated.filter((e) => e.confidence === 'Duplicate').length;
 
       const pool = await getPool();
       const tx = pool.transaction();
@@ -498,63 +686,78 @@ schoolCashRouter.post(
                   (FileName, FileHash, TotalRows, MatchedCount, ReviewCount, IgnoredCount,
                    Status, UploadedBy)
            OUTPUT INSERTED.ScoImportID AS id
-           VALUES (@fileName, @hash, @totalRows, @matched, @review, @ignored, 'Staged', @by)`,
+           VALUES (@fileName, @hash, @totalRows, 0, 0, 0, 'Staged', @by)`,
           {
             fileName: { type: sql.NVarChar(260), value: fileName },
             hash: { type: sql.VarBinary(32), value: hash },
-            totalRows: { type: sql.Int, value: evaluated.length },
-            matched: { type: sql.Int, value: matched },
-            review: { type: sql.Int, value: review },
-            ignored: { type: sql.Int, value: ignored },
+            totalRows: { type: sql.Int, value: parsed.rows.length },
             by: { type: sql.NVarChar(200), value: req.user!.email },
           },
         );
         const importId = header.recordset[0]!.id;
 
-        for (const e of evaluated) {
+        // Rows first, then items, then matching - in that order. Matching
+        // needs the resolved workshop, so it cannot run until the items exist.
+        for (let i = 0; i < parsed.rows.length; i += 1) {
+          const row = parsed.rows[i]!;
           await txQuery(
             tx,
             `INSERT INTO core.ScoRow
                     (ScoImportID, RowNumber, PurchaserEmail, PurchaserName, RecipientName,
                      ItemId, ItemName, PaidAmount, ItemBalance, TransactionFee,
                      PurchasedDate, Owing, Refunded, RawJson, RowIdentity,
-                     MatchedRegistrationID, MatchConfidence, MatchMethod, MatchNote)
+                     MatchConfidence, MatchMethod, MatchNote)
              VALUES (@importId, @rowNumber, @email, @purchaser, @recipient,
                      @itemId, @itemName, @paid, @balance, @fee,
                      @purchased, @owing, @refunded, @raw, @identity,
-                     @regId, @confidence, @method, @note)`,
+                     'None', 'none', 'Workshops not resolved yet.')`,
             {
               importId: { type: sql.Int, value: importId },
-              rowNumber: { type: sql.Int, value: e.row.rowNumber },
-              email: { type: sql.NVarChar(255), value: e.row.purchaserEmail },
-              purchaser: { type: sql.NVarChar(255), value: e.row.purchaserName },
-              recipient: { type: sql.NVarChar(255), value: e.row.recipientName },
-              itemId: { type: sql.NVarChar(50), value: e.row.itemId },
-              itemName: { type: sql.NVarChar(255), value: e.row.itemName },
-              paid: { type: sql.NVarChar(50), value: e.row.paidAmount },
-              balance: { type: sql.NVarChar(50), value: e.row.itemBalance },
-              fee: { type: sql.NVarChar(50), value: e.row.transactionFee },
-              purchased: { type: sql.NVarChar(50), value: e.row.purchasedDate },
-              owing: { type: sql.NVarChar(50), value: e.row.owing },
-              refunded: { type: sql.NVarChar(50), value: e.row.refunded },
-              raw: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(e.row.raw) },
-              identity: { type: sql.NVarChar(400), value: e.identity },
-              regId: { type: sql.Int, value: e.matchedRegistrationId },
-              confidence: { type: sql.NVarChar(10), value: e.confidence },
-              method: { type: sql.NVarChar(20), value: e.method },
-              note: { type: sql.NVarChar(255), value: e.note },
+              rowNumber: { type: sql.Int, value: row.rowNumber },
+              email: { type: sql.NVarChar(255), value: row.purchaserEmail },
+              purchaser: { type: sql.NVarChar(255), value: row.purchaserName },
+              recipient: { type: sql.NVarChar(255), value: row.recipientName },
+              itemId: { type: sql.NVarChar(50), value: row.itemId },
+              itemName: { type: sql.NVarChar(255), value: row.itemName },
+              paid: { type: sql.NVarChar(50), value: row.paidAmount },
+              balance: { type: sql.NVarChar(50), value: row.itemBalance },
+              fee: { type: sql.NVarChar(50), value: row.transactionFee },
+              purchased: { type: sql.NVarChar(50), value: row.purchasedDate },
+              owing: { type: sql.NVarChar(50), value: row.owing },
+              refunded: { type: sql.NVarChar(50), value: row.refunded },
+              raw: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(row.raw) },
+              identity: { type: sql.NVarChar(400), value: identities[i]! },
             },
           );
         }
+
+        // Group the rows into distinct items and suggest a workshop for each.
+        // Payments are not matched yet: the workshop has to be settled first,
+        // or a payment lands on whichever registration happened to be unpaid.
+        await buildItems(tx, importId);
+
+        // Match payments only where the workshop is already known. Items an
+        // admin still has to resolve stay at 'None' until they do.
+        const matched = await matchImportRows(tx, importId);
+
+        const itemStats = await txQuery<{ total: number; resolved: number }>(
+          tx,
+          `SELECT COUNT(*) AS total,
+                  SUM(CASE WHEN WorkshopID IS NOT NULL THEN 1 ELSE 0 END) AS resolved
+             FROM core.ScoItem WHERE ScoImportID = @id`,
+          { id: { type: sql.Int, value: importId } },
+        );
 
         await tx.commit();
         res.status(201).json({
           importId,
           fileName,
-          TotalRows: evaluated.length,
-          matched,
-          review,
-          ignored,
+          TotalRows: parsed.rows.length,
+          items: itemStats.recordset[0]!.total,
+          itemsResolved: itemStats.recordset[0]!.resolved ?? 0,
+          matched: matched.matched,
+          review: matched.review,
+          ignored: matched.ignored,
         });
       } catch (err) {
         await tx.rollback();
@@ -686,6 +889,250 @@ schoolCashRouter.get(
       }
 
       res.json({ ...header.recordset[0], rows: mapped, counts });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/*  Workshop resolution                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * @openapi
+ * /api/school-cash/imports/{id}/items:
+ *   get:
+ *     tags: [School Cash]
+ *     summary: The distinct items in an upload, with their workshop
+ *     description: >
+ *       Step one of an upload. Each distinct item name is listed once with the
+ *       workshop it resolves to, so an admin can confirm, choose, or create.
+ *       Payment matching does not run until every item is resolved.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *     responses:
+ *       200: { description: Items and whether the upload is ready }
+ */
+schoolCashRouter.get(
+  '/imports/:id/items',
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res, next) => {
+    try {
+      const importId = Number(req.params.id);
+      if (!Number.isInteger(importId) || importId <= 0) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid import id.' });
+        return;
+      }
+
+      const items = await query<Record<string, unknown>>(
+        `SELECT i.ScoItemID, i.ItemName, i.TotalRows, i.ItemBalance,
+                i.WorkshopID, i.ResolvedBy, i.SuggestionScore,
+                i.SuggestedWorkshopID,
+                w.WorkshopCode, CONVERT(NVARCHAR(10), w.StartDate, 23) AS WorkshopDate,
+                n.WorkshopName,
+                sn.WorkshopName AS SuggestedWorkshopName,
+                sw.WorkshopCode AS SuggestedWorkshopCode
+           FROM core.ScoItem i
+           LEFT JOIN core.Workshop w ON w.WorkshopID = i.WorkshopID
+           LEFT JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
+           LEFT JOIN core.Workshop sw ON sw.WorkshopID = i.SuggestedWorkshopID
+           LEFT JOIN core.WorkshopName sn ON sn.WorkshopNameID = sw.WorkshopNameID
+          WHERE i.ScoImportID = @id
+          ORDER BY i.TotalRows DESC, i.ItemName`,
+        { id: { type: sql.Int, value: importId } },
+      );
+
+      const unresolved = items.recordset.filter((i) => i.WorkshopID === null).length;
+
+      res.json({
+        rows: items.recordset.map((i) => ({
+          ...i,
+          ItemBalance: parseMoney(i.ItemBalance as string | null),
+          SuggestionScore: i.SuggestionScore === null ? null : Number(i.SuggestionScore),
+        })),
+        total: items.recordset.length,
+        unresolved,
+        ready: unresolved === 0 && items.recordset.length > 0,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** Every workshop, for the picker. */
+schoolCashRouter.get('/workshops', requireAuth, requireRole(...ADMIN_ROLES), async (_req, res, next) => {
+  try {
+    const rows = await allWorkshops();
+    res.json({ rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const itemResolve = z.object({
+  /** An existing workshop to use. */
+  workshopId: z.number().int().positive().optional(),
+  /** Or create one from these details. */
+  create: z
+    .object({
+      workshopNameId: z.number().int().positive().optional(),
+      newWorkshopName: z.string().trim().min(1).max(255).optional(),
+      workshopCode: z.string().trim().max(10).nullable().optional(),
+      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+      price: z.number().nullable().optional(),
+    })
+    .optional(),
+});
+
+/**
+ * @openapi
+ * /api/school-cash/items/{itemId}:
+ *   patch:
+ *     tags: [School Cash]
+ *     summary: Resolve one item to a workshop, or create the workshop
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: itemId, required: true, schema: { type: integer } }
+ *     responses:
+ *       200: { description: Resolved }
+ *       409: { description: The upload has already been applied }
+ */
+schoolCashRouter.patch(
+  '/items/:itemId',
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res, next) => {
+    try {
+      const itemId = Number(req.params.itemId);
+      const parsed = itemResolve.safeParse(req.body);
+      if (!Number.isInteger(itemId) || itemId <= 0) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid item id.' });
+        return;
+      }
+      if (!parsed.success) {
+        res.status(422).json({ error: 'validation_failed', details: parsed.error.issues });
+        return;
+      }
+      if (parsed.data.workshopId === undefined && parsed.data.create === undefined) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: 'Provide workshopId to use an existing workshop, or create to make one.',
+        });
+        return;
+      }
+
+      const current = await query<{ ScoImportID: number; AppliedCount: number }>(
+        `SELECT i.ScoImportID, im.AppliedCount
+           FROM core.ScoItem i
+           JOIN core.ScoImport im ON im.ScoImportID = i.ScoImportID
+          WHERE i.ScoItemID = @itemId`,
+        { itemId: { type: sql.Int, value: itemId } },
+      );
+      const row = current.recordset[0];
+      if (!row) {
+        res.status(404).json({ error: 'not_found', message: 'No such item.' });
+        return;
+      }
+      if (row.AppliedCount > 0) {
+        res.status(409).json({
+          error: 'already_applied',
+          message: 'Payments have already been applied from this upload, so its workshops cannot change.',
+        });
+        return;
+      }
+
+      let workshopId: number;
+      let resolvedBy: 'Manual' | 'Created';
+
+      if (parsed.data.workshopId !== undefined) {
+        const exists = await query<{ WorkshopID: number }>(
+          'SELECT WorkshopID FROM core.Workshop WHERE WorkshopID = @id',
+          { id: { type: sql.Int, value: parsed.data.workshopId } },
+        );
+        if (!exists.recordset[0]) {
+          res.status(422).json({ error: 'not_found', message: 'No such workshop.' });
+          return;
+        }
+        workshopId = parsed.data.workshopId;
+        resolvedBy = 'Manual';
+      } else {
+        const c = parsed.data.create!;
+        let nameId = c.workshopNameId ?? null;
+
+        if (nameId === null) {
+          if (!c.newWorkshopName) {
+            res.status(422).json({
+              error: 'validation_failed',
+              message: 'Provide workshopNameId or newWorkshopName to create a workshop.',
+            });
+            return;
+          }
+          // Reuse an existing name rather than creating a near-duplicate.
+          const existing = await query<{ WorkshopNameID: number }>(
+            `SELECT TOP 1 WorkshopNameID FROM core.WorkshopName
+              WHERE LTRIM(RTRIM(WorkshopName)) = @name`,
+            { name: { type: sql.NVarChar(255), value: c.newWorkshopName } },
+          );
+          if (existing.recordset[0]) {
+            nameId = existing.recordset[0].WorkshopNameID;
+          } else {
+            const seq = await query<{ NextId: number }>(
+              'SELECT ISNULL(MAX(WorkshopNameID), 0) + 1 AS NextId FROM core.WorkshopName',
+            );
+            const created = await query<{ WorkshopNameID: number }>(
+              `INSERT INTO core.WorkshopName (WorkshopNameID, WorkshopName)
+               OUTPUT INSERTED.WorkshopNameID AS WorkshopNameID
+               VALUES (@id, @name)`,
+              {
+                id: { type: sql.Int, value: seq.recordset[0]!.NextId },
+                name: { type: sql.NVarChar(255), value: c.newWorkshopName },
+              },
+            );
+            nameId = created.recordset[0]!.WorkshopNameID;
+          }
+        }
+
+        const seq = await query<{ NextId: number }>(
+          'SELECT ISNULL(MAX(WorkshopID), 0) + 1 AS NextId FROM core.Workshop',
+        );
+        const created = await query<{ WorkshopID: number }>(
+          `INSERT INTO core.Workshop
+                  (WorkshopID, WorkshopNameID, WorkshopCode, StartDate, Cost1,
+                   IsBrochure, IsFolder, IsLabel, IsClosed, IsCancelled, IsContracted,
+                   IsWcpc, IsStaffDev, IsFullyCodified)
+           OUTPUT INSERTED.WorkshopID AS WorkshopID
+           VALUES (@id, @nameId, @code, @start, @price,
+                   0, 0, 0, 0, 0, 0, 0, 0, 0)`,
+          {
+            id: { type: sql.Int, value: seq.recordset[0]!.NextId },
+            nameId: { type: sql.Int, value: nameId },
+            code: { type: sql.NVarChar(10), value: c.workshopCode ?? null },
+            start: { type: sql.Date, value: c.startDate ?? null },
+            price: { type: sql.Decimal(19, 4), value: c.price ?? null },
+          },
+        );
+        workshopId = created.recordset[0]!.WorkshopID;
+        resolvedBy = 'Created';
+      }
+
+      await query(
+        `UPDATE core.ScoItem
+            SET WorkshopID = @wid, ResolvedBy = @by,
+                ResolvedAt = SYSUTCDATETIME(), ResolvedByUser = @user
+          WHERE ScoItemID = @itemId`,
+        {
+          itemId: { type: sql.Int, value: itemId },
+          wid: { type: sql.Int, value: workshopId },
+          by: { type: sql.NVarChar(20), value: resolvedBy },
+          user: { type: sql.NVarChar(200), value: req.user!.email },
+        },
+      );
+
+      res.json({ ScoItemID: itemId, WorkshopID: workshopId, ResolvedBy: resolvedBy });
     } catch (err) {
       next(err);
     }
@@ -958,14 +1405,22 @@ schoolCashRouter.post(
         return;
       }
 
-      const header = await query<{ Status: string }>(
-        'SELECT Status FROM core.ScoImport WHERE ScoImportID = @id',
+      const header = await query<{ Status: string; Unresolved: number }>(
+        `SELECT im.Status,
+                (SELECT COUNT(*) FROM core.ScoItem i
+                  WHERE i.ScoImportID = im.ScoImportID AND i.WorkshopID IS NULL) AS Unresolved
+           FROM core.ScoImport im WHERE im.ScoImportID = @id`,
         { id: { type: sql.Int, value: importId } },
       );
       if (!header.recordset[0]) {
         res.status(404).json({ error: 'not_found', message: 'No such import.' });
         return;
       }
+
+      // Unresolved items are reported, not blocking. An admin can continue and
+      // apply what is matched, then come back and resolve the rest — the rows
+      // for those items stay unmatched and are picked up on the next apply.
+      const unresolved = header.recordset[0].Unresolved;
 
       const ready = await query<{
         ScoRowID: number;
@@ -981,13 +1436,15 @@ schoolCashRouter.post(
         MatchedRegistrationID: number | null;
         ParticipantName: string | null;
         WorkshopName: string | null;
+        WorkshopID: number | null;
       }>(
         `SELECT s.ScoRowID, s.RowNumber, s.PurchaserEmail, s.PurchaserName, s.ItemId, s.ItemName,
                 s.PaidAmount, s.ItemBalance, s.TransactionFee,
                 s.PurchasedDate, s.MatchedRegistrationID,
                 CONCAT(pt.FirstName, ' ', pt.LastName) AS ParticipantName,
-                n.WorkshopName
+                n.WorkshopName, i.WorkshopID
            FROM core.ScoRow s
+           JOIN core.ScoItem i ON i.ScoItemID = s.ScoItemID
            LEFT JOIN core.Registration r ON r.RegistrationID = s.MatchedRegistrationID
            LEFT JOIN core.Participant  pt ON pt.ParticipantID = r.ParticipantID
            LEFT JOIN core.Workshop    w  ON w.WorkshopID = r.WorkshopID
@@ -1078,6 +1535,27 @@ schoolCashRouter.post(
             { rowId: { type: sql.BigInt, value: row.ScoRowID } },
           );
           const externalId = staged.recordset[0]?.RowIdentity ?? null;
+
+          // Two uploads can both be staged before either is applied, so the
+          // duplicate check has to run again here — the unique index would
+          // reject the insert anyway, but a conflict reads better than a
+          // constraint error.
+          if (externalId) {
+            const paid = await txQuery<{ n: number }>(
+              tx,
+              `SELECT COUNT(*) AS n FROM core.Payment WHERE ExternalPaymentId = @identity`,
+              { identity: { type: sql.NVarChar(400), value: externalId } },
+            );
+            if ((paid.recordset[0]?.n ?? 0) > 0) {
+              conflicts.push({
+                rowNumber: row.RowNumber,
+                itemName: row.ItemName,
+                reason: 'This purchase was already paid from another upload.',
+              });
+              continue;
+            }
+          }
+
           const receipt: string | null = null;
 
           const payment = await txQuery<{ PaymentID: number }>(
@@ -1161,7 +1639,7 @@ schoolCashRouter.post(
         );
 
         await tx.commit();
-        res.json({ importId, applied, skipped: conflicts.length, conflicts });
+        res.json({ importId, applied, skipped: conflicts.length, conflicts, unresolved });
       } catch (err) {
         await tx.rollback();
         throw err;
@@ -1181,7 +1659,7 @@ schoolCashRouter.post(
  *     description: >
  *       Removes the upload entirely, so it no longer appears in the list. The
  *       staged rows go with it (cascade). An import that produced payments
- *       cannot be discarded — those payments are real and the history must
+ *       cannot be discarded - those payments are real and the history must
  *       keep pointing at the file they came from.
  *     security: [{ bearerAuth: [] }]
  *     parameters:

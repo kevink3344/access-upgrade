@@ -594,6 +594,33 @@ export const api = {
     import: (id: number) =>
       request<import('@pe/shared').ScoImportDetail>(`/api/school-cash/imports/${id}`),
 
+    /** Step one: the distinct items in an upload and their workshops. */
+    items: (importId: number) =>
+      request<import('@pe/shared').ScoItemsResponse>(`/api/school-cash/imports/${importId}/items`),
+
+    /** Every workshop, for the picker. */
+    workshops: () =>
+      request<{ rows: import('@pe/shared').ScoWorkshopOption[] }>('/api/school-cash/workshops'),
+
+    /** Resolve one item to an existing workshop, or create one. */
+    resolveItem: (
+      itemId: number,
+      body: {
+        workshopId?: number;
+        create?: {
+          workshopNameId?: number;
+          newWorkshopName?: string;
+          workshopCode?: string | null;
+          startDate?: string | null;
+          price?: number | null;
+        };
+      },
+    ) =>
+      request<{ ScoItemID: number; WorkshopID: number; ResolvedBy: string }>(
+        `/api/school-cash/items/${itemId}`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      ),
+
     matchRow: (rowId: number, body: { registrationId?: number | null; ignore?: boolean; ignoreReason?: string | null }) =>
       request<Record<string, unknown>>(`/api/school-cash/rows/${rowId}`, {
         method: 'PATCH',

@@ -1451,6 +1451,40 @@ export type ScoMatchMethod =
  */
 export type ScoImportStatus = 'Staged' | 'Applied' | 'Discarded';
 
+/** One distinct item in an upload, with the workshop it resolves to. */
+export interface ScoItemRow {
+  ScoItemID: number;
+  ItemName: string;
+  TotalRows: number;
+  ItemBalance: number | null;
+  WorkshopID: number | null;
+  ResolvedBy: 'Auto' | 'Manual' | 'Created' | null;
+  SuggestionScore: number | null;
+  SuggestedWorkshopID: number | null;
+  SuggestedWorkshopName: string | null;
+  SuggestedWorkshopCode: string | null;
+  WorkshopName: string | null;
+  WorkshopCode: string | null;
+  WorkshopDate: string | null;
+}
+
+export interface ScoItemsResponse {
+  rows: ScoItemRow[];
+  total: number;
+  unresolved: number;
+  /** True once every item has a workshop — payment matching may then run. */
+  ready: boolean;
+}
+
+/** A workshop an admin can pick from. */
+export interface ScoWorkshopOption {
+  workshopId: number;
+  workshopName: string;
+  workshopCode: string | null;
+  startDate: string | null;
+  price: number | null;
+}
+
 /** One uploaded Item Order Report. */
 export interface ScoImportRow {
   ScoImportID: number;
@@ -1543,6 +1577,8 @@ export interface ScoApplyResult {
   skipped: number;
   /** Rows that were matched to a registration that is no longer unpaid. */
   conflicts: { rowNumber: number; itemName: string | null; reason: string }[];
+  /** Items with no workshop, whose rows were therefore not matched. */
+  unresolved: number;
 }
 
 /** One entry in the permanent history of what was applied, for staff review. */

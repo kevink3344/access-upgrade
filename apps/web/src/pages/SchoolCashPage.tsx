@@ -6,6 +6,7 @@ import { useAuth } from '../auth';
 import { AppShell } from '../components/AppShell';
 import { IconSchoolCash, IconTrash } from '../components/icons';
 import { SchoolCashReview } from '../components/SchoolCashReview';
+import { SchoolCashWorkshops } from '../components/SchoolCashWorkshops';
 
 /**
  * Formats a numeric field defensively.
@@ -49,6 +50,7 @@ export function SchoolCashPage() {
   const canAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
 
   const [openImportId, setOpenImportId] = useState<number | null>(null);
+  const [step, setStep] = useState<'workshops' | 'payments'>('workshops');
   const [page, setPage] = useState(1);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -80,6 +82,7 @@ export function SchoolCashPage() {
       setUploadError(null);
       qc.invalidateQueries({ queryKey: ['school-cash'] });
       setOpenImportId(result.importId);
+      setStep('workshops');
     },
     onError: (err: unknown) => {
       setUploadError(err instanceof Error ? err.message : 'The upload failed.');
@@ -101,6 +104,15 @@ export function SchoolCashPage() {
     },
   });
 
+  /**
+   * Opens an upload. Imports that still have unresolved items start at the
+   * workshop step, because payment matching cannot run until they are settled.
+   */
+  function openImport(id: number) {
+    setOpenImportId(id);
+    setStep('workshops');
+  }
+
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -111,14 +123,33 @@ export function SchoolCashPage() {
   }
 
   if (openImportId !== null) {
+    // Two steps, in order. Workshops first: matching payments before the
+    // workshops are settled is what put money against the wrong workshop.
+    if (step === 'workshops') {
+      return (
+        <SchoolCashWorkshops
+          importId={openImportId}
+          canAdmin={!!canAdmin}
+          onBack={() => {
+            setOpenImportId(null);
+            setStep('workshops');
+            qc.invalidateQueries({ queryKey: ['school-cash'] });
+          }}
+          onContinue={() => setStep('payments')}
+        />
+      );
+    }
+
     return (
       <SchoolCashReview
         importId={openImportId}
         canAdmin={!!canAdmin}
         onBack={() => {
           setOpenImportId(null);
+          setStep('workshops');
           qc.invalidateQueries({ queryKey: ['school-cash'] });
         }}
+        onBackToWorkshops={() => setStep('workshops')}
       />
     );
   }
@@ -223,7 +254,7 @@ export function SchoolCashPage() {
                       <button
                         type="button"
                         className="link-button"
-                        onClick={() => setOpenImportId(r.ScoImportID)}
+                        onClick={() => openImport(r.ScoImportID)}
                       >
                         {r.FileName}
                       </button>
@@ -246,7 +277,7 @@ export function SchoolCashPage() {
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
-                          onClick={() => setOpenImportId(r.ScoImportID)}
+                          onClick={() => openImport(r.ScoImportID)}
                         >
                           {r.Status === 'Staged' && canAdmin ? 'Review' : 'View'}
                         </button>

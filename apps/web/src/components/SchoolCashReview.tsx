@@ -37,7 +37,7 @@ function fmtDate(iso: string | null): string {
 function ConfidencePill({ c }: { c: ScoMatchConfidence | null }) {
   if (c === 'High') return <span className="pill pill-open">High</span>;
   if (c === 'Low') return <span className="pill pill-full">Needs review</span>;
-  if (c === 'Duplicate') return <span className="pill pill-info">Already applied</span>;
+  if (c === 'Duplicate') return <span className="pill pill-info">Already uploaded</span>;
   if (c === 'Ignored') return <span className="pill pill-muted">Ignored</span>;
   return <span className="pill pill-full">Needs review</span>;
 }
@@ -56,10 +56,12 @@ export function SchoolCashReview({
   importId,
   canAdmin,
   onBack,
+  onBackToWorkshops,
 }: {
   importId: number;
   canAdmin: boolean;
   onBack: () => void;
+  onBackToWorkshops: () => void;
 }) {
   const qc = useQueryClient();
   const [filter, setFilter] = useState<Filter>('all');
@@ -67,6 +69,16 @@ export function SchoolCashReview({
   const [matching, setMatching] = useState<ScoRowRow | null>(null);
   const [applyResult, setApplyResult] = useState<ScoApplyResult | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const items = useQuery({
+    queryKey: ['school-cash', 'items', importId],
+    queryFn: () => api.schoolCash.items(importId),
+  });
+
+  const unresolvedItems = useMemo(
+    () => (items.data?.rows ?? []).filter((i) => i.WorkshopID === null),
+    [items.data],
+  );
 
   const detail = useQuery({
     queryKey: ['school-cash', 'import', importId],
@@ -156,7 +168,11 @@ export function SchoolCashReview({
           <button type="button" className="link-button" onClick={onBack} style={{ marginBottom: 6 }}>
             ← All uploads
           </button>
-          <h2>{detail.data?.FileName ?? 'Upload'}</h2>
+          {' · '}
+          <button type="button" className="link-button" onClick={onBackToWorkshops} style={{ marginBottom: 6 }}>
+            Workshops
+          </button>
+          <h2>Step 2 — {detail.data?.FileName ?? 'Upload'}</h2>
           <p>
             Uploaded {fmtDate(detail.data?.UploadedAt ?? null)} by{' '}
             {detail.data?.UploadedBy ?? '—'} · {rows.length.toLocaleString()} rows in this file
@@ -216,6 +232,8 @@ export function SchoolCashReview({
               `${applyResult.skipped} row${applyResult.skipped === 1 ? '' : 's'} could not be applied — see below.`}
             {needsReview > 0 &&
               ` ${needsReview} row${needsReview === 1 ? '' : 's'} still need review; resolve them and apply again.`}
+            {applyResult.unresolved > 0 &&
+              ` ${applyResult.unresolved} item${applyResult.unresolved === 1 ? '' : 's'} had no workshop, so their rows were not matched.`}
           </span>
         </div>
       )}
@@ -231,6 +249,46 @@ export function SchoolCashReview({
                 </li>
               ))}
             </ul>
+          </span>
+        </div>
+      )}
+
+      {(counts?.Duplicate ?? 0) > 0 && (
+        <div className="alert alert-info" role="status">
+          <span>
+            <strong>
+              {counts!.Duplicate.toLocaleString()} row
+              {counts!.Duplicate === 1 ? ' was' : 's were'} skipped as already uploaded.
+            </strong>{' '}
+            These purchases are in another upload or already paid, so they will not be recorded
+            twice. Filter to <em>Duplicates</em> to see them.
+          </span>
+        </div>
+      )}
+
+      {unresolvedItems.length > 0 && (
+        <div className="alert alert-warn" role="status">
+          <span>
+            <strong>
+              {unresolvedItems.length} item{unresolvedItems.length === 1 ? '' : 's'} in this file
+              {unresolvedItems.length === 1 ? ' has' : ' have'} no workshop yet.
+            </strong>{' '}
+            Rows for these will not be matched:
+            <ul style={{ margin: '6px 0 0 18px' }}>
+              {unresolvedItems.map((i) => (
+                <li key={i.ScoItemID}>
+                  {i.ItemName} ({i.TotalRows} row{i.TotalRows === 1 ? '' : 's'})
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="link-button"
+              onClick={onBackToWorkshops}
+              style={{ marginTop: 8 }}
+            >
+              Match these workshops
+            </button>
           </span>
         </div>
       )}

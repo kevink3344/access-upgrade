@@ -90,10 +90,9 @@ describe('School Cash endpoints', () => {
     }
   });
 
-  it('stages an unknown purchaser as matched, not as needing review', async () => {
-    // A purchaser with no participant record is not a failure: applying the
-    // import creates the participant and registration. This asserts the row
-    // is staged High so it needs no manual work.
+  it('stages an unknown purchaser as needing review, not auto-matched', async () => {
+    // Applying creates a participant and registration, which should be a
+    // deliberate choice — so an unknown email is surfaced, not assumed.
     const token = await authToken();
     // The email is unique per run: the import is keyed on a hash of the whole
     // file, so a byte-identical CSV would be refused as already imported.
@@ -111,19 +110,93 @@ describe('School Cash endpoints', () => {
       .send(csv);
 
     expect(res.status).toBe(201);
-    expect(res.body.matched).toBe(1);
-    expect(res.body.review).toBe(0);
+    // One distinct item, and it has no workshop — so nothing is matched yet.
+    expect(res.body.items).toBe(1);
+    expect(res.body.itemsResolved).toBe(0);
+
+    const items = await authed(`/api/school-cash/imports/${res.body.importId}/items`);
+    expect(items.status).toBe(200);
+    expect(items.body.ready).toBe(false);
+    expect(items.body.unresolved).toBe(1);
 
     // Clean up so the test leaves no staged rows behind.
-    const detail = await authed(`/api/school-cash/imports/${res.body.importId}`);
-    expect(detail.status).toBe(200);
-    const row = detail.body.rows[0];
-    expect(row.MatchConfidence).toBe('High');
-    expect(row.MatchNote).toContain('New purchaser');
+    await api
+      .post(`/api/school-cash/imports/${res.body.importId}/discard`)
+      .set('Authorization', `Bearer ${token}`);
+  });
+
+  it('allows applying with unresolved items, reporting how many were skipped', async () => {
+    // Staff can continue before every item is resolved. Those items simply do
+    // not match; the rest still apply, and the response says what was skipped.
+    const token = await authToken();
+    const unique = `unresolved-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.invalid`;
+    const csv = [
+      'Purchaser Email,Item Name,Item Id,Paid Item Balance,Paid Transaction Fee,Purchased,Paid Amount,Payments',
+      `${unique},Some Item,99999,$25.00,$1.10,09/15/2026,$26.10,paid`,
+    ].join('\n');
+
+    const res = await api
+      .post('/api/school-cash/imports')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'text/plain')
+      .set('X-File-Name', `unresolved-${Date.now()}.csv`)
+      .send(csv);
+    expect(res.status).toBe(201);
+    expect(res.body.items).toBe(1);
+    expect(res.body.itemsResolved).toBe(0);
+
+    // Nothing is matched, so there is nothing to apply — but the refusal is
+    // "nothing to apply", not "workshops unresolved".
+    const apply = await api
+      .post(`/api/school-cash/imports/${res.body.importId}/apply`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(apply.status).toBe(409);
+    expect(apply.body.error).toBe('nothing_to_apply');
 
     await api
       .post(`/api/school-cash/imports/${res.body.importId}/discard`)
       .set('Authorization', `Bearer ${token}`);
+  });
+
+  it('skips a purchase already staged by a different file', async () => {
+    // Two staff exporting the same day get different files — one may have an
+    // extra row — so the file hash differs while the purchases inside are the
+    // same. The repeated purchase must be skipped, not staged twice.
+    const token = await authToken();
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const header =
+      'Purchaser Email,Item Name,Item Id,Paid Item Balance,Paid Transaction Fee,Purchased,Paid Amount,Payments';
+    const shared = `dupe-${stamp}@example.invalid,Sensory Processing and Self-Regulation,50295,$25.00,$1.10,09/15/2026,$26.10,paid`;
+    const extra = `dupe-${stamp}@example.invalid,Handwriting: The Building Blocks,46947,$25.00,$1.10,09/16/2026,$26.10,paid`;
+
+    const up = (name: string, body: string) =>
+      api
+        .post('/api/school-cash/imports')
+        .set('Authorization', `Bearer ${token}`)
+        .set('Content-Type', 'text/plain')
+        .set('X-File-Name', name)
+        .send(body);
+
+    const first = await up(`dupe-a-${stamp}.csv`, [header, shared].join('\n'));
+    expect(first.status).toBe(201);
+    expect(first.body.ignored).toBe(0);
+
+    const second = await up(`dupe-b-${stamp}.csv`, [header, shared, extra].join('\n'));
+    expect(second.status).toBe(201);
+    // The shared purchase is skipped; the genuinely new one is kept.
+    expect(second.body.ignored).toBe(1);
+    expect(second.body.TotalRows).toBe(2);
+
+    // A byte-identical re-upload is refused outright.
+    const third = await up(`dupe-b-${stamp}.csv`, [header, shared, extra].join('\n'));
+    expect(third.status).toBe(409);
+    expect(third.body.error).toBe('already_imported');
+
+    for (const id of [first.body.importId, second.body.importId]) {
+      await api
+        .post(`/api/school-cash/imports/${id}/discard`)
+        .set('Authorization', `Bearer ${token}`);
+    }
   });
 
   it('deletes a staged upload so it leaves the list', async () => {

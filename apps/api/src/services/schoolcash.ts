@@ -267,52 +267,28 @@ export function identityOf(row: ScoCsvRow): string {
 /* ------------------------------------------------------------------ */
 
 export type MatchConfidence = 'High' | 'Low' | 'None' | 'Duplicate' | 'Ignored';
-export type MatchMethod =
-  | 'email'
-  | 'email+amount'
-  | 'email+workshop'
-  | 'manual'
-  | 'duplicate'
-  | 'none';
+export type MatchMethod = 'email' | 'email+amount' | 'manual' | 'duplicate' | 'none';
 
 /** A candidate registration the matcher may choose between. */
 export interface MatchCandidate {
   registrationId: number;
   /** The amount still owed on this registration, for the amount rule. */
   owed: number | null;
-  /**
-   * When the registration was made, ISO `YYYY-MM-DD`. Used to break a tie
-   * between candidates for the same workshop.
-   */
+  /** When the registration was made, ISO `YYYY-MM-DD`. */
   registeredOn?: string | null;
-  /**
-   * The name of the workshop this registration is for.
-   *
-   * This is what ties a payment to the right registration: a purchaser can
-   * have several unpaid registrations, and the most recent one is often for a
-   * different workshop entirely.
-   */
-  workshopName?: string | null;
 }
 
 export interface MatchInput {
   purchaserEmail: string | null;
   /** The item price — NOT the gross charge. See §11.2. */
   itemBalance: number | null;
-  /**
-   * The workshop the purchase is for, taken from the item name with the
-   * vendor's date suffix stripped. Used to tie the payment to the right
-   * registration.
-   */
-  itemName?: string | null;
   /** True when this vendor row has already been applied. */
   alreadyApplied: boolean;
   /**
    * When the School Cash purchase was made, ISO `YYYY-MM-DD`.
    *
    * Only registrations made on or before this date are considered: a payment
-   * cannot be for a registration that did not exist yet. This is what keeps a
-   * re-registration from stealing an older purchase's match.
+   * cannot be for a registration that did not exist yet.
    */
   purchasedOn?: string | null;
 }
@@ -330,12 +306,21 @@ function eligible(candidates: MatchCandidate[], purchasedOn?: string | null): Ma
   return candidates.filter((c) => !c.registeredOn || c.registeredOn <= purchasedOn);
 }
 
-/** Most recent first; undated registrations sort last. */
-function byMostRecent(a: MatchCandidate, b: MatchCandidate): number {
-  const da = a.registeredOn ?? '';
-  const db = b.registeredOn ?? '';
-  if (da === db) return b.registrationId - a.registrationId;
-  return db.localeCompare(da);
+/**
+ * A workshop an item could resolve to, with a score for how well it fits.
+ *
+ * Resolution happens once per distinct item, before any payment is matched.
+ * That ordering matters: the vendor's item name and this app's workshop name
+ * are different vocabularies, so deciding the workshop first — with a human
+ * confirming — is the only way to keep payments off the wrong workshop.
+ */
+export interface WorkshopOption {
+  workshopId: number;
+  workshopName: string;
+  workshopCode: string | null;
+  startDate: string | null;
+  price: number | null;
+  score: number;
 }
 
 /**
@@ -368,7 +353,8 @@ export function nameSimilarity(a: string | null, b: string | null): number {
 }
 
 /**
- * A candidate counts as the same workshop when the names overlap this much.
+ * The score at which an item is considered to *be* a workshop, rather than
+ * merely similar to one.
  *
  * Chosen against the real export rather than guessed. Scoring every item name
  * against the workshop names in the database gives a clean separation: genuine
@@ -381,6 +367,30 @@ export function nameSimilarity(a: string | null, b: string | null): number {
  * most of their words.
  */
 export const NAME_MATCH_THRESHOLD = 0.6;
+
+/**
+ * The score at which a workshop is worth *suggesting* to an admin.
+ *
+ * Lower than the auto-match threshold on purpose: a suggestion costs nothing
+ * because a human confirms it, and a near miss shown as the default saves
+ * them finding it by hand.
+ */
+export const SUGGESTION_THRESHOLD = 0.25;
+
+/** Picks the workshop an item most likely refers to, if any is close enough. */
+export function bestWorkshop(
+  itemName: string | null,
+  options: Omit<WorkshopOption, 'score'>[],
+): WorkshopOption | null {
+  let best: WorkshopOption | null = null;
+  for (const o of options) {
+    const score = nameSimilarity(itemName, o.workshopName);
+    if (score >= SUGGESTION_THRESHOLD && (!best || score > best.score)) {
+      best = { ...o, score };
+    }
+  }
+  return best;
+}
 
 /**
  * Words that appear in many workshop names and so cannot distinguish them.
@@ -408,26 +418,26 @@ function distinctiveWords(s: string | null): Set<string> {
 }
 
 /**
- * Applies the matching rules in order. The first rule that produces exactly
- * one candidate wins.
+ * Applies the matching rules in order, within the resolved workshop.
  *
  * `candidates` is every unpaid registration belonging to the participant who
  * owns `purchaserEmail` — the caller resolves the email, because that needs a
  * database and this function must stay pure.
  *
- * The rules, in order:
+ * The workshop is no longer a tiebreaker. An earlier version matched on "one
+ * candidate" or "the amount matches", then fell back to recency, and produced
+ * payments against workshops from 2011 because nothing tied the payment to the
+ * right workshop. Now the caller passes only candidates for the workshop the
+ * upload resolved, and:
  *
- *  1. Only one eligible candidate — match it.
- *  2. Several, but the item price matches exactly one — match that.
- *  3. Several, but exactly one is for the same workshop — match that.
- *  4. Several for the same workshop — take the most recent of those.
- *  5. Otherwise a human decides.
+ *  1. No candidates for that workshop — a human decides.
+ *  2. Exactly one — match it.
+ *  3. Several, but the amount picks one — match that.
+ *  4. Several and the amount does not settle it — a human decides.
  *
- * Rule 3 is the important one. A purchaser often has several unpaid
- * registrations, and the newest is frequently for a different workshop
- * entirely, so recency alone would pay the wrong one. The workshop name is
- * what actually ties a payment to a registration; recency only breaks a tie
- * between candidates for the same workshop.
+ * Recency is deliberately not used. Two unpaid registrations for the same
+ * workshop are rare, and picking the newer one silently would hide a real
+ * ambiguity rather than surface it.
  */
 export function matchRow(input: MatchInput, candidates: MatchCandidate[]): MatchOutcome {
   if (input.alreadyApplied) {
@@ -439,7 +449,12 @@ export function matchRow(input: MatchInput, candidates: MatchCandidate[]): Match
   }
 
   if (candidates.length === 0) {
-    return { confidence: 'None', method: 'none', registrationId: null, note: 'No unpaid registration for this purchaser.' };
+    return {
+      confidence: 'None',
+      method: 'none',
+      registrationId: null,
+      note: 'No unpaid registration for this workshop.',
+    };
   }
 
   const pool = eligible(candidates, input.purchasedOn);
@@ -449,7 +464,7 @@ export function matchRow(input: MatchInput, candidates: MatchCandidate[]): Match
       confidence: 'None',
       method: 'none',
       registrationId: null,
-      note: 'Every unpaid registration was made after this purchase.',
+      note: 'Every unpaid registration for this workshop was made after this purchase.',
     };
   }
 
@@ -475,46 +490,11 @@ export function matchRow(input: MatchInput, candidates: MatchCandidate[]): Match
     }
   }
 
-  // Rule 3: narrow to the same workshop before considering recency.
-  //
-  // Scored rather than merely filtered: an item can clear the threshold
-  // against more than one workshop ("A Guided Observation of the Demonstration
-  // Preschool Classroom (DPS)" scores 1.00 against its own name and 0.67
-  // against "A Full Center Guided Observation in the Demonstration
-  // Preschool"). Only the best-scoring workshop is considered, so the exact
-  // match cannot be beaten by a near one.
-  const scored = pool
-    .map((c) => ({ c, score: nameSimilarity(input.itemName ?? null, c.workshopName ?? null) }))
-    .filter((x) => x.score >= NAME_MATCH_THRESHOLD);
-
-  if (scored.length > 0) {
-    const best = Math.max(...scored.map((x) => x.score));
-    const sameWorkshop = scored.filter((x) => x.score === best).map((x) => x.c);
-
-    if (sameWorkshop.length === 1) {
-      return {
-        confidence: 'High',
-        method: 'email+workshop',
-        registrationId: sameWorkshop[0]!.registrationId,
-        note: `${pool.length} unpaid registrations; only one is for this workshop.`,
-      };
-    }
-
-    // Rule 4: several for the same workshop — the most recent of those wins.
-    const sorted = [...sameWorkshop].sort(byMostRecent);
-    return {
-      confidence: 'High',
-      method: 'email+workshop',
-      registrationId: sorted[0]!.registrationId,
-      note: `${sameWorkshop.length} registrations for this workshop; the most recent was picked.`,
-    };
-  }
-
-  // Rule 5: a human decides.
+  // Rule 3: several and the amount does not settle it — a human decides.
   return {
     confidence: 'Low',
     method: 'email',
     registrationId: null,
-    note: `${pool.length} unpaid registrations, none for this workshop.`,
+    note: `${pool.length} unpaid registrations for this workshop, none matching the amount.`,
   };
 }
