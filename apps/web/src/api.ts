@@ -672,6 +672,12 @@ export const api = {
   reports: {    catalogue: () =>
       request<import('@pe/shared').ReportCatalogueResponse>('/api/reports'),
 
+    /** One Visual Reports chart. `schoolYearId` is ignored by cross-year charts. */
+    chart: (key: import('@pe/shared').ChartKey, schoolYearId?: number | null) => {
+      const qs = schoolYearId ? `?schoolYearId=${schoolYearId}` : '';
+      return request<import('@pe/shared').ChartSeries>(`/api/reports/charts/${key}${qs}`);
+    },
+
     run: (key: string, params: Record<string, string | number | undefined>) => {
       const qs = new URLSearchParams();
       for (const [k, v] of Object.entries(params)) {

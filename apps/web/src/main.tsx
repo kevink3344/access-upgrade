@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useEffect, useState, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -25,6 +25,15 @@ import { CreditSlipsPage } from './pages/CreditSlipsPage';
 import { CertificateDesignerPage } from './pages/CertificateDesignerPage';
 import { CertificatesPage } from './pages/CertificatesPage';
 import { ReportsPage } from './pages/ReportsPage';
+
+/**
+ * Recharts is ~500 KB of the bundle, and only this one screen uses it. Loading
+ * it lazily keeps the Reports hub's first paint where it was.
+ */
+const VisualReportsPage = lazy(() =>
+  import('./pages/VisualReportsPage').then((m) => ({ default: m.VisualReportsPage })),
+);
+
 import { WebhooksPage } from './pages/WebhooksPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { FormsPage } from './pages/FormsPage';
@@ -135,6 +144,19 @@ function Router() {
   if (path === '/credit-slips') return <CreditSlipsPage />;
   if (path === '/certificates') return <CertificatesPage />;
   if (path === '/reports') return <ReportsPage />;
+  if (path === '/reports/visual') {
+    return (
+      <Suspense
+        fallback={
+          <div style={{ padding: 28 }}>
+            <div className="skeleton" style={{ height: 320 }} />
+          </div>
+        }
+      >
+        <VisualReportsPage />
+      </Suspense>
+    );
+  }
 
   if (path === '/notifications') return <NotificationsPage />;
 

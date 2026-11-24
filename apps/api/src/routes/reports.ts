@@ -11,6 +11,7 @@ import {
   type ReportParams,
   type ReportRow,
 } from '../services/reports.js';
+import { CHARTS } from '../services/charts.js';
 
 export const reportsRouter = Router();
 
@@ -90,6 +91,75 @@ reportsRouter.get('/', requireAuth, async (_req, res, next) => {
  *   get:
  *     tags: [Reports]
  *     summary: Run a report
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: key, required: true, schema: { type: string } }
+ *       - { in: query, name: schoolYearId, schema: { type: integer } }
+ *       - { in: query, name: from, schema: { type: string, format: date } }
+ *       - { in: query, name: to, schema: { type: string, format: date } }
+ *     responses:
+ *       200: { description: Rows }
+ *       404: { description: Unknown report }
+ */
+/* ------------------------------------------------------------------ */
+/*  Visual reports                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * @openapi
+ * /api/reports/charts/{key}:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Aggregate behind one Visual Reports chart
+ *     description: >
+ *       Returns the chart-ready series for one chart, with a note explaining
+ *       anything a viewer would otherwise misread (registrations rather than
+ *       people, revenue including refunds).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: key, required: true, schema: { type: string } }
+ *       - { in: query, name: schoolYearId, schema: { type: integer } }
+ *     responses:
+ *       200: { description: Chart series }
+ *       404: { description: Unknown chart }
+ */
+reportsRouter.get('/charts/:key', requireAuth, async (req, res, next) => {
+  try {
+    const chart = CHARTS[String(req.params.key)];
+    if (!chart) {
+      res.status(404).json({ error: 'not_found', message: 'No such chart' });
+      return;
+    }
+
+    const parsed = z
+      .object({ schoolYearId: z.coerce.number().int().optional() })
+      .safeParse(req.query);
+
+    if (!parsed.success) {
+      res.status(422).json({ error: 'validation_failed', message: 'Invalid schoolYearId' });
+      return;
+    }
+
+    const series = await chart.run(parsed.data.schoolYearId ?? null);
+    res.json(series);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/*  One report                                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * @openapi
+ * /api/reports/:key:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Run a report
+ *     description: >
+ *       Returns the report's rows. Screen output is capped at 5,000 rows;
+ *       the PDF path is uncapped.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: key, required: true, schema: { type: string } }

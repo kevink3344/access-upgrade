@@ -70,6 +70,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/workshops/approval', label: 'Workshop approval', icon: IconApproval },
       { to: '/certificates', label: 'Certificates', icon: IconCertificate },
       { to: '/reports', label: 'Reports hub', icon: IconReports },
+      { to: '/reports/visual', label: 'Visual Reports', icon: IconDashboard },
       { to: '/mailing-lists', label: 'Mailing lists', icon: IconMail },
     ],
   },

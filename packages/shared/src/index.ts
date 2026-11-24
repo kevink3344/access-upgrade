@@ -1190,6 +1190,48 @@ export interface ReportRunResponse {
   total: number;
   truncated: boolean;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Visual reports                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One point on a chart. `label` is what the axis shows; `value` is what the
+ * bar or slice represents. Extra numeric keys are allowed so a chart can
+ * carry a second measure (a count and an amount, say) without a new shape.
+ */
+export interface ChartPoint {
+  label: string;
+  value: number;
+  [extra: string]: string | number;
+}
+
+/**
+ * Every chart endpoint returns this, so the frontend has one fetch pattern.
+ *
+ * `note` is not decoration: several charts count something that reads
+ * differently from what a viewer assumes (registrations rather than people,
+ * revenue including refunds). The wording lives next to the query that
+ * produces the number.
+ */
+export interface ChartSeries {
+  data: ChartPoint[];
+  /** Sum of `value`, for the card subtitle. */
+  total: number;
+  /** True when there is nothing to draw — the card shows a message instead. */
+  isEmpty: boolean;
+  note: string | null;
+  /** Unit for the axis and tooltip, e.g. "registrations" or "USD". */
+  unit: string;
+}
+
+/** The charts the Visual Reports page renders. */
+export type ChartKey =
+  | 'registrations-by-month'
+  | 'attendance-outcomes'
+  | 'workshops-by-category'
+  | 'revenue-by-year'
+  | 'top-agencies';
 /* ------------------------------------------------------------------ */
 /*  Notifications                                                      */
 /* ------------------------------------------------------------------ */
