@@ -22,6 +22,11 @@ function money(n: number | null): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
+/** Formats a numeric field defensively — a null must not blank the page. */
+function count(n: number | null | undefined): string {
+  return typeof n === 'number' ? n.toLocaleString() : '—';
+}
+
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso.endsWith('Z') ? iso : `${iso}Z`);
@@ -265,7 +270,7 @@ export function SchoolCashReview({
                 className={filter === f.key ? 'is-active' : ''}
                 onClick={() => setFilter(f.key)}
               >
-                {f.label} ({n.toLocaleString()})
+                {f.label} ({count(n)})
               </button>
             );
           })}

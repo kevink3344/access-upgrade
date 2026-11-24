@@ -42,6 +42,7 @@ import { FormEditorPage } from './pages/FormEditorPage';
 import { ApiDocsPage } from './pages/ApiDocsPage';
 import { PublicRegisterPage } from './pages/PublicRegisterPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -215,7 +216,9 @@ function Router() {
 createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <Router />
+      <ErrorBoundary>
+        <Router />
+      </ErrorBoundary>
     </AuthProvider>
   </QueryClientProvider>,
 );

@@ -7,6 +7,17 @@ import { AppShell } from '../components/AppShell';
 import { IconSchoolCash } from '../components/icons';
 import { SchoolCashReview } from '../components/SchoolCashReview';
 
+/**
+ * Formats a numeric field defensively.
+ *
+ * The API sends these as numbers, but a null or a missing field would throw
+ * on `.toLocaleString()` and blank the whole page. A dash is a far better
+ * outcome than a white screen.
+ */
+function count(n: number | null | undefined): string {
+  return typeof n === 'number' ? n.toLocaleString() : '—';
+}
+
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso.endsWith('Z') ? iso : `${iso}Z`);
@@ -205,16 +216,16 @@ export function SchoolCashPage() {
                       <div className="muted" style={{ fontSize: 12 }}>by {r.UploadedBy}</div>
                     </td>
                     <td data-label="Uploaded">{fmtDate(r.UploadedAt)}</td>
-                    <td data-label="Rows" className="num">{r.TotalRows.toLocaleString()}</td>
-                    <td data-label="Matched" className="num">{r.MatchedCount.toLocaleString()}</td>
+                    <td data-label="Rows" className="num">{count(r.TotalRows)}</td>
+                    <td data-label="Matched" className="num">{count(r.MatchedCount)}</td>
                     <td data-label="To review" className="num">
                       {r.ReviewCount > 0 ? (
-                        <strong>{r.ReviewCount.toLocaleString()}</strong>
+                        <strong>{count(r.ReviewCount)}</strong>
                       ) : (
                         '0'
                       )}
                     </td>
-                    <td data-label="Applied" className="num">{r.AppliedCount.toLocaleString()}</td>
+                    <td data-label="Applied" className="num">{count(r.AppliedCount)}</td>
                     <td data-label="Status"><StatusPill status={r.Status} /></td>
                     <td data-label="Actions" className="num">
                       <span className="row-actions">
