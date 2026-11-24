@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from '../auth/middleware.js';
 import {
   identitiesFor,
   matchRow,
+  normaliseItemName,
   parseMoney,
   parseScoCsv,
   type MatchCandidate,
@@ -219,7 +220,11 @@ async function createRegistrationFor(
     participantId = created.recordset[0]!.ParticipantID;
   }
 
-  // The workshop the item refers to. Exact name match only — see above.
+  // The workshop the item refers to. The vendor appends the session date to
+  // the item name, so both sides are normalised before comparing. Still an
+  // exact match after that: a fuzzy match would file payments against the
+  // wrong workshop, and a conflict is cheaper to resolve than a wrong payment.
+  const wanted = normaliseItemName(row.ItemName);
   const workshop = await txQuery<{ WorkshopID: number }>(
     tx,
     `SELECT TOP 1 w.WorkshopID
@@ -227,7 +232,7 @@ async function createRegistrationFor(
        JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
       WHERE LTRIM(RTRIM(n.WorkshopName)) = @item
       ORDER BY w.StartDate DESC, w.WorkshopID DESC`,
-    { item: { type: sql.NVarChar(255), value: (row.ItemName ?? '').trim() } },
+    { item: { type: sql.NVarChar(255), value: wanted } },
   );
 
   const workshopId = workshop.recordset[0]?.WorkshopID;
@@ -951,10 +956,6 @@ schoolCashRouter.post(
         res.status(404).json({ error: 'not_found', message: 'No such import.' });
         return;
       }
-      if (header.recordset[0].Status === 'Discarded') {
-        res.status(409).json({ error: 'discarded', message: 'This import was discarded.' });
-        return;
-      }
 
       const ready = await query<{
         ScoRowID: number;
@@ -1166,13 +1167,18 @@ schoolCashRouter.post(
  * /api/school-cash/imports/{id}/discard:
  *   post:
  *     tags: [School Cash]
- *     summary: Discard a staged import without applying anything
+ *     summary: Delete a staged import and its rows
+ *     description: >
+ *       Removes the upload entirely, so it no longer appears in the list. The
+ *       staged rows go with it (cascade). An import that produced payments
+ *       cannot be discarded — those payments are real and the history must
+ *       keep pointing at the file they came from.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: integer } }
  *     responses:
- *       204: { description: Discarded }
- *       409: { description: Already applied }
+ *       204: { description: Deleted }
+ *       409: { description: Already produced payments }
  */
 schoolCashRouter.post(
   '/imports/:id/discard',
@@ -1193,15 +1199,22 @@ schoolCashRouter.post(
       if (row.AppliedCount > 0) {
         res.status(409).json({
           error: 'already_applied',
-          message: 'Some rows from this import have already produced payments, so it cannot be discarded.',
+          message:
+            'Some rows from this upload have already produced payments, so it cannot be discarded. ' +
+            'Those payments are recorded against it.',
         });
         return;
       }
 
-      await query(
-        `UPDATE core.ScoImport SET Status = 'Discarded' WHERE ScoImportID = @id`,
-        { id: { type: sql.Int, value: importId } },
-      );
+      // The row count is checked rather than assumed: if the cascade is ever
+      // dropped, deleting the header would orphan every staged row.
+      await query('DELETE FROM core.ScoRow WHERE ScoImportID = @id', {
+        id: { type: sql.Int, value: importId },
+      });
+      await query('DELETE FROM core.ScoImport WHERE ScoImportID = @id', {
+        id: { type: sql.Int, value: importId },
+      });
+
       res.status(204).end();
     } catch (err) {
       next(err);

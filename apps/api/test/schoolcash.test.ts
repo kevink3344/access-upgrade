@@ -8,6 +8,7 @@ import {
   matchRow,
   rowIdentity,
   identitiesFor,
+  normaliseItemName,
   REQUIRED_COLUMNS,
   type MatchCandidate,
 } from '../src/services/schoolcash.js';
@@ -230,6 +231,59 @@ describe('matchRow', () => {
  * twice. The vendor export carries no receipt or payment id — `ExternalId1`
  * is blank on every row — so identity has to come from the row's content.
  */
+describe('normaliseItemName', () => {
+  it('strips a single trailing date', () => {
+    expect(normaliseItemName('Handwriting: The Building Blocks- 9/15/26')).toBe(
+      'Handwriting: The Building Blocks',
+    );
+    expect(normaliseItemName('A Guided Observation of the Demonstration Preschool Classroom (DPS) 10/1')).toBe(
+      'A Guided Observation of the Demonstration Preschool Classroom (DPS)',
+    );
+  });
+
+  it('strips a comma-separated list of dates', () => {
+    expect(normaliseItemName("Early Childhood Directors' Forum- 11/10/26, 2/23/27, 4/27/27")).toBe(
+      "Early Childhood Directors' Forum",
+    );
+  });
+
+  it('strips a four-digit year', () => {
+    expect(normaliseItemName('Positive Solutions for Families- The Power of Routines- 1/11/2027')).toBe(
+      'Positive Solutions for Families- The Power of Routines',
+    );
+  });
+
+  it('leaves a name with no date alone', () => {
+    expect(normaliseItemName('Sensory Processing and Self-Regulation')).toBe(
+      'Sensory Processing and Self-Regulation',
+    );
+  });
+
+  it('does not strip a name that merely ends in a number', () => {
+    expect(normaliseItemName('Session 4')).toBe('Session 4');
+    expect(normaliseItemName('Cohort 2026')).toBe('Cohort 2026');
+  });
+
+  it('tolerates null and blank', () => {
+    expect(normaliseItemName(null)).toBe('');
+    expect(normaliseItemName('   ')).toBe('');
+  });
+
+  it('normalises every dated item in the real export to a name the app could hold', () => {
+    const p = fs.existsSync(NEW_FIXTURE) ? NEW_FIXTURE : null;
+    if (!p) return;
+    const rows = parseScoCsv(fs.readFileSync(p, 'utf8')).rows;
+    const names = new Set(rows.map((r) => r.itemName ?? ''));
+
+    // Every normalised name must be non-empty and must not still end in a date.
+    for (const n of names) {
+      const norm = normaliseItemName(n);
+      expect(norm.length).toBeGreaterThan(0);
+      expect(norm).not.toMatch(/\d{1,2}\/\d{1,2}/);
+    }
+  });
+});
+
 describe('rowIdentity', () => {
   const base = {
     purchaserEmail: 'bria@example.org',

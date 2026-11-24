@@ -161,7 +161,30 @@ export function parseMoney(text: string | null | undefined): number | null {
 }
 
 /**
- * A stable identity for a vendor row, used to recognise a row that has
+ * Normalises a School Cash item name so it can be compared with a workshop
+ * name.
+ *
+ * The vendor appends the session date to the item: "Early Childhood
+ * Directors' Forum- 11/10/26, 2/23/27, 4/27/27", "(DPS) 10/1",
+ * "Handwriting: The Building Blocks- 9/15/26". The workshop in this app is
+ * named without it, so a straight comparison misses about a quarter of the
+ * items.
+ *
+ * Only a trailing date is stripped — never words — so a name that genuinely
+ * ends in a number is left alone.
+ */
+export function normaliseItemName(name: string | null): string {
+  if (!name) return '';
+  return name
+    .replace(
+      /[\s\-–—]*\d{1,2}\/\d{1,2}(\/\d{2,4})?(\s*,\s*\d{1,2}\/\d{1,2}(\/\d{2,4})?)*\s*$/,
+      '',
+    )
+    .replace(/[\s\-–—:,]+$/, '')
+    .trim();
+}
+
+/** A stable identity for a vendor row, used to recognise a row that has
  * already been applied.
  *
  * The Item Order Report has no receipt number, payment id, or transaction id

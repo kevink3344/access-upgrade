@@ -168,7 +168,11 @@ export function SchoolCashReview({
               type="button"
               className="btn btn-ghost"
               onClick={() => {
-                if (window.confirm('Discard this upload? Nothing will be recorded.')) {
+                if (
+                  window.confirm(
+                    'Delete this upload? The file and its staged rows are removed. Nothing has been paid, so no payments are affected.',
+                  )
+                ) {
                   discard.mutate();
                 }
               }}
@@ -179,7 +183,7 @@ export function SchoolCashReview({
                   : undefined
               }
             >
-              Discard upload
+              {discard.isPending ? 'Deleting…' : 'Delete upload'}
             </button>
             <button
               type="button"
@@ -334,10 +338,13 @@ export function SchoolCashReview({
                     <td data-label="Matched to">
                       {r.MatchedRegistrationID ? (
                         <>
-                          <strong>{r.WorkshopCode ?? `Registration ${r.MatchedRegistrationID}`}</strong>
+                          <strong>{r.WorkshopName ?? `Registration ${r.MatchedRegistrationID}`}</strong>
+                          <div className="muted" style={{ fontSize: 12 }}>
+                            {r.WorkshopCode ?? '—'}
+                            {r.WorkshopDate ? ` · ${r.WorkshopDate}` : ''}
+                          </div>
                           <div className="muted" style={{ fontSize: 12 }}>
                             {r.ParticipantName ?? 'Unknown participant'}
-                            {r.WorkshopDate ? ` · ${r.WorkshopDate}` : ''}
                           </div>
                         </>
                       ) : (
@@ -512,10 +519,10 @@ function MatchDrawer({
                       onChange={() => setSelected(c.RegistrationID)}
                     />
                     <span>
-                      <strong>{c.WorkshopCode ?? c.WorkshopName ?? 'Workshop'}</strong>
+                      <strong>{c.WorkshopName ?? c.WorkshopCode ?? 'Workshop'}</strong>
                       <span className="muted" style={{ display: 'block', fontSize: 12 }}>
-                        {c.ParticipantName} · {c.WorkshopDate ?? 'no date'} · owes{' '}
-                        {money(c.Owed)}
+                        {c.WorkshopCode ?? '—'} · {c.ParticipantName} · {c.WorkshopDate ?? 'no date'} ·
+                        owes {money(c.Owed)}
                       </span>
                     </span>
                   </label>

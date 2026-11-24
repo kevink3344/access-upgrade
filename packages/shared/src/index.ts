@@ -1445,6 +1445,10 @@ export type ScoMatchMethod =
   | 'duplicate'
   | 'none';
 
+/**
+ * `Discarded` is retained in the type because older rows may still carry it,
+ * but discarding now deletes the upload outright, so it is never written.
+ */
 export type ScoImportStatus = 'Staged' | 'Applied' | 'Discarded';
 
 /** One uploaded Item Order Report. */

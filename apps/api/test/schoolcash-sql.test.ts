@@ -125,4 +125,37 @@ describe('School Cash endpoints', () => {
       .post(`/api/school-cash/imports/${res.body.importId}/discard`)
       .set('Authorization', `Bearer ${token}`);
   });
+
+  it('deletes a staged upload so it leaves the list', async () => {
+    const token = await authToken();
+    const unique = `delete-me-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.invalid`;
+    const csv = [
+      'Purchaser Email,Item Name,Item Id,Paid Item Balance,Paid Transaction Fee,Purchased,Paid Amount,Payments',
+      `${unique},Some Item,99999,$25.00,$1.10,09/15/2026,$26.10,paid`,
+    ].join('\n');
+
+    const created = await api
+      .post('/api/school-cash/imports')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'text/plain')
+      .set('X-File-Name', `delete-me-${Date.now()}.csv`)
+      .send(csv);
+    expect(created.status).toBe(201);
+    const importId = created.body.importId as number;
+
+    const del = await api
+      .post(`/api/school-cash/imports/${importId}/discard`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(del.status).toBe(204);
+
+    // Gone from the detail endpoint...
+    const detail = await authed(`/api/school-cash/imports/${importId}`);
+    expect(detail.status).toBe(404);
+
+    // ...and gone from the list, rather than lingering as "Discarded".
+    const list = await authed('/api/school-cash/imports?pageSize=200');
+    expect(list.status).toBe(200);
+    const ids = (list.body.rows as { ScoImportID: number }[]).map((r) => r.ScoImportID);
+    expect(ids).not.toContain(importId);
+  });
 });

@@ -33,7 +33,6 @@ function fmtDate(iso: string | null): string {
 
 function StatusPill({ status }: { status: ScoImportStatus }) {
   if (status === 'Applied') return <span className="pill pill-open">Applied</span>;
-  if (status === 'Discarded') return <span className="pill pill-muted">Discarded</span>;
   return <span className="pill pill-full">Staged</span>;
 }
 
@@ -374,9 +373,15 @@ function SchoolCashHistory() {
                     </td>
                     <td data-label="Participant">{r.ParticipantName ?? '—'}</td>
                     <td data-label="Workshop">
-                      {r.WorkshopCode ? <strong>{r.WorkshopCode}</strong> : '—'}
-                      {r.WorkshopName && (
-                        <div className="muted" style={{ fontSize: 12 }}>{r.WorkshopName}</div>
+                      {r.WorkshopName ? (
+                        <>
+                          <strong>{r.WorkshopName}</strong>
+                          {r.WorkshopCode && (
+                            <div className="muted" style={{ fontSize: 12 }}>{r.WorkshopCode}</div>
+                          )}
+                        </>
+                      ) : (
+                        '—'
                       )}
                     </td>
                     <td data-label="Item price" className="num">{money(r.ItemBalance)}</td>
