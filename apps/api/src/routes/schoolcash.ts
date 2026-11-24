@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { getPool, query, sql, txQuery, type SqlParam } from '../db.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import {
+  identitiesFor,
   matchRow,
   parseMoney,
   parseScoCsv,
@@ -89,13 +90,6 @@ function readBody(req: { body: unknown }): string | null {
   return null;
 }
 
-/** The vendor's stable identity for a row, used for the idempotency index. */
-function externalKeys(row: ScoCsvRow): { receipt: string | null; paymentId: string | null } {
-  const receipt = row.raw['Receipt Number']?.trim() || null;
-  const paymentId = row.raw['Payment Id']?.trim() || row.raw['Transaction Id']?.trim() || null;
-  return { receipt, paymentId };
-}
-
 /**
  * Finds the participant behind a purchaser email.
  *
@@ -141,20 +135,17 @@ async function unpaidCandidates(participantId: number): Promise<MatchCandidate[]
   return r.recordset.map((row) => ({ registrationId: row.RegistrationID, owed: row.Owed }));
 }
 
-/** True when this vendor row already produced a payment. */
-async function alreadyApplied(row: ScoCsvRow): Promise<boolean> {
-  const { receipt, paymentId } = externalKeys(row);
-  if (!receipt && !paymentId) return false;
-
+/**
+ * True when this vendor row already produced a payment.
+ *
+ * Keyed on the row's derived identity, which is stable across re-exports of
+ * the same purchase. The export has no receipt or payment id, so there is
+ * nothing else to key on.
+ */
+async function alreadyApplied(identity: string): Promise<boolean> {
   const r = await query<{ n: number }>(
-    `SELECT COUNT(*) AS n
-       FROM core.Payment
-      WHERE (@receipt IS NOT NULL AND ExternalReceipt = @receipt)
-         OR (@paymentId IS NOT NULL AND ExternalPaymentId = @paymentId)`,
-    {
-      receipt: { type: sql.NVarChar(100), value: receipt },
-      paymentId: { type: sql.NVarChar(100), value: paymentId },
-    },
+    `SELECT COUNT(*) AS n FROM core.Payment WHERE ExternalPaymentId = @identity`,
+    { identity: { type: sql.NVarChar(400), value: identity } },
   );
   return (r.recordset[0]?.n ?? 0) > 0;
 }
@@ -189,18 +180,18 @@ async function schoolCashMethodId(): Promise<number | null> {
  * Kept separate from the insert so the same logic can be reused when an admin
  * re-runs matching on an import.
  */
-async function evaluateRow(row: ScoCsvRow): Promise<{
+async function evaluateRow(row: ScoCsvRow, identity: string): Promise<{
   matchedRegistrationId: number | null;
   confidence: string;
   method: string;
   note: string | null;
 }> {
-  if (await alreadyApplied(row)) {
+  if (await alreadyApplied(identity)) {
     return {
       matchedRegistrationId: null,
       confidence: 'Duplicate',
       method: 'duplicate',
-      note: 'This receipt already produced a payment.',
+      note: 'This purchase already produced a payment.',
     };
   }
 
@@ -307,15 +298,21 @@ schoolCashRouter.post(
       // Evaluate first, then write. The matcher issues several queries per
       // row, and holding a transaction open across ~100 round trips would
       // risk a timeout; nothing is visible until the insert below commits.
+      //
+      // Identities are computed for the whole file up front, because exact
+      // repeats are numbered by occurrence and that needs the full row list.
+      const identities = identitiesFor(parsed.rows);
       const evaluated: Array<{
         row: ScoCsvRow;
+        identity: string;
         matchedRegistrationId: number | null;
         confidence: string;
         method: string;
         note: string | null;
       }> = [];
-      for (const row of parsed.rows) {
-        evaluated.push({ row, ...(await evaluateRow(row)) });
+      for (let i = 0; i < parsed.rows.length; i += 1) {
+        const row = parsed.rows[i]!;
+        evaluated.push({ row, identity: identities[i]!, ...(await evaluateRow(row, identities[i]!)) });
       }
 
       const matched = evaluated.filter((e) => e.confidence === 'High').length;
@@ -352,11 +349,11 @@ schoolCashRouter.post(
             `INSERT INTO core.ScoRow
                     (ScoImportID, RowNumber, PurchaserEmail, PurchaserName, RecipientName,
                      ItemId, ItemName, PaidAmount, ItemBalance, TransactionFee,
-                     PurchasedDate, Owing, Refunded, RawJson,
+                     PurchasedDate, Owing, Refunded, RawJson, RowIdentity,
                      MatchedRegistrationID, MatchConfidence, MatchMethod, MatchNote)
              VALUES (@importId, @rowNumber, @email, @purchaser, @recipient,
                      @itemId, @itemName, @paid, @balance, @fee,
-                     @purchased, @owing, @refunded, @raw,
+                     @purchased, @owing, @refunded, @raw, @identity,
                      @regId, @confidence, @method, @note)`,
             {
               importId: { type: sql.Int, value: importId },
@@ -373,6 +370,7 @@ schoolCashRouter.post(
               owing: { type: sql.NVarChar(50), value: e.row.owing },
               refunded: { type: sql.NVarChar(50), value: e.row.refunded },
               raw: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(e.row.raw) },
+              identity: { type: sql.NVarChar(400), value: e.identity },
               regId: { type: sql.Int, value: e.matchedRegistrationId },
               confidence: { type: sql.NVarChar(10), value: e.confidence },
               method: { type: sql.NVarChar(20), value: e.method },
@@ -385,7 +383,8 @@ schoolCashRouter.post(
         res.status(201).json({
           importId,
           fileName,
-          TotalRows: evaluated.length,          matched,
+          TotalRows: evaluated.length,
+          matched,
           review,
           ignored,
         });
@@ -807,7 +806,10 @@ schoolCashRouter.post(
       const ready = await query<{
         ScoRowID: number;
         RowNumber: number;
+        PurchaserEmail: string | null;
+        ItemId: string | null;
         ItemName: string | null;
+        PaidAmount: string | null;
         ItemBalance: string | null;
         TransactionFee: string | null;
         PurchasedDate: string | null;
@@ -815,7 +817,8 @@ schoolCashRouter.post(
         ParticipantName: string | null;
         WorkshopName: string | null;
       }>(
-        `SELECT s.ScoRowID, s.RowNumber, s.ItemName, s.ItemBalance, s.TransactionFee,
+        `SELECT s.ScoRowID, s.RowNumber, s.PurchaserEmail, s.ItemId, s.ItemName,
+                s.PaidAmount, s.ItemBalance, s.TransactionFee,
                 s.PurchasedDate, s.MatchedRegistrationID,
                 CONCAT(pt.FirstName, ' ', pt.LastName) AS ParticipantName,
                 n.WorkshopName
@@ -881,21 +884,15 @@ schoolCashRouter.post(
           const amount = parseMoney(row.ItemBalance) ?? 0;
           const fee = parseMoney(row.TransactionFee) ?? 0;
 
-          const raw = await txQuery<{ RawJson: string | null }>(
+          // Read the identity computed at upload, so apply writes exactly what
+          // the duplicate check compared against.
+          const staged = await txQuery<{ RowIdentity: string | null }>(
             tx,
-            `SELECT RawJson FROM core.ScoRow WHERE ScoRowID = @rowId`,
+            `SELECT RowIdentity FROM core.ScoRow WHERE ScoRowID = @rowId`,
             { rowId: { type: sql.BigInt, value: row.ScoRowID } },
           );
-          let receipt: string | null = null;
-          let externalId: string | null = null;
-          try {
-            const rawObj = JSON.parse(raw.recordset[0]?.RawJson ?? '{}') as Record<string, string>;
-            receipt = rawObj['Receipt Number']?.trim() || null;
-            externalId = rawObj['Payment Id']?.trim() || rawObj['Transaction Id']?.trim() || null;
-          } catch {
-            // A row whose raw JSON will not parse still applies; it just
-            // loses its vendor identity, and the unique index tolerates nulls.
-          }
+          const externalId = staged.recordset[0]?.RowIdentity ?? null;
+          const receipt: string | null = null;
 
           const payment = await txQuery<{ PaymentID: number }>(
             tx,

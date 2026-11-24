@@ -160,6 +160,85 @@ export function parseMoney(text: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * A stable identity for a vendor row, used to recognise a row that has
+ * already been applied.
+ *
+ * The Item Order Report has no receipt number, payment id, or transaction id
+ * — `ExternalId1` exists but is blank on every row. So identity has to be
+ * derived from the row's own content: who bought it, which item, when, and
+ * for how much.
+ *
+ * This matters because the exports are cumulative rather than incremental.
+ * The 24 Nov file contained all 98 rows of the 15 Nov file plus 8 new ones,
+ * so a cumulative re-upload must not pay the first 98 twice.
+ *
+ * `payments` is included because it carries the card type and date, which
+ * distinguishes two genuinely separate purchases of the same item by the same
+ * person on the same day.
+ *
+ * `occurrence` handles the remaining case: two rows can be identical in every
+ * column, because someone really did buy the same item twice in one order.
+ * Both files contain such pairs. Numbering the repeats keeps them distinct
+ * without inventing data — the first occurrence is 0, the second 1, and so on.
+ */
+export function rowIdentity(f: {
+  purchaserEmail: string | null;
+  itemId: string | null;
+  purchasedDate: string | null;
+  itemBalance: string | null;
+  paidAmount: string | null;
+  payments: string | null;
+  occurrence?: number;
+}): string {
+  return [
+    (f.purchaserEmail ?? '').toLowerCase(),
+    f.itemId ?? '',
+    f.purchasedDate ?? '',
+    f.itemBalance ?? '',
+    f.paidAmount ?? '',
+    f.payments ?? '',
+    String(f.occurrence ?? 0),
+  ].join('|');
+}
+
+/**
+ * Assigns each row its identity, numbering exact repeats within a file.
+ *
+ * Numbering is per file and depends on row order, so it is only meaningful
+ * for rows produced by the same export. That is sufficient: the question it
+ * answers is "did this file's row already become a payment?", and the vendor
+ * emits rows in a stable order.
+ */
+export function identitiesFor(rows: ScoCsvRow[]): string[] {
+  const seen = new Map<string, number>();
+  return rows.map((row) => {
+    const base = rowIdentity({
+      purchaserEmail: row.purchaserEmail,
+      itemId: row.itemId,
+      purchasedDate: row.purchasedDate,
+      itemBalance: row.itemBalance,
+      paidAmount: row.paidAmount,
+      payments: row.raw['Payments'] ?? null,
+    });
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n === 0 ? base : `${base}|${n}`;
+  });
+}
+
+/** Identity for a parsed CSV row. */
+export function identityOf(row: ScoCsvRow): string {
+  return rowIdentity({
+    purchaserEmail: row.purchaserEmail,
+    itemId: row.itemId,
+    purchasedDate: row.purchasedDate,
+    itemBalance: row.itemBalance,
+    paidAmount: row.paidAmount,
+    payments: row.raw['Payments'] ?? null,
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /*  Matching                                                           */
 /* ------------------------------------------------------------------ */

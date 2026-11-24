@@ -6,6 +6,8 @@ import {
   parseMoney,
   splitCsvLine,
   matchRow,
+  rowIdentity,
+  identitiesFor,
   REQUIRED_COLUMNS,
   type MatchCandidate,
 } from '../src/services/schoolcash.js';
@@ -18,6 +20,8 @@ import {
  */
 
 const FIXTURE = path.resolve(__dirname, '../../../database/ItemOrderReport_1793719554413.csv');
+const OLD_FIXTURE = FIXTURE;
+const NEW_FIXTURE = path.resolve(__dirname, '../../../database/ItemOrderReport_1795535397115.csv');
 
 describe('splitCsvLine', () => {
   it('splits plain fields', () => {
@@ -179,5 +183,74 @@ describe('matchRow', () => {
       [{ registrationId: 41, owed: null }, { registrationId: 42, owed: 100 }],
     );
     expect(r.confidence).toBe('Low');
+  });
+});
+
+/**
+ * Row identity is what stops a cumulative re-upload paying the same purchase
+ * twice. The vendor export carries no receipt or payment id — `ExternalId1`
+ * is blank on every row — so identity has to come from the row's content.
+ */
+describe('rowIdentity', () => {
+  const base = {
+    purchaserEmail: 'bria@example.org',
+    itemId: '48692',
+    purchasedDate: '09/15/2026',
+    itemBalance: '$300.00',
+    paidAmount: '$312.00',
+    payments: '$312.00 - CreditCard (Online) - 09/15/26',
+  };
+
+  it('is stable for the same purchase', () => {
+    expect(rowIdentity(base)).toBe(rowIdentity({ ...base }));
+  });
+
+  it('ignores email case, which varies between exports', () => {
+    expect(rowIdentity({ ...base, purchaserEmail: 'BRIA@Example.ORG' })).toBe(rowIdentity(base));
+  });
+
+  it('separates different items', () => {
+    expect(rowIdentity({ ...base, itemId: '99999' })).not.toBe(rowIdentity(base));
+  });
+
+  it('separates different purchase dates', () => {
+    expect(rowIdentity({ ...base, purchasedDate: '09/16/2026' })).not.toBe(rowIdentity(base));
+  });
+
+  it('separates two purchases of the same item on the same day by the payment line', () => {
+    const second = { ...base, payments: '$312.00 - CreditCard (Online) - 09/15/26 (2)' };
+    expect(rowIdentity(second)).not.toBe(rowIdentity(base));
+  });
+
+  it('tolerates nulls without collapsing distinct rows', () => {
+    const a = rowIdentity({ ...base, purchaserEmail: null });
+    const b = rowIdentity({ ...base, purchaserEmail: '' });
+    expect(a).toBe(b);
+    expect(a).not.toBe(rowIdentity(base));
+  });
+
+  it('produces the same identity from both real exports for shared rows', () => {
+    // The 24 Nov file is the 15 Nov file plus 8 rows. Every row they share
+    // must hash identically, or a re-upload would pay those rows again.
+    const oldRows = parseScoCsv(fs.readFileSync(OLD_FIXTURE, 'utf8')).rows;
+    const newRows = parseScoCsv(fs.readFileSync(NEW_FIXTURE, 'utf8')).rows;
+
+    const oldIds = identitiesFor(oldRows);
+    const newIds = new Set(identitiesFor(newRows));
+    const shared = oldIds.filter((id) => newIds.has(id));
+
+    expect(oldRows).toHaveLength(98);
+    expect(newRows).toHaveLength(106);
+    // Every one of the 98 earlier rows is recognised in the later export.
+    expect(shared).toHaveLength(98);
+  });
+
+  it('numbers exact repeats so two identical purchases stay distinct', () => {
+    // Both files contain rows identical in every column: someone bought the
+    // same item twice in one order. Collapsing them would silently drop a
+    // payment.
+    const rows = parseScoCsv(fs.readFileSync(OLD_FIXTURE, 'utf8')).rows;
+    const ids = identitiesFor(rows);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

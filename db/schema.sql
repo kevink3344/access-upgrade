@@ -496,6 +496,11 @@ CREATE TABLE core.ScoRow (
     Owing          NVARCHAR(50)  NULL,
     Refunded       NVARCHAR(50)  NULL,
     RawJson        NVARCHAR(MAX) NULL,
+    -- The vendor row's derived identity. The export carries no receipt or
+    -- payment id, so this is built from the row's content (see rowIdentity in
+    -- services/schoolcash.ts). Computed once at upload so apply reads the same
+    -- value rather than recomputing it.
+    RowIdentity    NVARCHAR(400) NULL,
     MatchedRegistrationID INT NULL,
     MatchConfidence NVARCHAR(10) NULL,
     MatchMethod     NVARCHAR(20) NULL,

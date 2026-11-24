@@ -90,6 +90,11 @@ CREATE TABLE core.ScoRow (
     Refunded       NVARCHAR(50)  NULL,
     -- The whole line, so a column we did not anticipate is still recoverable.
     RawJson        NVARCHAR(MAX) NULL,
+    -- The vendor row's derived identity. The export carries no receipt or
+    -- payment id, so this is built from the row's content (see rowIdentity in
+    -- services/schoolcash.ts). Computed once at upload so apply reads the same
+    -- value rather than recomputing it.
+    RowIdentity    NVARCHAR(400) NULL,
     -- What the matcher decided.
     MatchedRegistrationID INT NULL,
     -- High | Low | None | Duplicate | Ignored
@@ -105,6 +110,13 @@ CREATE TABLE core.ScoRow (
     PRINT 'Created core.ScoRow';
 END
 ELSE PRINT 'core.ScoRow already exists';
+GO
+
+-- Added after the table was first created, so databases that already have
+-- core.ScoRow need the column added separately.
+IF COL_LENGTH('core.ScoRow', 'RowIdentity') IS NULL
+    ALTER TABLE core.ScoRow ADD RowIdentity NVARCHAR(400) NULL;
+ELSE PRINT 'core.ScoRow.RowIdentity already exists';
 GO
 
 -- Provenance on payments. Without these a payment created here is
