@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { api, authedGet } from './helpers.js';
+import { api, authedGet, hasDatabase } from './helpers.js';
 
 /**
  * Read-only checks over the domain the app is actually used for.
@@ -8,7 +8,7 @@ import { api, authedGet } from './helpers.js';
  * data — never on a specific row count or a specific workshop, so the suite
  * keeps passing as the test database grows.
  */
-describe('forms', () => {
+describe.skipIf(!hasDatabase)('forms', () => {
   it('lists published templates with their current version', async () => {
     const res = await authedGet('/api/forms');
     expect(res.status).toBe(200);
@@ -89,7 +89,7 @@ describe('forms', () => {
   });
 });
 
-describe('workshops', () => {
+describe.skipIf(!hasDatabase)('workshops', () => {
   it('lists workshops with a stable shape', async () => {
     const res = await authedGet('/api/workshops?page=1&pageSize=5');
     expect(res.status).toBe(200);
@@ -113,7 +113,7 @@ describe('workshops', () => {
   });
 });
 
-describe('public registration link', () => {
+describe.skipIf(!hasDatabase)('public registration link', () => {
   it('404s an unknown slug rather than leaking a stack trace', async () => {
     const res = await api.get('/api/public/registration-links/does-not-exist-xyz');
     expect(res.status).toBe(404);

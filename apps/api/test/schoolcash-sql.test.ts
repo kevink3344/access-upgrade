@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { api, authToken } from './helpers.js';
+import { api, authToken, hasDatabase } from './helpers.js';
 import { parseScoCsv } from '../src/services/schoolcash.js';
 
 /**
@@ -27,7 +27,7 @@ async function authed(pathname: string) {
   return api.get(pathname).set('Authorization', `Bearer ${token}`);
 }
 
-describe('School Cash endpoints', () => {
+describe.skipIf(!hasDatabase)('School Cash endpoints', () => {
   it('lists imports', async () => {
     const res = await authed('/api/school-cash/imports');
     expect(res.status).toBe(200);

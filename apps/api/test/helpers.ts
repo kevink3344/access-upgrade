@@ -1,5 +1,6 @@
 import request from 'supertest';
 import type supertest from 'supertest';
+import { envConfigured } from '../src/env.js';
 import { app } from '../src/server.js';
 
 /**
@@ -8,7 +9,13 @@ import { app } from '../src/server.js';
  * These tests run against the real database named in apps/api/.env, which is
  * the TEST database. Nothing here writes data: every assertion is read-only,
  * so a failed run cannot leave rows behind.
+ *
+ * CI has no credentials, so every suite that imports this must skip when
+ * `hasDatabase` is false. Otherwise the run fails on a connection error rather
+ * than reporting that the database-backed tests were not run.
  */
+export const hasDatabase = envConfigured;
+
 export const api: supertest.Agent = request(app);
 
 let cachedToken: string | null = null;

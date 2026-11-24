@@ -36,16 +36,31 @@ const schema = z.object({
 
 const parsed = schema.safeParse(process.env);
 
+/**
+ * Under test, a missing environment is not fatal.
+ *
+ * The suite is run by CI, which has no database credentials and no JWT secret.
+ * Exiting here would kill the whole run before a single test could report —
+ * including the pure tests that need no database at all. Tests that do need
+ * one check `env` themselves and skip.
+ */
 if (!parsed.success) {
-  console.error('\n❌ Invalid environment configuration:\n');
-  for (const issue of parsed.error.issues) {
-    console.error(`   ${issue.path.join('.')}: ${issue.message}`);
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+    // Deliberately quiet: the DB-backed suites report their own skip reason.
+  } else {
+    console.error('\n❌ Invalid environment configuration:\n');
+    for (const issue of parsed.error.issues) {
+      console.error(`   ${issue.path.join('.')}: ${issue.message}`);
+    }
+    console.error('\n   Copy database/.env.example to apps/api/.env and fill in the values.\n');
+    process.exit(1);
   }
-  console.error('\n   Copy database/.env.example to apps/api/.env and fill in the values.\n');
-  process.exit(1);
 }
 
-export const env = parsed.data;
+/** True when the app has everything it needs to start. */
+export const envConfigured = parsed.success;
+
+export const env = parsed.success ? parsed.data : ({} as z.infer<typeof schema>);
 
 /** Super-admin email, accepting either variable name. */
 export const superAdminEmail = env.SUPER_ADMIN_EMAIL ?? env.SUPER_ADMIN_USERNAME;
