@@ -11,6 +11,8 @@ export interface AuthUser {
   displayName: string;
   role: UserRole;
   isActive: boolean;
+  /** Opt out of notification emails; the in-app bell is unaffected. */
+  receivesAdminEmail: boolean;
   lastLoginAt: string | null;
 }
 

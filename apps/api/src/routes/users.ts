@@ -22,6 +22,8 @@ const updateSchema = z.object({
   password: z.string().min(6).optional(),
   role: z.enum(ROLES).optional(),
   isActive: z.boolean().optional(),
+  /** Opt out of notification emails. The in-app bell is unaffected. */
+  receivesAdminEmail: z.boolean().optional(),
 });
 
 /**
@@ -70,7 +72,7 @@ usersRouter.get('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN'), async (re
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query<UserRow>(
-      `SELECT UserID, Email, DisplayName, PasswordHash, Role, IsActive, IsSeeded,
+      `SELECT UserID, Email, DisplayName, PasswordHash, Role, IsActive, ReceivesAdminEmail, IsSeeded,
               LastLoginAt, PasswordChangedAt, CreatedAt, UpdatedAt
          FROM core.AppUser ${where}
         ORDER BY DisplayName`,
@@ -278,6 +280,10 @@ usersRouter.patch('/:id', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN'), asyn
     if (d.isActive !== undefined) {
       sets.push('IsActive = @active');
       params.active = { type: sql.Bit, value: d.isActive ? 1 : 0 };
+    }
+    if (d.receivesAdminEmail !== undefined) {
+      sets.push('ReceivesAdminEmail = @adminEmail');
+      params.adminEmail = { type: sql.Bit, value: d.receivesAdminEmail ? 1 : 0 };
     }
     if (d.password !== undefined) {
       sets.push('PasswordHash = @hash', 'PasswordChangedAt = SYSUTCDATETIME()');

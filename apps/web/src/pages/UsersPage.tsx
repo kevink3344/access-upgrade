@@ -82,6 +82,7 @@ function UserDrawer({
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>(user?.role ?? 'VIEWER');
+  const [receivesAdminEmail, setReceivesAdminEmail] = useState(user?.receivesAdminEmail ?? true);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -120,6 +121,7 @@ function UserDrawer({
           email: parsed.data.email,
           displayName: parsed.data.displayName,
           role: parsed.data.role,
+          receivesAdminEmail,
         };
         if (parsed.data.password) body.password = parsed.data.password;
         return api.users.update(user.userId, body);
@@ -236,6 +238,31 @@ function UserDrawer({
               <span className="field-hint">You cannot change your own role.</span>
             )}
           </div>
+
+          {/* Only admins receive these emails, so the switch is shown only for
+              roles that would get them. The label is deliberately generic:
+              more notification types are expected, and a label naming one of
+              them would need renaming each time. The in-app bell is separate
+              and always on, which the hint says plainly. */}
+          {(role === 'SUPER_ADMIN' || role === 'ADMIN') && (
+            <div className="toggle-row">
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={receivesAdminEmail}
+                  onChange={(e) => setReceivesAdminEmail(e.target.checked)}
+                />
+                <span className="switch-track" aria-hidden="true" />
+                <span className="switch-label">
+                  Email alerts for admins
+                  <span className="field-hint" style={{ marginTop: 0 }}>
+                    Off means this admin is left out of notification emails, such as workshop
+                    capacity alerts. They still see everything in the notification bell.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
 
           <div className="drawer-actions">
             <button type="button" className="btn btn-ghost" onClick={onClose}>

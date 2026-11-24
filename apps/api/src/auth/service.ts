@@ -14,6 +14,8 @@ export interface UserRow {
   PasswordHash: string;
   Role: UserRole;
   IsActive: boolean;
+  /** Opt out of notification emails; the in-app bell is unaffected. */
+  ReceivesAdminEmail: boolean;
   IsSeeded: boolean;
   LastLoginAt: Date | null;
   PasswordChangedAt: Date | null;
@@ -28,6 +30,7 @@ export function toAuthUser(row: UserRow): AuthUser {
     displayName: row.DisplayName,
     role: row.Role,
     isActive: row.IsActive,
+    receivesAdminEmail: row.ReceivesAdminEmail,
     lastLoginAt: row.LastLoginAt ? row.LastLoginAt.toISOString() : null,
   };
 }

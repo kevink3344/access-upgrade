@@ -1,4 +1,5 @@
 import { query, sql, type SqlParam } from '../db.js';
+import { sendAdminEmail } from './webhooks.js';
 
 /**
  * In-app notifications.
@@ -134,12 +135,28 @@ export async function checkWorkshopCapacity(workshopId: number): Promise<void> {
   const label = w.WorkshopName ?? w.WorkshopCode ?? `Workshop ${w.WorkshopID}`;
   const pct = Math.round(percent);
 
+  const title = `${label} is ${pct}% full`;
+  const body = `${w.Registered} of ${w.MaxEnrollment} places taken. The alert threshold for this workshop is ${w.NotifyPercentFull}%.`;
+
+  // The same destination as the in-app notification, so one alert does not
+  // send staff to two different places.
+  const linkPath = `/workshops?edit=${w.WorkshopID}`;
+
   await createNotification({
     kind: 'workshop-capacity',
-    title: `${label} is ${pct}% full`,
-    body: `${w.Registered} of ${w.MaxEnrollment} places taken. The alert threshold for this workshop is ${w.NotifyPercentFull}%.`,
-    linkPath: `/workshops?edit=${w.WorkshopID}`,
+    title,
+    body,
+    linkPath,
     workshopId: w.WorkshopID,
+  });
+
+  // The same alert also goes out by email, through whatever webhook declares
+  // `notify_type: admin`. Fire-and-forget: a mail flow being down must not
+  // stop the in-app notification above from being recorded, and must not
+  // stop the fired flag below from being set — otherwise every subsequent
+  // registration would retry the alert.
+  void sendAdminEmail({ subject: title, body, linkPath }).catch((e: Error) => {
+    console.error('[notifications] admin email failed:', e.message);
   });
 
   await query(

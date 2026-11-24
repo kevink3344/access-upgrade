@@ -21,6 +21,9 @@ BEGIN
         PasswordHash  NVARCHAR(255) NOT NULL,   -- bcrypt, cost 12
         Role          NVARCHAR(20)  NOT NULL,
         IsActive      BIT           NOT NULL CONSTRAINT DF_AppUser_IsActive DEFAULT 1,
+        -- Opt out of notification emails (workshop capacity alerts today,
+        -- more later). The in-app bell is unaffected; see migration 015.
+        ReceivesAdminEmail BIT      NOT NULL CONSTRAINT DF_AppUser_ReceivesAdminEmail DEFAULT 1,
         IsSeeded      BIT           NOT NULL CONSTRAINT DF_AppUser_IsSeeded DEFAULT 0,  -- came from env
         LastLoginAt   DATETIME2(0)  NULL,
         PasswordChangedAt DATETIME2(0) NULL,
