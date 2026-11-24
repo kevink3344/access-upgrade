@@ -13,7 +13,27 @@
 
 set -u
 
-CACHE_DIR="${PUPPETEER_CACHE_DIR:-$(pwd)/.cache/puppeteer}"
+# Work from the directory that actually holds the app, whichever workflow
+# deployed it. The hand-written workflow copies this script to the package
+# root; Azure's generated workflow uploads the repo as-is, so the script sits
+# in scripts/ and the app is one level up. Resolving the root here means the
+# same App Service startup command works either way.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/dist/server.js" ]; then
+  APP_ROOT="$SCRIPT_DIR"
+elif [ -f "$SCRIPT_DIR/../dist/server.js" ]; then
+  APP_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "$SCRIPT_DIR/../apps/api/dist/server.js" ]; then
+  # Raw monorepo checkout: this is scripts/, the API is at apps/api.
+  APP_ROOT="$(cd "$SCRIPT_DIR/../apps/api" && pwd)"
+else
+  echo "[startup] cannot find dist/server.js near $SCRIPT_DIR - starting anyway"
+  APP_ROOT="$SCRIPT_DIR"
+fi
+cd "$APP_ROOT" || exit 1
+echo "[startup] app root: $APP_ROOT"
+
+CACHE_DIR="${PUPPETEER_CACHE_DIR:-$APP_ROOT/puppeteer-cache}"
 export PUPPETEER_CACHE_DIR="$CACHE_DIR"
 
 # Chrome needs these at runtime. apt-get is only available on the Debian-based

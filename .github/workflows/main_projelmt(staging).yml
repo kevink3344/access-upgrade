@@ -25,15 +25,61 @@ jobs:
 
       - name: npm install, build, and test
         run: |
-          npm install
+          npm ci
           npm run build --if-present
           npm run test --if-present
+
+      # This workflow deploys the `staging` slot, which runs the same App
+      # Service startup command as `dev` (`startup.sh`). The repo is a
+      # monorepo: the API compiles to apps/api/dist and the SPA to
+      # apps/web/dist, so uploading the raw checkout gives App Service nothing
+      # it can run - no dist/server.js at the root, no production
+      # node_modules, no startup.sh.
+      #
+      # Assemble the same package shape deploy-projelmt.yml builds, so both
+      # slots run identical artifacts.
+      - name: Assemble deployment package
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/package"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+
+          cp -r apps/api/dist "$OUT/dist"
+          cp apps/api/package.json "$OUT/package.json"
+
+          mkdir -p "$OUT/web"
+          cp -r apps/web/dist "$OUT/web/dist"
+
+          cp scripts/startup.sh "$OUT/startup.sh"
+          chmod +x "$OUT/startup.sh"
+
+          test -f "$OUT/dist/server.js"      || { echo "::error::missing dist/server.js"; exit 1; }
+          test -f "$OUT/web/dist/index.html" || { echo "::error::missing web/dist/index.html"; exit 1; }
+          test -x "$OUT/startup.sh"          || { echo "::error::startup.sh is not executable"; exit 1; }
+
+          cd "$OUT"
+          node -e "
+            const p = require('./package.json');
+            delete p.dependencies['@pe/shared'];
+            delete p.devDependencies;
+            delete p.scripts.dev;
+            delete p.scripts.build;
+            delete p.scripts.typecheck;
+            delete p.scripts.seed;
+            p.scripts.start = 'node dist/server.js';
+            require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2));
+          "
+          npm install --omit=dev --no-audit --no-fund
+
+          PUPPETEER_CACHE_DIR="$OUT/puppeteer-cache" \
+            npx --yes @puppeteer/browsers install chrome@stable --path "$OUT/puppeteer-cache"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: .
+          path: ${{ runner.temp }}/package
 
   deploy:
     runs-on: ubuntu-latest
