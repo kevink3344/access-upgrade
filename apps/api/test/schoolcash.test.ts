@@ -9,6 +9,8 @@ import {
   rowIdentity,
   identitiesFor,
   normaliseItemName,
+  nameSimilarity,
+  NAME_MATCH_THRESHOLD,
   REQUIRED_COLUMNS,
   type MatchCandidate,
 } from '../src/services/schoolcash.js';
@@ -143,43 +145,92 @@ describe('matchRow', () => {
     expect(r.registrationId).toBe(21);
   });
 
-  it('rule 3: several candidates and the amount settles nothing, so the newest wins', () => {
+  it('rule 3: several candidates, only one for this workshop', () => {
     const dated: MatchCandidate[] = [
-      { registrationId: 51, owed: 100, registeredOn: '2026-01-05' },
-      { registrationId: 52, owed: 450, registeredOn: '2026-09-01' },
+      { registrationId: 51, owed: 100, registeredOn: '2026-01-05', workshopName: 'Sensory Processing and Self-Regulation' },
+      { registrationId: 52, owed: 450, registeredOn: '2026-09-01', workshopName: "Early Childhood Directors' Forum" },
     ];
-    const r = matchRow({ purchaserEmail: 'a@b.org', itemBalance: 450, alreadyApplied: false }, dated);
-    // The amount picks 52 anyway; make it ambiguous to prove recency decides.
-    const ambiguous = matchRow(
-      { purchaserEmail: 'a@b.org', itemBalance: 999, alreadyApplied: false },
+    // The amount settles nothing (999), so the workshop name must decide.
+    const r = matchRow(
+      { purchaserEmail: 'a@b.org', itemBalance: 999, alreadyApplied: false, itemName: 'Sensory Processing and Self-Regulation' },
       dated,
     );
-    expect(r.registrationId).toBe(52);
-    expect(ambiguous).toMatchObject({
-      confidence: 'High',
-      method: 'email+recent',
-      registrationId: 52,
-    });
+    expect(r).toMatchObject({ confidence: 'High', method: 'email+workshop', registrationId: 51 });
   });
 
-  it('rule 3 picks the later of two same-day registrations by id', () => {
-    const sameDay: MatchCandidate[] = [
-      { registrationId: 61, owed: 100, registeredOn: '2026-09-01' },
-      { registrationId: 62, owed: 200, registeredOn: '2026-09-01' },
+  it('rule 3 does not fall back to the newest when no workshop matches', () => {
+    const dated: MatchCandidate[] = [
+      { registrationId: 51, owed: 100, registeredOn: '2026-01-05', workshopName: 'Sensory Processing and Self-Regulation' },
+      { registrationId: 52, owed: 450, registeredOn: '2026-09-01', workshopName: "Early Childhood Directors' Forum" },
     ];
-    const r = matchRow({ purchaserEmail: 'a@b.org', itemBalance: 999, alreadyApplied: false }, sameDay);
-    // Identical dates are genuinely ambiguous — a human decides.
+    // Recency alone would have picked 52 — the bug this rule fixes.
+    const r = matchRow(
+      { purchaserEmail: 'a@b.org', itemBalance: 999, alreadyApplied: false, itemName: 'Handwriting: The Building Blocks' },
+      dated,
+    );
     expect(r.confidence).toBe('Low');
+    expect(r.registrationId).toBeNull();
+    expect(r.note).toContain('none for this workshop');
+  });
+
+  it('rule 4: several for the same workshop, the most recent of those wins', () => {
+    const same: MatchCandidate[] = [
+      { registrationId: 61, owed: 100, registeredOn: '2026-01-05', workshopName: 'Sensory Processing and Self-Regulation' },
+      { registrationId: 62, owed: 200, registeredOn: '2026-08-01', workshopName: 'Sensory Processing and Self-Regulation' },
+      { registrationId: 63, owed: 300, registeredOn: '2026-09-01', workshopName: 'Something Else Entirely' },
+    ];
+    const r = matchRow(
+      { purchaserEmail: 'a@b.org', itemBalance: 999, alreadyApplied: false, itemName: 'Sensory Processing and Self-Regulation' },
+      same,
+    );
+    // 63 is the newest overall but a different workshop, so it must not win.
+    expect(r).toMatchObject({ confidence: 'High', method: 'email+workshop', registrationId: 62 });
+  });
+
+  it('rule 3 prefers the best-scoring workshop over a merely similar one', () => {
+    // Real pair from the database: the (DPS) item scores 1.00 against its own
+    // name and 0.67 against the "Full Center ... Demonstration Preschool" one.
+    const candidates: MatchCandidate[] = [
+      {
+        registrationId: 91,
+        owed: 100,
+        registeredOn: '2026-09-01',
+        workshopName: 'A Full Center Guided Observation in the Demonstration Preschool',
+      },
+      {
+        registrationId: 92,
+        owed: 100,
+        registeredOn: '2026-01-01',
+        workshopName: 'A Guided Observation of the Demonstration Preschool Classroom (DPS)',
+      },
+    ];
+    const r = matchRow(
+      {
+        purchaserEmail: 'a@b.org',
+        itemBalance: 999,
+        itemName: 'A Guided Observation of the Demonstration Preschool Classroom (DPS)',
+        alreadyApplied: false,
+      },
+      candidates,
+    );
+    // 91 is newer, but 92 is the better name match.
+    expect(r).toMatchObject({ confidence: 'High', method: 'email+workshop', registrationId: 92 });
   });
 
   it('rule 3 ignores registrations made after the purchase', () => {
     const dated: MatchCandidate[] = [
-      { registrationId: 71, owed: 100, registeredOn: '2026-01-05' },
-      { registrationId: 72, owed: 450, registeredOn: '2026-12-01' },
+      { registrationId: 71, owed: 100, registeredOn: '2026-01-05', workshopName: 'Sensory Processing and Self-Regulation' },
+      { registrationId: 72, owed: 450, registeredOn: '2026-12-01', workshopName: 'Sensory Processing and Self-Regulation' },
     ];
     // Purchased in September: the December registration did not exist yet.
     const r = matchRow(
-      { purchaserEmail: 'a@b.org', itemBalance: 999, alreadyApplied: false, purchasedOn: '2026-09-15' },
+      {
+        purchaserEmail: 'a@b.org',
+        itemBalance: 999,
+        itemName: 'Sensory Processing and Self-Regulation',
+        alreadyApplied: false,
+        purchasedOn: '2026-09-15',
+      },
       dated,
     );
     expect(r.registrationId).toBe(71);
@@ -281,6 +332,47 @@ describe('normaliseItemName', () => {
       expect(norm.length).toBeGreaterThan(0);
       expect(norm).not.toMatch(/\d{1,2}\/\d{1,2}/);
     }
+  });
+});
+
+describe('nameSimilarity', () => {
+  it('is 1 for identical names', () => {
+    expect(nameSimilarity('Sensory Processing and Self-Regulation', 'Sensory Processing and Self-Regulation')).toBe(1);
+  });
+
+  it('ignores punctuation and case', () => {
+    const score = nameSimilarity(
+      'Positive Solutions for Families- The Power of Routines',
+      'Positive Solutions for Families - The Power of Routines',
+    );
+    expect(score).toBe(1);
+  });
+
+  it('is 0 for unrelated workshops', () => {
+    expect(nameSimilarity('Sensory Processing and Self-Regulation', "Early Childhood Directors' Forum")).toBe(0);
+  });
+
+  it('is 0 when either side is missing', () => {
+    expect(nameSimilarity(null, 'Anything')).toBe(0);
+    expect(nameSimilarity('Anything', null)).toBe(0);
+  });
+
+  it('scores a partial overlap below the threshold', () => {
+    // Shares only "Families", which is too generic to identify a workshop.
+    const score = nameSimilarity(
+      'Positive Solutions for Families - The Power of Routines',
+      'Positive Solutions for Families - Keeping it Positive',
+    );
+    expect(score).toBeGreaterThan(0);
+    expect(score).toBeLessThan(NAME_MATCH_THRESHOLD);
+  });
+
+  it('accepts a real pairing from the export', () => {
+    // The vendor item, normalised, against the workshop name in this app.
+    const item = normaliseItemName('A Guided Observation of the Demonstration Preschool Classroom (DPS) 10/1');
+    expect(
+      nameSimilarity(item, 'A Guided Observation of the Demonstration Preschool Classroom (DPS)'),
+    ).toBeGreaterThanOrEqual(NAME_MATCH_THRESHOLD);
   });
 });
 

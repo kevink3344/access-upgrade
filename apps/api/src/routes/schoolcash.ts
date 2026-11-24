@@ -127,14 +127,17 @@ async function unpaidCandidates(participantId: number): Promise<MatchCandidate[]
     RegistrationID: number;
     Owed: number | null;
     RegisteredOn: string | null;
+    WorkshopName: string | null;
   }>(
     `SELECT r.RegistrationID,
             CASE WHEN w.Cost1 IS NULL THEN NULL
                  ELSE w.Cost1 - ISNULL(r.PaidAmount, 0)
             END AS Owed,
-            CONVERT(NVARCHAR(10), COALESCE(r.RegistrationDate, w.StartDate), 23) AS RegisteredOn
+            CONVERT(NVARCHAR(10), COALESCE(r.RegistrationDate, w.StartDate), 23) AS RegisteredOn,
+            n.WorkshopName
        FROM core.Registration r
        JOIN core.Workshop w ON w.WorkshopID = r.WorkshopID
+       LEFT JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
       WHERE r.ParticipantID = @pid
         AND r.IsCancelled = 0
         AND ISNULL(r.PaidAmount, 0) <= 0
@@ -145,6 +148,7 @@ async function unpaidCandidates(participantId: number): Promise<MatchCandidate[]
     registrationId: row.RegistrationID,
     owed: row.Owed,
     registeredOn: row.RegisteredOn,
+    workshopName: row.WorkshopName,
   }));
 }
 
@@ -356,7 +360,13 @@ async function evaluateRow(row: ScoCsvRow, identity: string): Promise<{
 
   const candidates = await unpaidCandidates(participantId);
   const outcome = matchRow(
-    { purchaserEmail: email, itemBalance, alreadyApplied: false, purchasedOn },
+    {
+      purchaserEmail: email,
+      itemBalance,
+      itemName: normaliseItemName(row.itemName),
+      alreadyApplied: false,
+      purchasedOn,
+    },
     candidates,
   );
 

@@ -424,8 +424,8 @@ function SchoolCashHistory() {
                     <td data-label="Method" className="muted">
                       {r.MatchMethod === 'manual'
                         ? 'Manual'
-                        : r.MatchMethod === 'email+recent'
-                          ? 'Automatic (newest)'
+                        : r.MatchMethod === 'email+workshop'
+                          ? 'Automatic (workshop)'
                           : r.MatchMethod === 'email+amount'
                             ? 'Automatic (amount)'
                             : 'Automatic'}

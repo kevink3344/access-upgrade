@@ -270,7 +270,7 @@ export type MatchConfidence = 'High' | 'Low' | 'None' | 'Duplicate' | 'Ignored';
 export type MatchMethod =
   | 'email'
   | 'email+amount'
-  | 'email+recent'
+  | 'email+workshop'
   | 'manual'
   | 'duplicate'
   | 'none';
@@ -281,16 +281,30 @@ export interface MatchCandidate {
   /** The amount still owed on this registration, for the amount rule. */
   owed: number | null;
   /**
-   * When the registration was made, ISO `YYYY-MM-DD`. Used to pick the most
-   * recent when the amount does not settle which one a payment is for.
+   * When the registration was made, ISO `YYYY-MM-DD`. Used to break a tie
+   * between candidates for the same workshop.
    */
   registeredOn?: string | null;
+  /**
+   * The name of the workshop this registration is for.
+   *
+   * This is what ties a payment to the right registration: a purchaser can
+   * have several unpaid registrations, and the most recent one is often for a
+   * different workshop entirely.
+   */
+  workshopName?: string | null;
 }
 
 export interface MatchInput {
   purchaserEmail: string | null;
   /** The item price — NOT the gross charge. See §11.2. */
   itemBalance: number | null;
+  /**
+   * The workshop the purchase is for, taken from the item name with the
+   * vendor's date suffix stripped. Used to tie the payment to the right
+   * registration.
+   */
+  itemName?: string | null;
   /** True when this vendor row has already been applied. */
   alreadyApplied: boolean;
   /**
@@ -325,6 +339,75 @@ function byMostRecent(a: MatchCandidate, b: MatchCandidate): number {
 }
 
 /**
+ * How closely two workshop names agree, 0 to 1.
+ *
+ * Deliberately crude and explainable rather than clever. The two sides come
+ * from different systems — the vendor's item name and this app's workshop
+ * name — so they differ in punctuation and wording ("Positive Solutions for
+ * Families- The Power of Routines" against "Positive Solutions for
+ * Families - The Power of Routines"). Comparing the sets of *distinctive*
+ * words tolerates that without letting unrelated workshops match.
+ *
+ * Returns the Jaccard overlap of the distinctive words: shared words divided
+ * by the union. "Sensory Processing Self Regulation" against itself is 1;
+ * against "Early Childhood Directors Forum" is 0.
+ *
+ * Generic words are excluded first, so "Guided Observation of the Blended
+ * Classroom" and "Guided Observation of the Demonstration Preschool" do not
+ * look alike merely for sharing the words they have in common with a dozen
+ * other workshops.
+ */
+export function nameSimilarity(a: string | null, b: string | null): number {
+  const wa = distinctiveWords(a);
+  const wb = distinctiveWords(b);
+  if (wa.size === 0 || wb.size === 0) return 0;
+
+  let shared = 0;
+  for (const w of wa) if (wb.has(w)) shared += 1;
+  return shared / (wa.size + wb.size - shared);
+}
+
+/**
+ * A candidate counts as the same workshop when the names overlap this much.
+ *
+ * Chosen against the real export rather than guessed. Scoring every item name
+ * against the workshop names in the database gives a clean separation: genuine
+ * pairings score 1.00, and everything unrelated scores 0.40 or below. 0.6 sits
+ * in that gap.
+ *
+ * 0.5 was tried first and was too loose — it paired "A Guided Observation of
+ * the Blended Classroom (BC)" with "A Guided Observation of the Demonstration
+ * Preschool Classroom (DPS)", two genuinely different workshops that share
+ * most of their words.
+ */
+export const NAME_MATCH_THRESHOLD = 0.6;
+
+/**
+ * Words that appear in many workshop names and so cannot distinguish them.
+ *
+ * Without this, two different "Guided Observation" workshops look alike. The
+ * similarity score is not enough on its own: it counts shared words, and
+ * generic words are shared by unrelated workshops.
+ */
+const GENERIC_WORDS = new Set([
+  'a', 'an', 'the', 'of', 'for', 'and', 'in', 'to', 'with', 'your',
+  'guided', 'observation', 'full', 'center', 'classroom', 'classrooms',
+  'workshop', 'session', 'sessions', 'series', 'part',
+]);
+
+/** The words that actually identify a workshop. */
+function distinctiveWords(s: string | null): Set<string> {
+  if (!s) return new Set();
+  return new Set(
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 1 && !GENERIC_WORDS.has(w)),
+  );
+}
+
+/**
  * Applies the matching rules in order. The first rule that produces exactly
  * one candidate wins.
  *
@@ -336,14 +419,15 @@ function byMostRecent(a: MatchCandidate, b: MatchCandidate): number {
  *
  *  1. Only one eligible candidate — match it.
  *  2. Several, but the item price matches exactly one — match that.
- *  3. Several, and one is the most recent — match that.
- *  4. Otherwise a human decides.
+ *  3. Several, but exactly one is for the same workshop — match that.
+ *  4. Several for the same workshop — take the most recent of those.
+ *  5. Otherwise a human decides.
  *
- * Rule 3 exists because a purchaser often pays for the same workshop twice, or
- * has several unpaid registrations of different values, and the amount alone
- * leaves several candidates. The most recent unpaid registration is the one a
- * new payment is for far more often than not, and the review screen shows the
- * choice so an admin can overrule it.
+ * Rule 3 is the important one. A purchaser often has several unpaid
+ * registrations, and the newest is frequently for a different workshop
+ * entirely, so recency alone would pay the wrong one. The workshop name is
+ * what actually ties a payment to a registration; recency only breaks a tie
+ * between candidates for the same workshop.
  */
 export function matchRow(input: MatchInput, candidates: MatchCandidate[]): MatchOutcome {
   if (input.alreadyApplied) {
@@ -389,28 +473,48 @@ export function matchRow(input: MatchInput, candidates: MatchCandidate[]): Match
         note: `${pool.length} unpaid registrations; the amount picked this one.`,
       };
     }
-    // Several at the same amount is genuinely ambiguous, so fall through to
-    // the recency rule rather than guessing between them.
   }
 
-  // Rule 3: take the most recent, provided it is unambiguously the newest.
-  const sorted = [...pool].sort(byMostRecent);
-  const newest = sorted[0]!;
-  const runnerUp = sorted[1]!;
-  if (newest.registeredOn && newest.registeredOn !== runnerUp.registeredOn) {
+  // Rule 3: narrow to the same workshop before considering recency.
+  //
+  // Scored rather than merely filtered: an item can clear the threshold
+  // against more than one workshop ("A Guided Observation of the Demonstration
+  // Preschool Classroom (DPS)" scores 1.00 against its own name and 0.67
+  // against "A Full Center Guided Observation in the Demonstration
+  // Preschool"). Only the best-scoring workshop is considered, so the exact
+  // match cannot be beaten by a near one.
+  const scored = pool
+    .map((c) => ({ c, score: nameSimilarity(input.itemName ?? null, c.workshopName ?? null) }))
+    .filter((x) => x.score >= NAME_MATCH_THRESHOLD);
+
+  if (scored.length > 0) {
+    const best = Math.max(...scored.map((x) => x.score));
+    const sameWorkshop = scored.filter((x) => x.score === best).map((x) => x.c);
+
+    if (sameWorkshop.length === 1) {
+      return {
+        confidence: 'High',
+        method: 'email+workshop',
+        registrationId: sameWorkshop[0]!.registrationId,
+        note: `${pool.length} unpaid registrations; only one is for this workshop.`,
+      };
+    }
+
+    // Rule 4: several for the same workshop — the most recent of those wins.
+    const sorted = [...sameWorkshop].sort(byMostRecent);
     return {
       confidence: 'High',
-      method: 'email+recent',
-      registrationId: newest.registrationId,
-      note: `${pool.length} unpaid registrations; the most recent was picked.`,
+      method: 'email+workshop',
+      registrationId: sorted[0]!.registrationId,
+      note: `${sameWorkshop.length} registrations for this workshop; the most recent was picked.`,
     };
   }
 
-  // Rule 4: a human decides.
+  // Rule 5: a human decides.
   return {
     confidence: 'Low',
     method: 'email',
     registrationId: null,
-    note: `${pool.length} unpaid registrations, none matching the amount or clearly newest.`,
+    note: `${pool.length} unpaid registrations, none for this workshop.`,
   };
 }

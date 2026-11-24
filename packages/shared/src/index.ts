@@ -1440,7 +1440,7 @@ export type ScoMatchConfidence = 'High' | 'Low' | 'None' | 'Duplicate' | 'Ignore
 export type ScoMatchMethod =
   | 'email'
   | 'email+amount'
-  | 'email+recent'
+  | 'email+workshop'
   | 'manual'
   | 'duplicate'
   | 'none';
