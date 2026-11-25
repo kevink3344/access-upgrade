@@ -5,7 +5,6 @@ import {
   IconDashboard,
   IconWorkshops,
   IconCatalog,
-  IconParticipants,
   IconPresenters,
   IconRegistrations,
   IconPayments,
@@ -34,7 +33,7 @@ interface NavGroup {
 }
 
 /**
- * Full navigation, mirroring the Access switchboard (plan §7.1) so staff
+ * Full navigation, mirroring the Access switchboard (plan Â§7.1) so staff
  * recognise where things live. Grouped rather than flat because there are
  * now 16 destinations.
  */
@@ -66,11 +65,17 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-/** Bottom tab bar on phones — only the destinations staff use standing up. */
+/**
+ * Bottom tab bar on phones â€” only the destinations staff use standing up.
+ *
+ * Payments takes the middle slot: checking whether someone has paid is the
+ * thing staff do most often away from a desk, and the participant list is
+ * reachable from every payment anyway.
+ */
 const MOBILE_NAV: NavItem[] = [
   { to: '/', label: 'Home', icon: IconDashboard },
   { to: '/workshops', label: 'Workshops', icon: IconWorkshops },
-  { to: '/admin/participants', label: 'People', icon: IconParticipants },
+  { to: '/payments', label: 'Payments', icon: IconPayments },
   { to: '/registrations', label: 'Register', icon: IconRegistrations },
   { to: '/reports', label: 'Reports', icon: IconReports },
 ];
@@ -119,13 +124,13 @@ export function AppShell({
     try {
       localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
     } catch {
-      // Private mode or a full quota — the preference simply won't persist.
+      // Private mode or a full quota â€” the preference simply won't persist.
     }
   }, [collapsed]);
 
   // Keep the document title in sync with the screen.
   useEffect(() => {
-    document.title = `${title} · Project Enlightenment`;
+    document.title = `${title} Â· Project Enlightenment`;
   }, [title]);
 
   const isActive = (to: string) =>
@@ -196,7 +201,7 @@ export function AppShell({
           >
             <IconLayoutSidebar width={18} height={18} />
           </button>
-          {/* The sidebar — and its sunburst — is hidden below 1024px, so the
+          {/* The sidebar â€” and its sunburst â€” is hidden below 1024px, so the
               mark is repeated here and shown only at that width. */}
           <a className="topbar-brand" href="/" aria-label="Project Enlightenment home">
             <img
