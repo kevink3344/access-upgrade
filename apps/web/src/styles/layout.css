@@ -23,10 +23,10 @@
   overscroll-behavior: contain;
 }
 
-/* With 19 destinations the nav is taller than the viewport on most
+/* With 15 destinations the nav is taller than the viewport on most
    laptops. Sections must not shrink, or they overlap and swallow clicks. */
 .sidebar-section {
-  padding: 14px 8px 0;
+  padding: 10px 8px 0;
   flex-shrink: 0;
 }
 
@@ -35,7 +35,11 @@
 }
 
 .sidebar-brand {
-  padding: 20px 20px 16px;
+  display: flex;
+  align-items: center;
+  height: var(--header-height);
+  padding: 0 20px;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--surface-neutral);
 }
 
@@ -81,7 +85,7 @@
   text-transform: uppercase;
   font-weight: 700;
   color: var(--text-faint);
-  padding: 0 14px 8px;
+  padding: 0 14px 5px;
 }
 
 .sidebar-nav {
@@ -94,7 +98,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 14px;
+  padding: 6px 14px;
   font-size: 13.5px;
   color: #5b6b78;
   text-decoration: none;
@@ -134,7 +138,7 @@
 }
 
 .sidebar-collapsed .sidebar-brand {
-  padding: 20px 0 16px;
+  padding: 0;
   display: flex;
   justify-content: center;
 }
@@ -148,7 +152,7 @@
 }
 
 .sidebar-collapsed .sidebar-section {
-  padding: 14px 6px 0;
+  padding: 10px 6px 0;
 }
 
 /* The group heading is a word ("Data", "Reports"); at 64px it would wrap, so
@@ -164,7 +168,7 @@
 
 .sidebar-collapsed .sidebar-link {
   justify-content: center;
-  padding: 10px 0;
+  padding: 8px 0;
   gap: 0;
   border-left-width: 0;
   border-radius: var(--radius);

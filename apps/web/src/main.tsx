@@ -40,9 +40,11 @@ import { NotificationsPage } from './pages/NotificationsPage';
 import { FormsPage } from './pages/FormsPage';
 import { FormEditorPage } from './pages/FormEditorPage';
 import { ApiDocsPage } from './pages/ApiDocsPage';
+import { SettingsPage, SettingsUnavailable } from './pages/SettingsPage';
 import { PublicRegisterPage } from './pages/PublicRegisterPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { canSeeSettings } from './settings';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -84,7 +86,6 @@ function usePathname(): string {
 
 const ROUTES: Record<string, string> = {
   '/workshops': 'Workshops',
-  '/workshops/approval': 'Workshop approval',
   '/workshop-names': 'Workshop catalog',
   '/participants': 'Participants',
   '/agencies': 'Agencies',
@@ -97,13 +98,13 @@ const ROUTES: Record<string, string> = {
   '/training-requests': 'Training requests',
   '/folders': 'Folder builder',
   '/reports': 'Reports hub',
-  '/mailing-lists': 'Mailing lists',
   '/admin': 'Admin',
   '/admin/users': 'Users',
   '/admin/utilities': 'Utilities',
   '/api-docs': 'API documentation',
   '/admin/webhooks': 'Webhooks',
   '/admin/forms': 'Form Designer',
+  '/settings': 'Settings',
   '/notifications': 'Notifications',
 };
 
@@ -163,6 +164,10 @@ function Router() {
   }
 
   if (path === '/notifications') return <NotificationsPage />;
+
+  if (path === '/settings') {
+    return canSeeSettings(user.role) ? <SettingsPage /> : <SettingsUnavailable />;
+  }
 
   if (path === '/admin/users') {
     if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {

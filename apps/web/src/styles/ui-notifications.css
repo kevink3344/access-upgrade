@@ -1,4 +1,12 @@
-/* ---------- notification bell ---------- */.notif-wrap { position: relative; }
+/* ---------- notification bell ---------- */
+/* Flex, not block: an inline-flex button on a text baseline inside a block
+   wrapper picks up a sub-pixel offset that breaks alignment with the
+   topbar's other icon buttons. */
+.notif-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
 
 .notif-bell {
   position: relative;
@@ -7,6 +15,8 @@
   justify-content: center;
   width: 36px;
   height: 36px;
+  line-height: 1;
+  box-sizing: border-box;
   border: 1px solid transparent;
   border-radius: var(--radius);
   background: none;

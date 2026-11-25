@@ -14,19 +14,14 @@ import {
   IconSchoolCash,
   IconRequests,
   IconFolder,
-  IconApproval,
   IconReports,
-  IconMail,
-  IconUsers,
-  IconUtilities,
-  IconApi,
-  IconAdmin,
   IconCertificate,
-  IconWebhook,
+  IconSettings,
   IconLogout,
   IconLayoutSidebar,
 } from './icons';
 import { NotificationBell } from './NotificationBell';
+import { canSeeSettings } from '../settings';
 
 interface NavItem {
   to: string;
@@ -69,38 +64,9 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'Reports',
     items: [
       { to: '/folders', label: 'Folder builder', icon: IconFolder },
-      { to: '/workshops/approval', label: 'Workshop approval', icon: IconApproval },
       { to: '/certificates', label: 'Certificates', icon: IconCertificate },
       { to: '/reports', label: 'Reports hub', icon: IconReports },
       { to: '/reports/visual', label: 'Visual Reports', icon: IconDashboard },
-      { to: '/mailing-lists', label: 'Mailing lists', icon: IconMail },
-    ],
-  },
-  {
-    title: 'Administration',
-    items: [
-      { to: '/admin/users', label: 'Users', icon: IconUsers, roles: ['SUPER_ADMIN', 'ADMIN'] },
-      {
-        to: '/admin/certificates',
-        label: 'Certificate Designer',
-        icon: IconCertificate,
-        roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'],
-      },
-      {
-        to: '/admin/forms',
-        label: 'Form Designer',
-        icon: IconRequests,
-        roles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'],
-      },
-      { to: '/admin/utilities', label: 'Utilities', icon: IconUtilities, roles: ['SUPER_ADMIN', 'ADMIN'] },
-      { to: '/admin', label: 'Admin', icon: IconAdmin, roles: ['SUPER_ADMIN', 'ADMIN'] },
-    ],
-  },
-  {
-    title: 'Developer',
-    items: [
-      { to: '/api-docs', label: 'API documentation', icon: IconApi, roles: ['SUPER_ADMIN', 'ADMIN'] },
-      { to: '/admin/webhooks', label: 'Webhooks', icon: IconWebhook, roles: ['SUPER_ADMIN', 'ADMIN'] },
     ],
   },
 ];
@@ -249,6 +215,21 @@ export function AppShell({
           </a>
           <div className="topbar-actions">
             {user && <NotificationBell />}
+            {user && canSeeSettings(user.role) && (
+              <a
+                href="/settings"
+                className={`topbar-settings${
+                  currentPath === '/settings' || currentPath.startsWith('/admin') || currentPath === '/api-docs'
+                    ? ' active'
+                    : ''
+                }`}
+                title="Settings"
+                aria-label="Settings"
+                aria-current={currentPath === '/settings' ? 'page' : undefined}
+              >
+                <IconSettings width={20} height={20} />
+              </a>
+            )}
             {user && (
               <div className="user-chip topbar-user">
                 <span className="avatar" aria-hidden="true">{initials(user.displayName)}</span>
