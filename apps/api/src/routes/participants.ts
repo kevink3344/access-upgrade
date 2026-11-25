@@ -181,7 +181,16 @@ participantsRouter.get('/', requireAuth, async (req, res, next) => {
 
     if (!includeEmpty) where.push(`NOT ${IS_EMPTY}`);
     if (q) {
-      where.push('(p.FirstName LIKE @q OR p.LastName LIKE @q OR p.Email LIKE @q)');
+      // The full name is searched as well as the parts. Staff type "Kevin
+      // Test", not "Test" — matching only FirstName/LastName meant a full name
+      // found nothing unless it happened to be a substring of one column.
+      // Both orders are covered, because the list sorts by last name but
+      // people say the first name first.
+      where.push(
+        `(p.FirstName LIKE @q OR p.LastName LIKE @q OR p.Email LIKE @q
+          OR CONCAT(p.FirstName, ' ', p.LastName) LIKE @q
+          OR CONCAT(p.LastName, ', ', p.FirstName) LIKE @q)`,
+      );
       params.q = { type: sql.NVarChar(260), value: `%${q}%` };
     }
     if (agencyId) {
