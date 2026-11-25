@@ -658,6 +658,8 @@ export interface TrainingRequestDetail {
   RequestPhone: string | null;
   RequestExt: number | null;
   RequestEmail: string | null;
+  /** Free text describing the training wanted, from the public request form. */
+  Description: string | null;
   ParticipantCount: string | null;
   InvoiceNum: string | null;
   InvoiceDate: string | null;
@@ -678,6 +680,7 @@ export interface TrainingRequestWrite {
   requestPhone?: string | null;
   requestExt?: number | null;
   requestEmail?: string | null;
+  description?: string | null;
   participantCount?: string | null;
   invoiceNum?: string | null;
   invoiceDate?: string | null;
@@ -934,6 +937,24 @@ export interface PaymentSummary {
 
 export type PublicLinkStatus = 'open' | 'closed' | 'not-yet-open' | 'revoked' | 'full';
 
+/** A standalone form's public link state (GET /api/forms/:id/link). */
+export interface FormLinkState {
+  formTemplateId: number;
+  formName: string;
+  kind: FormTemplateKind;
+  isArchived: boolean;
+  /** False until the form is published; a draft cannot be shared. */
+  hasPublishedVersion: boolean;
+  link: {
+    slug: string;
+    url: string;
+    isActive: boolean;
+    formTemplateVersionId: number | null;
+    createdBy: string;
+    createdAt: string;
+  } | null;
+}
+
 export interface RegistrationLinkState {
   workshop: {
     workshopId: number;
@@ -970,6 +991,11 @@ export interface PublicSessionOption {
 }
 
 export interface PublicLinkState {  state: PublicLinkStatus;
+  /**
+   * Where a submission goes. `trainingRequest` means the link is a standalone
+   * form with no workshop, so the page renders the form alone.
+   */
+  kind: 'registration' | 'trainingRequest';
   /** Seats left, from the live roster. Null when the workshop is uncapped. */
   seatsRemaining: number | null;
   /**
@@ -1005,11 +1031,13 @@ export interface PublicLinkState {  state: PublicLinkStatus;
 export type RegistrantRole = 'Educator' | 'Parent/caregiver';
 
 export interface PublicRegisterRequest {
-  firstName: string;
-  lastName: string;
-  email: string;
-  /** Required — the form branches on this. */
-  registrantRole: RegistrantRole;
+  // A training request form asks none of these, so they are optional here and
+  // enforced server-side only for the registration kind.
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  /** Required for a registration form — it branches on this. */
+  registrantRole?: RegistrantRole;
   phone?: string;
   agencyId?: number | null;
   /** Educator only — ages of the students in the class. */
@@ -1352,6 +1380,8 @@ export interface FormTemplateSummary {
   name: string;
   description: string | null;
   isActive: boolean;
+  /** Where submissions are stored. */
+  kind: FormTemplateKind;
   currentVersionId: number | null;
   currentVersionNumber: number | null;
   isPublished: boolean;
@@ -1359,6 +1389,15 @@ export interface FormTemplateSummary {
   archivedAt: string | null;
   updatedAt: string | null;
 }
+
+/**
+ * Where a form's submissions are stored.
+ *
+ * `registration` writes a Participant/Registration; `trainingRequest` writes a
+ * core.TrainingRequest, so the submission appears on the Training requests
+ * screen instead of the registrations list.
+ */
+export type FormTemplateKind = 'registration' | 'trainingRequest';
 
 /** One registration's custom answers. */
 export interface FormAnswerGroup {

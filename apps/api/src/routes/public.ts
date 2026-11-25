@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { query, sql, type SqlParam } from '../db.js';
 import { env } from '../env.js';
 import { checkWorkshopCapacity } from '../services/notifications.js';
-import { getVersionForLink, saveAnswers } from '../services/forms.js';
+import { getVersionForLink, saveAnswers, getKindForLink, createTrainingRequestFromAnswers } from '../services/forms.js';
 
 /**
  * Public registration endpoints. Mounted at /api/public.
@@ -62,14 +62,16 @@ type LinkState = 'open' | 'closed' | 'not-yet-open' | 'revoked' | 'full';
 
 interface ResolvedLink {
   RegistrationLinkID: number;
-  WorkshopID: number;
+  /** Null for a standalone form link (a training request, say). */
+  WorkshopID: number | null;
+  FormTemplateID: number | null;
   IsActive: boolean;
   WebSeatCap: number | null;
   OpensAt: Date | null;
   ClosesAt: Date | null;
   RevokedAt: Date | null;
-  IsRegistrationOpen: boolean;
-  IsCancelled: boolean;
+  IsRegistrationOpen: boolean | null;
+  IsCancelled: boolean | null;
   RedirectToPayment: boolean;
   PaymentUrl: string | null;
   WorkshopCode: string | null;
@@ -89,8 +91,11 @@ interface ResolvedLink {
 }
 
 async function resolveSlug(slug: string): Promise<ResolvedLink | null> {
+  // LEFT JOIN the workshop: a standalone form link has none, and an INNER
+  // JOIN would make it look like the slug does not exist.
   const r = await query<ResolvedLink>(
-    `SELECT l.RegistrationLinkID, l.WorkshopID, l.IsActive, l.WebSeatCap, l.OpensAt, l.ClosesAt, l.RevokedAt,
+    `SELECT l.RegistrationLinkID, l.WorkshopID, l.FormTemplateID,
+            l.IsActive, l.WebSeatCap, l.OpensAt, l.ClosesAt, l.RevokedAt,
             l.RedirectToPayment, l.PaymentUrl,
             w.IsRegistrationOpen, w.IsCancelled,
             w.WorkshopCode, n.WorkshopName, w.StartDate, w.EndDate,
@@ -103,7 +108,7 @@ async function resolveSlug(slug: string): Promise<ResolvedLink | null> {
             (SELECT COUNT(*) FROM core.Registration r
               WHERE r.WorkshopID = w.WorkshopID AND r.Source = 'Web' AND r.IsCancelled = 0) AS WebTaken
        FROM core.WorkshopRegistrationLink l
-       JOIN core.Workshop w ON w.WorkshopID = l.WorkshopID
+       LEFT JOIN core.Workshop w ON w.WorkshopID = l.WorkshopID
        LEFT JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
        LEFT JOIN core.Agency a ON a.AgencyID = w.AgencyID
       WHERE l.Slug = @slug`,
@@ -115,6 +120,16 @@ async function resolveSlug(slug: string): Promise<ResolvedLink | null> {
 function linkState(l: ResolvedLink): LinkState {
   if (l.RevokedAt !== null) return 'revoked';
   if (!l.IsActive) return 'revoked';
+
+  // A standalone form link has no workshop, so there is nothing to close,
+  // cancel or fill up — the link's own switch is the whole story.
+  if (l.WorkshopID === null) {
+    const now = new Date();
+    if (l.OpensAt && now < l.OpensAt) return 'not-yet-open';
+    if (l.ClosesAt && now > l.ClosesAt) return 'closed';
+    return 'open';
+  }
+
   if (!l.IsRegistrationOpen || l.IsCancelled) return 'closed';
 
   const now = new Date();
@@ -306,10 +321,14 @@ publicRouter.get('/registration-links/:slug', async (req, res, next) => {
     // descriptive — this does not change what the registration records
     // beyond the answer text.
     const wantsSessions = form?.questions.some((q) => q.fieldType === 'session') ?? false;
-    const sessions = wantsSessions ? await listSessionsForPublic(link.WorkshopID) : [];
+    const sessions =
+      wantsSessions && link.WorkshopID !== null
+        ? await listSessionsForPublic(link.WorkshopID)
+        : [];
 
     res.json({
       state,
+      kind: await getKindForLink(link.RegistrationLinkID),
       seatsRemaining: seatsRemaining(link),
       form,
       sessions,
@@ -338,12 +357,12 @@ publicRouter.get('/registration-links/:slug', async (req, res, next) => {
 });
 
 const registerSchema = z.object({
-  firstName: z.string().min(1, 'First name is required').max(30),
-  lastName: z.string().min(1, 'Last name is required').max(30),
-  email: z.string().email('Enter a valid email').max(100),
-  registrantRole: z.enum(['Educator', 'Parent/caregiver'], {
-    message: 'Select whether you are an educator or a parent/caregiver',
-  }),
+  // Required for a registration form; a training request form asks for its own
+  // fields instead, so these are only enforced when the kind calls for them.
+  firstName: z.string().max(30).optional(),
+  lastName: z.string().max(30).optional(),
+  email: z.string().max(100).optional(),
+  registrantRole: z.enum(['Educator', 'Parent/caregiver']).optional(),
   phone: z.string().max(15).optional(),
   agencyId: z.number().int().positive().nullable().optional(),
   /** Educator only: ages of the students in the class. */
@@ -454,7 +473,33 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
     }
 
     const data = parsed.data;
-    const email = data.email.trim().toLowerCase();
+
+    // A training request form has no registrant to identify, so the email
+    // rate-limit bucket and the registration fields below only apply to the
+    // registration kind.
+    const formKind = await getKindForLink(link.RegistrationLinkID);
+
+    if (formKind === 'registration') {
+      const missingReg: string[] = [];
+      if (!data.firstName?.trim()) missingReg.push('firstName');
+      if (!data.lastName?.trim()) missingReg.push('lastName');
+      if (!data.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) {
+        missingReg.push('email');
+      }
+      if (!data.registrantRole) missingReg.push('registrantRole');
+
+      if (missingReg.length > 0) {
+        await logSubmission(link.RegistrationLinkID, ip, ua, 'Rejected', 'validation');
+        res.status(422).json({
+          error: 'validation_failed',
+          message: 'Please check the form',
+          details: missingReg.map((path) => ({ path, message: 'This field is required' })),
+        });
+        return;
+      }
+    }
+
+    const email = data.email?.trim().toLowerCase() ?? '';
 
     // Honeypot: a real person never fills a hidden field.
     if (data.website && data.website.trim() !== '') {
@@ -529,6 +574,22 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
       }
     }
 
+    // ---- branch on where this form stores its submissions ----
+    // A training request form is not a workshop registration: it writes a
+    // core.TrainingRequest row and stops, so it never touches Participant or
+    // Registration and never consumes a seat.
+    if (formKind === 'trainingRequest') {
+      const trainingRequestId = await createTrainingRequestFromAnswers(data.answers ?? {});
+      await logSubmission(link.RegistrationLinkID, ip, ua, 'Accepted', 'training-request');
+
+      res.status(201).json({
+        registered: true,
+        trainingRequestId,
+        message: 'Your training request has been submitted. We will be in touch.',
+      });
+      return;
+    }
+
     // ---- participant: match on email, else create ----
     const existing = await query<{ ParticipantID: number }>(
       `SELECT TOP 1 ParticipantID FROM core.Participant
@@ -570,23 +631,18 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
         },
       );
     } else {
-      const next = await query<{ NextId: number }>(
-        'SELECT ISNULL(MAX(ParticipantID), 0) + 1 AS NextId FROM core.Participant',
-      );
-
       const created = await query<{ ParticipantID: number }>(
         `INSERT INTO core.Participant
-                (ParticipantID, FirstName, LastName, Email, HomePhone, AgencyID, GradeLevel,
+                (FirstName, LastName, Email, HomePhone, AgencyID, GradeLevel,
                  ChildrenAges, SecondCaregiverInfo,
                  IsTeacherMailingList, IsParentMailingList, DateOfEntry)
          OUTPUT INSERTED.ParticipantID
-         VALUES (@id, @fn, @ln, @email, @phone, @agency, @classAges,
+         VALUES (@fn, @ln, @email, @phone, @agency, @classAges,
                  @childrenAges, @secondCaregiver,
                  @teacher, @parent, SYSUTCDATETIME())`,
         {
-          id: { type: sql.Int, value: next.recordset[0]!.NextId },
-          fn: { type: sql.NVarChar(30), value: data.firstName.trim() },
-          ln: { type: sql.NVarChar(30), value: data.lastName.trim() },
+          fn: { type: sql.NVarChar(30), value: data.firstName!.trim() },
+          ln: { type: sql.NVarChar(30), value: data.lastName!.trim() },
           email: { type: sql.NVarChar(100), value: email },
           phone: { type: sql.NVarChar(15), value: data.phone ?? null },
           agency: { type: sql.Int, value: data.agencyId ?? null },
@@ -627,12 +683,7 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
       );
       await logSubmission(link.RegistrationLinkID, ip, ua, 'Duplicate', null);
     } else {
-      const next = await query<{ NextId: number }>(
-        'SELECT ISNULL(MAX(RegistrationID), 0) + 1 AS NextId FROM core.Registration',
-      );
-
       const params: Record<string, SqlParam> = {
-        id: { type: sql.Int, value: next.recordset[0]!.NextId },
         pid: { type: sql.Int, value: participantId },
         wid: { type: sql.Int, value: link.WorkshopID },
         lid: { type: sql.Int, value: link.RegistrationLinkID },
@@ -642,10 +693,10 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
 
       const created = await query<{ RegistrationID: number }>(
         `INSERT INTO core.Registration
-                (RegistrationID, ParticipantID, WorkshopID, RegistrationDate, IsCancelled,
+                (ParticipantID, WorkshopID, RegistrationDate, IsCancelled,
                  Attended, EmailConfirmation, Source, RegistrationLinkID, ConfirmationToken, Notes)
          OUTPUT INSERTED.RegistrationID
-         VALUES (@id, @pid, @wid, CAST(SYSUTCDATETIME() AS DATE), 0, 0, 0, 'Web', @lid, @token, @notes)`,
+         VALUES (@pid, @wid, CAST(SYSUTCDATETIME() AS DATE), 0, 0, 0, 'Web', @lid, @token, @notes)`,
         params,
       );
       registrationId = created.recordset[0]!.RegistrationID;
@@ -654,7 +705,7 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
       // Raise the capacity alert if this registration crossed the threshold.
       // Safe to call on a duplicate submission too: the fired flag makes it
       // a no-op once the alert has gone out.
-      await checkWorkshopCapacity(link.WorkshopID);
+      await checkWorkshopCapacity(link.WorkshopID!);
     }
 
     // Custom answers. Written after the registration exists so the FK holds,

@@ -16,8 +16,13 @@ BEGIN
     CREATE TABLE core.WorkshopRegistrationLink (
         RegistrationLinkID INT IDENTITY(1,1) NOT NULL
             CONSTRAINT PK_WorkshopRegistrationLink PRIMARY KEY,
-        WorkshopID         INT           NOT NULL
+        -- A link belongs to a workshop (registration forms) or to a form
+        -- template (standalone forms such as training requests). Exactly one
+        -- is set; CK_RegistrationLink_Target enforces that at least one is.
+        WorkshopID         INT           NULL
             CONSTRAINT FK_RegistrationLink_Workshop REFERENCES core.Workshop(WorkshopID),
+        FormTemplateID     INT           NULL
+            CONSTRAINT FK_RegistrationLink_FormTemplate REFERENCES core.FormTemplate(FormTemplateID),
         Slug               NVARCHAR(24)  NOT NULL,
         IsActive           BIT           NOT NULL CONSTRAINT DF_RegistrationLink_IsActive DEFAULT 0,
         WebSeatCap         INT           NULL,
@@ -30,10 +35,13 @@ BEGIN
         CreatedBy          NVARCHAR(100) NOT NULL,
         CreatedAt          DATETIME2(0)  NOT NULL CONSTRAINT DF_RegistrationLink_CreatedAt DEFAULT SYSUTCDATETIME(),
         CONSTRAINT UQ_RegistrationLink_Slug UNIQUE (Slug),
+        CONSTRAINT CK_RegistrationLink_Target
+            CHECK (WorkshopID IS NOT NULL OR FormTemplateID IS NOT NULL),
         CONSTRAINT CK_RegistrationLink_PaymentUrl
             CHECK (RedirectToPayment = 0 OR PaymentUrl IS NOT NULL)
     );
     CREATE INDEX IX_RegistrationLink_Workshop ON core.WorkshopRegistrationLink(WorkshopID);
+    CREATE INDEX IX_RegistrationLink_FormTemplate ON core.WorkshopRegistrationLink(FormTemplateID);
     PRINT 'core.WorkshopRegistrationLink created';
 END
 ELSE PRINT 'core.WorkshopRegistrationLink already exists';

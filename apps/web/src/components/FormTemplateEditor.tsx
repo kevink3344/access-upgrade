@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { FormFieldType, FormQuestion, FormQuestionDraft } from '@pe/shared';
+import type { FormFieldType, FormQuestion, FormQuestionDraft, FormTemplateKind } from '@pe/shared';
 import { api } from '../api';
+import { FormLinkPanel } from './FormLinkPanel';
 
 interface Props {
   formTemplateId: number;
@@ -22,6 +23,20 @@ const FIELD_TYPES: { value: FormFieldType; label: string }[] = [
 ];
 
 const CHOICE_TYPES: FormFieldType[] = ['select', 'radio', 'checkbox'];
+
+/**
+ * Fields the public page renders from its own hard-coded inputs, so removing
+ * one would silently drop it from the form and fail the submission.
+ *
+ * A registration form always asks these; a training request form asks its own
+ * fields instead, so only the registration set is locked.
+ */
+const REQUIRED_KEYS = new Set(['registrantRole', 'firstName', 'lastName', 'email', 'phone', 'agency']);
+
+function isRemovable(q: { questionKey: string }, kind: FormTemplateKind): boolean {
+  if (kind === 'trainingRequest') return true;
+  return !REQUIRED_KEYS.has(q.questionKey);
+}
 
 function toDraft(q: FormQuestion): FormQuestionDraft {
   return {
@@ -86,6 +101,8 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
   const templateName = templates.data?.data.find(
     (t) => t.formTemplateId === formTemplateId,
   )?.name;
+  const templateKind =
+    templates.data?.data.find((t) => t.formTemplateId === formTemplateId)?.kind ?? 'registration';
 
   // Edit the newest version — usually the published one, or a draft if one
   // is already in progress.
@@ -194,6 +211,9 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
               : 'Loading…'}
             {dirty && <span className="form-editor-dirty" style={{ marginLeft: 8 }}>Unsaved changes</span>}
           </p>
+          {templateKind === 'trainingRequest' && (
+            <FormLinkPanel formTemplateId={formTemplateId} canEdit={!!canEdit} />
+          )}
         </div>
         <div className="row-actions">
           {canEdit && (
@@ -249,7 +269,9 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
                   <li key={`${q.questionKey}-${i}`} className={selected === i ? 'is-active' : ''}>
                     <button type="button" className="form-q-row" onClick={() => setSelected(i)}>
                       <span className="form-q-label">
-                        {q.isBuiltIn && <span className="form-q-lock" title="Built-in field">🔒</span>}
+                        {q.isBuiltIn && !isRemovable(q, templateKind) && (
+                          <span className="form-q-lock" title="Required by the public form">🔒</span>
+                        )}
                         {q.label}
                       </span>
                       <span className="form-q-meta">
@@ -459,7 +481,7 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
                   )}
                 </fieldset>
 
-                {canEdit && !active.isBuiltIn && (
+                {canEdit && isRemovable(active, templateKind) && (
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"

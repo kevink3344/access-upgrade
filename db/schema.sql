@@ -899,6 +899,10 @@ CREATE TABLE core.TrainingRequest (
     RequestPhone      NVARCHAR(14)   NULL,
     RequestExt        INT            NULL,
     RequestEmail      NVARCHAR(100)  NULL,
+    -- Free-text description of the training wanted, from the public request
+    -- form. The legacy import has no equivalent (TopicRequested on the quote
+    -- table is a workshop-type code), so this is new.
+    Description       NVARCHAR(MAX)  NULL,
     -- Legacy NumParticpants (typo) is NVARCHAR(255). Kept as text per plan §B.1
     -- until the values are reviewed; rename applied, type not yet changed.
     ParticipantCount  NVARCHAR(255)  NULL,
@@ -1379,6 +1383,9 @@ CREATE TABLE core.FormTemplate (
     Name           NVARCHAR(100) NOT NULL,
     Description    NVARCHAR(500) NULL,
     IsActive       BIT           NOT NULL CONSTRAINT DF_FormTemplate_IsActive DEFAULT 1,
+    -- Where submissions go: a registration, or a training request.
+    Kind           NVARCHAR(30)  NOT NULL CONSTRAINT DF_FormTemplate_Kind DEFAULT 'registration'
+        CONSTRAINT CK_FormTemplate_Kind CHECK (Kind IN ('registration', 'trainingRequest')),
     -- Archived forms are retired rather than deleted: the row, its versions
     -- and its answers all stay, and it can be restored.
     ArchivedAt     DATETIME2     NULL,

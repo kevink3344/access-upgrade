@@ -72,7 +72,7 @@ formsRouter.get('/', requireAuth, async (req, res, next) => {
  *   post:
  *     tags: [Forms]
  *     summary: Create a form template
- *     description: Seeds an unpublished v1 containing the six built-in questions.
+ *     description: Seeds an unpublished v1 containing only the questions the public form always asks.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: Created }
@@ -83,6 +83,7 @@ formsRouter.post('/', requireAuth, requireRole(...EDIT_ROLES), async (req, res, 
       .object({
         name: z.string().min(1, 'A name is required').max(100),
         description: z.string().max(500).nullable().optional(),
+        kind: z.enum(['registration', 'trainingRequest']).default('registration'),
       })
       .safeParse(req.body);
 
@@ -99,6 +100,7 @@ formsRouter.post('/', requireAuth, requireRole(...EDIT_ROLES), async (req, res, 
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       actor: req.user!.email,
+      kind: parsed.data.kind,
     });
 
     res.status(201).json(created);

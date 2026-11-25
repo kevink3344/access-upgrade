@@ -17,6 +17,17 @@ import { query, sql, type SqlParam } from '../db.js';
  * report working without knowing this feature exists.
  */
 
+/**
+ * Where a form's submissions are stored.
+ *
+ * `registration` writes a Participant/Registration. `trainingRequest` writes a
+ * core.TrainingRequest instead, so the submission shows up on the Training
+ * requests screen rather than the registrations list.
+ */
+export type FormTemplateKind = 'registration' | 'trainingRequest';
+
+export const FORM_KINDS: FormTemplateKind[] = ['registration', 'trainingRequest'];
+
 export type FieldType =
   | 'text'
   | 'longtext'
@@ -64,6 +75,8 @@ export interface FormTemplateSummary {
   name: string;
   description: string | null;
   isActive: boolean;
+  /** Where submissions are stored. */
+  kind: FormTemplateKind;
   currentVersionNumber: number | null;
   currentVersionId: number | null;
   isPublished: boolean;
@@ -222,10 +235,129 @@ export function builtInQuestions() {
   return BUILT_IN_QUESTIONS;
 }
 
-/** Next free id for a non-IDENTITY table. */
-async function nextId(table: string, column: string): Promise<number> {
+/**
+ * The questions every public registration asks, whatever the form says.
+ *
+ * The public page renders the registrant role and the name/email/phone/agency
+ * inputs from its own hard-coded fields and skips any question with a
+ * `mapsToColumn`, so a form that omits one of these would silently lose it and
+ * the submission would fail validation. New templates therefore start with
+ * these; the role-specific questions and Notes are the author's to add.
+ */
+const REQUIRED_KEYS = new Set(['registrantRole', 'firstName', 'lastName', 'email', 'phone', 'agency']);
+
+export function requiredQuestions() {
+  return BUILT_IN_QUESTIONS.filter((q) => REQUIRED_KEYS.has(q.questionKey));
+}/**
+ * The fields a training request asks, seeded into a new form of that kind.
+ *
+ * The keys are the contract with the submission handler: each maps to a column
+ * on core.TrainingRequest, so a request submitted through the public form lands
+ * on the Training requests screen with the right values.
+ */
+export function trainingRequestQuestions(): Omit<DraftQuestion, 'sortOrder'>[] {
+  return [
+    {
+      questionKey: 'agency',
+      label: 'School or agency',
+      helpText: null,
+      placeholder: null,
+      fieldType: 'agency',
+      isRequired: true,
+      options: [],
+      maxLength: null,
+      mapsToColumn: 'TrainingRequest.AgencyID',
+      isBuiltIn: true,
+      branchOnQuestionKey: null,
+      branchOptionValue: null,
+    },
+    {
+      questionKey: 'requestDescription',
+      label: 'Request description',
+      helpText: 'What training would you like us to deliver?',
+      placeholder: null,
+      fieldType: 'longtext',
+      isRequired: true,
+      options: [],
+      maxLength: null,
+      mapsToColumn: 'TrainingRequest.Description',
+      isBuiltIn: true,
+      branchOnQuestionKey: null,
+      branchOptionValue: null,
+    },
+    {
+      questionKey: 'requestedBy',
+      label: 'Requested by',
+      helpText: null,
+      placeholder: null,
+      fieldType: 'text',
+      isRequired: true,
+      options: [],
+      maxLength: 100,
+      mapsToColumn: 'TrainingRequest.RequestedBy',
+      isBuiltIn: true,
+      branchOnQuestionKey: null,
+      branchOptionValue: null,
+    },
+    {
+      questionKey: 'requestedByEmail',
+      label: 'Requested by email',
+      helpText: null,
+      placeholder: null,
+      fieldType: 'text',
+      isRequired: true,
+      options: [],
+      maxLength: 100,
+      mapsToColumn: 'TrainingRequest.RequestEmail',
+      isBuiltIn: true,
+      branchOnQuestionKey: null,
+      branchOptionValue: null,
+    },
+    {
+      questionKey: 'requestPhone',
+      label: 'Phone',
+      helpText: null,
+      placeholder: null,
+      fieldType: 'text',
+      isRequired: false,
+      options: [],
+      maxLength: 14,
+      mapsToColumn: 'TrainingRequest.RequestPhone',
+      isBuiltIn: true,
+      branchOnQuestionKey: null,
+      branchOptionValue: null,
+    },
+  ];
+}
+
+/**
+ * Next free id for a non-IDENTITY table.
+ *
+ * The read and the write are one statement, so concurrent callers cannot both
+ * read the same maximum and then collide on the primary key. `UPDLOCK` takes
+ * the update lock on the row the aggregate reads; `HOLDLOCK` holds it until
+ * the insert commits, which is what serialises two callers.
+ *
+ * `seed` supplies the table's other NOT NULL columns. They cannot be omitted
+ * from the INSERT: SQL Server applies no defaults to them, so a bare id insert
+ * fails with "Cannot insert the value NULL" before the caller's UPDATE runs.
+ */
+async function nextId(
+  table: string,
+  column: string,
+  seed?: Record<string, SqlParam>,
+): Promise<number> {
+  const names = seed ? Object.keys(seed) : [];
+  const placeholders = names.map((k) => `@${k}`);
+
   const r = await query<{ id: number }>(
-    `SELECT ISNULL(MAX(${column}), 0) + 1 AS id FROM ${table}`,
+    `DECLARE @id INT;
+     SELECT @id = ISNULL(MAX(${column}), 0) + 1
+       FROM ${table} WITH (UPDLOCK, HOLDLOCK);
+     INSERT INTO ${table} (${column}${names.length ? ', ' + names.join(', ') : ''})
+     OUTPUT INSERTED.${column} AS id
+     VALUES (@id${placeholders.length ? ', ' + placeholders.join(', ') : ''});`,
+    seed,
   );
   return r.recordset[0]!.id;
 }
@@ -250,13 +382,14 @@ export async function listTemplates(includeArchived = false): Promise<FormTempla
     Name: string;
     Description: string | null;
     IsActive: boolean;
+    Kind: FormTemplateKind;
     UpdatedAt: Date | null;
     ArchivedAt: Date | null;
     CurrentVersionID: number | null;
     CurrentVersionNumber: number | null;
     PublishedAt: Date | null;
   }>(
-    `SELECT t.FormTemplateID, t.Name, t.Description, t.IsActive, t.UpdatedAt, t.ArchivedAt,
+    `SELECT t.FormTemplateID, t.Name, t.Description, t.IsActive, t.Kind, t.UpdatedAt, t.ArchivedAt,
             v.FormTemplateVersionID AS CurrentVersionID,
             v.VersionNumber        AS CurrentVersionNumber,
             v.PublishedAt
@@ -277,6 +410,7 @@ export async function listTemplates(includeArchived = false): Promise<FormTempla
     name: x.Name,
     description: x.Description,
     isActive: x.IsActive,
+    kind: x.Kind,
     currentVersionId: x.CurrentVersionID,
     currentVersionNumber: x.CurrentVersionNumber,
     isPublished: x.PublishedAt !== null,
@@ -399,6 +533,74 @@ export async function getVersionForLink(linkId: number): Promise<FormVersion | n
   return getVersion(id);
 }
 
+/**
+ * Where the form pinned to a link stores its submissions.
+ *
+ * A link with no pinned version uses the built-in registration form, so the
+ * default is `registration`.
+ */
+export async function getKindForLink(linkId: number): Promise<FormTemplateKind> {
+  const r = await query<{ Kind: FormTemplateKind | null }>(
+    `SELECT t.Kind
+       FROM core.WorkshopRegistrationLink l
+       JOIN core.FormTemplateVersion v ON v.FormTemplateVersionID = l.FormTemplateVersionID
+       JOIN core.FormTemplate t ON t.FormTemplateID = v.FormTemplateID
+      WHERE l.RegistrationLinkID = @id`,
+    { id: { type: sql.Int, value: linkId } },
+  );
+  return r.recordset[0]?.Kind ?? 'registration';
+}
+
+/**
+ * Write a training-request submission to core.TrainingRequest.
+ *
+ * The answers are keyed by question key, which for this form kind is the
+ * contract with `trainingRequestQuestions()`. Unknown keys are ignored, so a
+ * crafted payload cannot set columns the form never asked about.
+ */
+export async function createTrainingRequestFromAnswers(
+  answers: Record<string, unknown>,
+): Promise<number> {
+  const str = (key: string, max: number): string | null => {
+    const v = answers[key];
+    if (typeof v !== 'string') return null;
+    const t = v.trim();
+    return t === '' ? null : t.slice(0, max);
+  };
+
+  const agencyRaw = answers.agency;
+  const agencyId =
+    typeof agencyRaw === 'number'
+      ? agencyRaw
+      : typeof agencyRaw === 'string' && /^\d+$/.test(agencyRaw.trim())
+        ? Number(agencyRaw.trim())
+        : null;
+
+  const description = str('requestDescription', 2000);
+  const requestedBy = str('requestedBy', 100);
+  const requestEmail = str('requestedByEmail', 100);
+  const requestPhone = str('requestPhone', 14);
+
+  const created = await query<{ TrainingRequestID: number }>(
+    `INSERT INTO core.TrainingRequest
+            (TrainingRequestID, AgencyID, RequestDate, RequestedBy, RequestPhone,
+             RequestEmail, Description, IsActive)
+     OUTPUT INSERTED.TrainingRequestID
+     SELECT ISNULL(MAX(TrainingRequestID), 0) + 1, @agency, CAST(SYSUTCDATETIME() AS DATE),
+            @by, @phone, @email, @desc, 1
+       FROM core.TrainingRequest WITH (UPDLOCK, HOLDLOCK)`,
+    {
+      agency: { type: sql.Int, value: agencyId },
+      by: { type: sql.NVarChar(100), value: requestedBy },
+      phone: { type: sql.NVarChar(14), value: requestPhone },
+      email: { type: sql.NVarChar(100), value: requestEmail },
+      desc: { type: sql.NVarChar(sql.MAX), value: description },
+    },
+  );
+
+  return created.recordset[0]!.TrainingRequestID;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Writes                                                             */
 /* ------------------------------------------------------------------ */
@@ -407,27 +609,29 @@ export async function createTemplate(input: {
   name: string;
   description?: string | null;
   actor: string;
+  kind?: FormTemplateKind;
 }): Promise<{ formTemplateId: number; versionId: number }> {
-  const templateId = await nextId('core.FormTemplate', 'FormTemplateID');
+  const kind = input.kind ?? 'registration';
 
-  await query(
-    `INSERT INTO core.FormTemplate (FormTemplateID, Name, Description, IsActive, CreatedBy)
-     VALUES (@id, @name, @desc, 1, @by)`,
-    {
-      id: { type: sql.Int, value: templateId },
-      name: { type: sql.NVarChar(100), value: input.name },
-      desc: { type: sql.NVarChar(500), value: input.description ?? null },
-      by: { type: sql.NVarChar(200), value: input.actor },
-    },
-  );
+  const templateId = await nextId('core.FormTemplate', 'FormTemplateID', {
+    Name: { type: sql.NVarChar(100), value: input.name },
+    Description: { type: sql.NVarChar(500), value: input.description ?? null },
+    IsActive: { type: sql.Bit, value: 1 },
+    Kind: { type: sql.NVarChar(30), value: kind },
+    CreatedBy: { type: sql.NVarChar(200), value: input.actor },
+  });
 
-  // A new template starts as an unpublished v1 carrying the built-in form,
-  // so staff edit a working form rather than an empty page.
+  // A new template starts as an unpublished v1. A registration form gets only
+  // the questions the public page always asks (role, name, email, phone,
+  // agency); a training request form gets the request fields instead. Either
+  // way it is not a copy of whatever form was created last.
+  const seed = kind === 'trainingRequest' ? trainingRequestQuestions() : requiredQuestions();
+
   const versionId = await insertVersion(
     templateId,
     1,
     input.actor,
-    builtInQuestions().map((q, i) => ({ ...q, sortOrder: i + 1 })),
+    seed.map((q, i) => ({ ...q, sortOrder: i + 1 })),
   );
 
   return { formTemplateId: templateId, versionId };
@@ -439,11 +643,16 @@ async function insertVersion(
   actor: string,
   questions: DraftQuestion[],
 ): Promise<number> {
-  const versionId = await nextId('core.FormTemplateVersion', 'FormTemplateVersionID');
+  const versionId = await nextId('core.FormTemplateVersion', 'FormTemplateVersionID', {
+    FormTemplateID: { type: sql.Int, value: formTemplateId },
+    VersionNumber: { type: sql.Int, value: versionNumber },
+    CreatedBy: { type: sql.NVarChar(200), value: actor },
+  });
 
   await query(
-    `INSERT INTO core.FormTemplateVersion (FormTemplateVersionID, FormTemplateID, VersionNumber, CreatedBy)
-     VALUES (@id, @tpl, @num, @by)`,
+    `UPDATE core.FormTemplateVersion
+        SET FormTemplateID = @tpl, VersionNumber = @num, CreatedBy = @by
+      WHERE FormTemplateVersionID = @id`,
     {
       id: { type: sql.Int, value: versionId },
       tpl: { type: sql.Int, value: formTemplateId },
@@ -452,26 +661,26 @@ async function insertVersion(
     },
   );
 
-  let questionId = await nextId('core.FormQuestion', 'FormQuestionID');
-
-  // Branch targets are given as question keys (stable, human-readable) but
-  // stored as ids. Resolve them after all rows exist, so a branch can point at
-  // a question defined later in the list.
+  // Insert the questions directly rather than pre-allocating placeholder rows
+  // and updating them: FormQuestion has UNIQUE (FormTemplateVersionID,
+  // QuestionKey), so a placeholder's key would collide with the real row that
+  // replaces it. One statement per question keeps the ids contiguous.
   const keyToId = new Map<string, number>();
-  questions.forEach((q, i) => keyToId.set(q.questionKey, questionId + i));
+  const startId = await nextQuestionId();
+  questions.forEach((q, i) => keyToId.set(q.questionKey, startId + i));
 
-  for (const q of questions) {
+  for (const [i, q] of questions.entries()) {
     const branchOnId = q.branchOnQuestionKey ? (keyToId.get(q.branchOnQuestionKey) ?? null) : null;
 
     await query(
       `INSERT INTO core.FormQuestion
               (FormQuestionID, FormTemplateVersionID, SortOrder, QuestionKey, Label, HelpText,
-               Placeholder, FieldType, IsRequired, OptionsJson, MaxLength, MapsToColumn, IsBuiltIn,
-               BranchOnQuestionID, BranchOptionValue)
-       VALUES (@id, @ver, @sort, @key, @label, @help, @ph, @type, @req, @opts, @maxLen, @maps, @builtIn,
-               @branchOn, @branchVal)`,
+               Placeholder, FieldType, IsRequired, OptionsJson, MaxLength, MapsToColumn,
+               IsBuiltIn, BranchOnQuestionID, BranchOptionValue)
+       VALUES (@id, @ver, @sort, @key, @label, @help, @ph, @type, @req, @opts, @maxLen,
+               @maps, @builtIn, @branchOn, @branchVal)`,
       {
-        id: { type: sql.Int, value: questionId },
+        id: { type: sql.Int, value: startId + i },
         ver: { type: sql.Int, value: versionId },
         sort: { type: sql.Int, value: q.sortOrder },
         key: { type: sql.NVarChar(50), value: q.questionKey },
@@ -488,10 +697,23 @@ async function insertVersion(
         branchVal: { type: sql.NVarChar(100), value: branchOnId ? (q.branchOptionValue ?? null) : null },
       },
     );
-    questionId++;
   }
 
   return versionId;
+}
+
+/**
+ * First id for a block of consecutive FormQuestion rows.
+ *
+ * Read and insert are one statement under UPDLOCK/HOLDLOCK, so two callers
+ * cannot claim the same block.
+ */
+async function nextQuestionId(): Promise<number> {
+  const r = await query<{ id: number }>(
+    `SELECT ISNULL(MAX(FormQuestionID), 0) + 1 AS id
+       FROM core.FormQuestion WITH (UPDLOCK, HOLDLOCK)`,
+  );
+  return r.recordset[0]!.id;
 }
 
 /** A question as supplied by the editor — optional fields may be absent. */
@@ -648,7 +870,6 @@ export async function saveAnswers(
   answers: Record<string, unknown>,
 ): Promise<void> {
   const byKey = new Map(version.questions.map((q) => [q.questionKey, q]));
-  let answerId = await nextId('core.FormAnswer', 'FormAnswerID');
 
   for (const [key, raw] of Object.entries(answers)) {
     const q = byKey.get(key);
@@ -668,18 +889,19 @@ export async function saveAnswers(
       answerText = String(raw);
     }
 
+    // One insert per answer: the id is only needed as the row's key, so
+    // allocating it up front and then UPDATEing would be a wasted round trip.
     await query(
       `INSERT INTO core.FormAnswer (FormAnswerID, RegistrationID, FormQuestionID, AnswerText, AnswerJson)
-       VALUES (@id, @reg, @q, @text, @json)`,
+       SELECT ISNULL(MAX(FormAnswerID), 0) + 1, @reg, @q, @text, @json
+         FROM core.FormAnswer WITH (UPDLOCK, HOLDLOCK)`,
       {
-        id: { type: sql.BigInt, value: answerId },
         reg: { type: sql.Int, value: registrationId },
         q: { type: sql.Int, value: q.formQuestionId },
         text: { type: sql.NVarChar(sql.MAX), value: answerText },
         json: { type: sql.NVarChar(sql.MAX), value: answerJson },
       },
     );
-    answerId++;
   }
 }
 

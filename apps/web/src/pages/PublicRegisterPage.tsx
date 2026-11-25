@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+﻿import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import type { PublicLinkState } from '@pe/shared';
@@ -40,7 +40,7 @@ type Role = (typeof ROLES)[number];
 type Errors = Record<string, string>;
 
 function fmtDate(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return 'â€”';
   return new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'long',
@@ -63,7 +63,7 @@ function fmtTime(t: string | null): string {
  * Rendered inside the card rather than as a page banner, so the logo and the
  * workshop title share one surface instead of being split by a colour band.
  */
-function PublicBrand() {
+function PublicBrand({ subtitle = 'Workshop Registration' }: { subtitle?: string }) {
   return (
     <div className="public-brand">
       <img
@@ -76,32 +76,32 @@ function PublicBrand() {
       />
       <span className="public-brand-text">
         <b>Project Enlightenment</b>
-        <small>Workshop Registration</small>
+        <small>{subtitle}</small>
       </span>
     </div>
   );
 }
 
 /**
- * Every public state — the form, the "full" screen, the confirmation — renders
+ * Every public state â€” the form, the "full" screen, the confirmation â€” renders
  * through here, so the tab title is set once for all of them. Without this the
  * page inherits the staff app's title from index.html, which is wrong for a
  * family who has never seen the staff app.
  */
-function PublicChrome({ children }: { children: React.ReactNode }) {
+function PublicChrome({ children, title = 'Project Enlightenment - Workshop Registration' }: { children: React.ReactNode; title?: string }) {
   useEffect(() => {
     const previous = document.title;
-    document.title = 'Project Enlightenment - Workshop Registration';
+    document.title = title;
     return () => {
       document.title = previous;
     };
-  }, []);
+  }, [title]);
 
   return (
     <div className="public-page">
       <main className="public-main">{children}</main>
       <p className="public-foot">
-        Wake County Public School System · Project Enlightenment
+        Wake County Public School System Â· Project Enlightenment
       </p>
     </div>
   );
@@ -134,7 +134,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
-  /** Honeypot — a real person never fills this. */
+  /** Honeypot â€” a real person never fills this. */
   const [website, setWebsite] = useState('');
   /** Custom answers keyed by QuestionKey, for links pinned to a form version. */
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
@@ -150,6 +150,66 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
 
   function set(key: string, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  /**
+   * The questions to render.
+   *
+   * A registration form skips the ones with a `mapsToColumn` because the page
+   * renders those itself. A standalone form has no such block, so it renders
+   * every question on the version.
+   */
+  function visibleQuestions(includeMapped = false) {
+    return (data?.form?.questions ?? [])
+      .filter((q) => includeMapped || !q.mapsToColumn)
+      .filter((q) => {
+        if (!q.branchOnQuestionKey) return true;
+        const gate = answers[q.branchOnQuestionKey];
+        return typeof gate === 'string' && gate === q.branchOptionValue;
+      });
+  }
+
+  /**
+   * A standalone form asks only its own questions â€” there is no registrant
+   * role, name or agency block, because nothing is being registered.
+   */
+  async function onSubmitStandalone(e: FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+
+    const missing: Record<string, string> = {};
+    for (const q of visibleQuestions(true)) {
+      if (!q.isRequired) continue;
+      const v = answers[q.questionKey];
+      if (!v || (Array.isArray(v) && v.length === 0) || (typeof v === 'string' && !v.trim())) {
+        missing[q.questionKey] = `${q.label} is required`;
+      }
+    }
+    if (Object.keys(missing).length > 0) {
+      setAnswerErrors(missing);
+      return;
+    }
+    setAnswerErrors({});
+    setSubmitting(true);
+
+    try {
+      await api.publicRegistration.register(slug, {
+        answers,
+        website,
+        elapsedMs: Date.now() - mountedAt.current,
+      });
+      setDone(true);
+    } catch (err) {
+      setFormError(
+        err instanceof HttpError
+          ? err.status === 429
+            ? 'Too many attempts. Please try again later.'
+            : err.message
+          : 'Could not submit. Check your connection and try again.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function onSubmit(e: FormEvent) {
@@ -280,6 +340,28 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
   }
 
   if (link.state === 'full' || done) {
+    // A standalone form has no seats, so a successful submission is the only
+    // thing that reaches here.
+    if (done && link.kind === 'trainingRequest') {
+      return (
+        <PublicChrome title="Project Enlightenment - Training Request">
+          <div className="public-card public-terminal">
+            <PublicBrand subtitle="Training Request" />
+            <div className="icon-wrap" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </div>
+            <h1>Request received</h1>
+            <p>
+              Thank you. Your training request has been submitted and Project
+              Enlightenment will be in touch.
+            </p>
+          </div>
+        </PublicChrome>
+      );
+    }
+
     return (
       <PublicChrome>
         <div className="public-card public-terminal">
@@ -321,6 +403,171 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
   const w = link.workshop;
   const seats = link.seatsRemaining;
 
+  // A standalone form (a training request) has no workshop to describe, so it
+  // renders only its own questions.
+  if (link.kind === 'trainingRequest') {
+    return (
+      <PublicChrome title="Project Enlightenment - Training Request">
+        <div className="public-card">
+          <PublicBrand subtitle="Training Request" />
+          <h1>Training request</h1>
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13.5 }}>
+            Tell us what training you would like Project Enlightenment to deliver.
+          </p>
+        </div>
+
+        <div className="public-card">
+          <h2>Your request</h2>
+
+          {formError && (
+            <div className="alert alert-error" role="alert">
+              <span>{formError}</span>
+            </div>
+          )}
+
+          <form className="public-form" onSubmit={onSubmitStandalone} noValidate>
+            {visibleQuestions(true).map((q) => {
+              const value = answers[q.questionKey];
+              const err = answerErrors[q.questionKey];
+
+              function setAnswer(v: string | string[]) {
+                setAnswers((prev) => ({ ...prev, [q.questionKey]: v }));
+                setAnswerErrors((prev) => {
+                  const next = { ...prev };
+                  delete next[q.questionKey];
+                  return next;
+                });
+              }
+
+              return (
+                <div className="field" key={q.questionKey}>
+                  <label htmlFor={`q-${q.questionKey}`}>
+                    {q.label}
+                    {q.isRequired ? (
+                      <Req />
+                    ) : (
+                      <span style={{ fontWeight: 400, color: 'var(--text-faint)' }}> (optional)</span>
+                    )}
+                  </label>
+
+                  {q.fieldType === 'agency' ? (
+                    <AgencyPicker
+                      id={`q-${q.questionKey}`}
+                      value={typeof value === 'string' && value ? Number(value) : null}
+                      label={agencyLabels[q.questionKey] ?? ''}
+                      onChange={(id, lbl) => {
+                        setAnswer(id === null ? '' : String(id));
+                        setAgencyLabels((prev) => ({ ...prev, [q.questionKey]: lbl }));
+                      }}
+                      describedBy={q.helpText ? `q-${q.questionKey}-help` : undefined}
+                    />
+                  ) : q.fieldType === 'longtext' ? (
+                    <textarea
+                      id={`q-${q.questionKey}`}
+                      rows={3}
+                      maxLength={q.maxLength ?? 2000}
+                      placeholder={q.placeholder ?? ''}
+                      value={typeof value === 'string' ? value : ''}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
+                      aria-invalid={!!err}
+                      aria-required={q.isRequired}
+                    />
+                  ) : q.fieldType === 'select' ? (
+                    <select
+                      id={`q-${q.questionKey}`}
+                      value={typeof value === 'string' ? value : ''}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
+                      aria-invalid={!!err}
+                      aria-required={q.isRequired}
+                    >
+                      <option value="">Selectâ€¦</option>
+                      {q.options.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  ) : q.fieldType === 'radio' ? (
+                    <div className="q-choices" role="radiogroup" aria-required={q.isRequired}>
+                      {q.options.map((o) => (
+                        <label key={o} className="q-choice">
+                          <input
+                            type="radio"
+                            name={`q-${q.questionKey}`}
+                            value={o}
+                            checked={value === o}
+                            onChange={() => setAnswer(o)}
+                          />
+                          <span>{o}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : q.fieldType === 'checkbox' ? (
+                    <div className="q-choices">
+                      {q.options.map((o) => {
+                        const list = Array.isArray(value) ? value : [];
+                        return (
+                          <label key={o} className="q-choice">
+                            <input
+                              type="checkbox"
+                              value={o}
+                              checked={list.includes(o)}
+                              onChange={(e) =>
+                                setAnswer(
+                                  e.target.checked ? [...list, o] : list.filter((x) => x !== o),
+                                )
+                              }
+                            />
+                            <span>{o}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <input
+                      id={`q-${q.questionKey}`}
+                      type={q.fieldType === 'number' ? 'number' : 'text'}
+                      maxLength={q.maxLength ?? 255}
+                      placeholder={q.placeholder ?? ''}
+                      value={typeof value === 'string' ? value : ''}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
+                      aria-invalid={!!err}
+                      aria-required={q.isRequired}
+                    />
+                  )}
+
+                  {q.helpText && (
+                    <span className="field-hint" id={`q-${q.questionKey}-help`}>
+                      {q.helpText}
+                    </span>
+                  )}
+                  {err && <span className="error" role="alert">{err}</span>}
+                </div>
+              );
+            })}
+
+            <div className="hp-field" aria-hidden="true">
+              <label htmlFor="r-website">Website</label>
+              <input
+                id="r-website"
+                name="website"
+                tabIndex={-1}
+                autoComplete="off"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+              />
+            </div>
+
+            <button type="submit" className="btn btn-primary" disabled={submitting}>
+              {submitting ? 'Submittingâ€¦' : 'Submit request'}
+            </button>
+          </form>
+        </div>
+      </PublicChrome>
+    );
+  }
+
   // Real counts from the live roster. Null means the workshop has no stated
   // capacity, so the line is omitted rather than inventing a number.
   const availLabel =
@@ -348,7 +595,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
               <dt>Time</dt>
               <dd>
                 {fmtTime(w.startTime)}
-                {w.endTime ? ` – ${fmtTime(w.endTime)}` : ''}
+                {w.endTime ? ` â€“ ${fmtTime(w.endTime)}` : ''}
               </dd>
             </div>
           )}
@@ -369,7 +616,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
               <dt>Credit</dt>
               <dd>
                 {w.credit}
-                {w.ceus ? ` · ${w.ceus} CEUs` : ''}
+                {w.ceus ? ` Â· ${w.ceus} CEUs` : ''}
               </dd>
             </div>
           )}
@@ -611,7 +858,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
                       aria-invalid={!!err}
                       aria-required={q.isRequired}
                     >
-                      <option value="">Select…</option>
+                      <option value="">Selectâ€¦</option>
                       {q.options.map((o) => (
                         <option key={o} value={o}>{o}</option>
                       ))}
@@ -625,7 +872,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
                       aria-invalid={!!err}
                       aria-required={q.isRequired}
                     >
-                      <option value="">Select a session…</option>
+                      <option value="">Select a sessionâ€¦</option>
                       {(data?.sessions ?? []).map((s) => (
                         <option key={s.workshopSessionId} value={s.label}>
                           {s.label}
@@ -731,12 +978,12 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
           )}
 
           <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? 'Registering…' : 'Register'}
+            {submitting ? 'Registeringâ€¦' : 'Register'}
           </button>
 
           {!(link.redirectToPayment && link.paymentUrl) && (
             <p className="field-hint" style={{ marginTop: 12, textAlign: 'center' }}>
-              Payment is arranged separately — registering does not charge you.
+              Payment is arranged separately â€” registering does not charge you.
             </p>
           )}
         </form>

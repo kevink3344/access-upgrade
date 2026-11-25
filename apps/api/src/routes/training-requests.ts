@@ -41,6 +41,7 @@ const writeSchema = z.object({
     .refine((v) => v === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Enter a valid email')
     .nullable()
     .optional(),
+  description: z.string().max(4000).nullable().optional(),
   participantCount: z.string().max(255).nullable().optional(),
   invoiceNum: z.string().max(10).nullable().optional(),
   invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullable().optional(),
@@ -57,6 +58,7 @@ const COLUMNS: Record<string, { column: string; type: () => SqlParam['type'] }> 
   requestPhone: { column: 'RequestPhone', type: () => sql.NVarChar(14) },
   requestExt: { column: 'RequestExt', type: () => sql.Int },
   requestEmail: { column: 'RequestEmail', type: () => sql.NVarChar(100) },
+  description: { column: 'Description', type: () => sql.NVarChar(sql.MAX) },
   participantCount: { column: 'ParticipantCount', type: () => sql.NVarChar(255) },
   invoiceNum: { column: 'InvoiceNum', type: () => sql.NVarChar(10) },
   invoiceDate: { column: 'InvoiceDate', type: () => sql.Date },
@@ -126,7 +128,7 @@ trainingRequestsRouter.get('/', requireAuth, async (req, res, next) => {
 
     if (q) {
       where.push(
-        '(a.AgencyName LIKE @q OR t.RequestedBy LIKE @q OR t.InvoiceNum LIKE @q OR t.RequestEmail LIKE @q)',
+        '(a.AgencyName LIKE @q OR t.RequestedBy LIKE @q OR t.InvoiceNum LIKE @q OR t.RequestEmail LIKE @q OR t.Description LIKE @q)',
       );
       params.q = { type: sql.NVarChar(260), value: `%${q}%` };
     }
@@ -156,13 +158,14 @@ trainingRequestsRouter.get('/', requireAuth, async (req, res, next) => {
               SUM(CASE WHEN t.InvoiceNum IS NULL THEN 1 ELSE 0 END) AS uninvoiced
          FROM core.TrainingRequest t
          LEFT JOIN core.Agency a ON a.AgencyID = t.AgencyID
-        WHERE ${q ? '(a.AgencyName LIKE @q OR t.RequestedBy LIKE @q OR t.InvoiceNum LIKE @q OR t.RequestEmail LIKE @q)' : '1 = 1'}`,
+        WHERE ${q ? '(a.AgencyName LIKE @q OR t.RequestedBy LIKE @q OR t.InvoiceNum LIKE @q OR t.RequestEmail LIKE @q OR t.Description LIKE @q)' : '1 = 1'}`,
       q ? { q: { type: sql.NVarChar(260), value: `%${q}%` } } : {},
     );
 
     const rows = await query(
       `SELECT t.TrainingRequestID, t.AgencyID, a.AgencyName,
               t.RequestDate, t.RequestedBy, t.RequestEmail, t.RequestPhone,
+              t.Description,
               t.ParticipantCount, t.InvoiceNum, t.InvoiceDate, t.DueDate,
               t.AmtDue, t.IsActive,
               (SELECT COUNT(*) FROM core.TrainingRequestQuote qq

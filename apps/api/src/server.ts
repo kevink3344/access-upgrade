@@ -30,6 +30,7 @@ import { reportsRouter } from './routes/reports.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { formsRouter } from './routes/forms.js';
+import { formLinkRouter } from './routes/form-link.js';
 import { trainingRequestsRouter } from './routes/training-requests.js';
 import { creditSlipsRouter } from './routes/credit-slips.js';
 import { schoolCashRouter } from './routes/schoolcash.js';
@@ -224,6 +225,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/forms', formsRouter);
+app.use('/api/forms/:id/link', formLinkRouter);
 app.use('/api/training-requests', trainingRequestsRouter);
 app.use('/api/credit-slips', creditSlipsRouter);
 // The School Cash upload is the raw CSV as text/plain, not multipart, so it

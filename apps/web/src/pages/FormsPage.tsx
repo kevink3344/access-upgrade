@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { FormTemplateKind } from '@pe/shared';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { AppShell } from '../components/AppShell';
@@ -20,6 +21,7 @@ export function FormsPage() {
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const [newKind, setNewKind] = useState<FormTemplateKind>('registration');
   const [notice, setNotice] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
 
@@ -37,10 +39,11 @@ export function FormsPage() {
   }
 
   const create = useMutation({
-    mutationFn: () => api.forms.create({ name: newName.trim() }),
+    mutationFn: () => api.forms.create({ name: newName.trim(), kind: newKind }),
     onSuccess: (r) => {
       setCreating(false);
       setNewName('');
+      setNewKind('registration');
       setNotice(null);
       qc.invalidateQueries({ queryKey: ['forms'] });
       openEditor(r.formTemplateId);
@@ -117,6 +120,23 @@ export function FormsPage() {
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="e.g. Standard Registration Form"
               />
+            </div>
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label htmlFor="new-form-kind">Stores submissions as</label>
+              <select
+                id="new-form-kind"
+                className="input"
+                value={newKind}
+                onChange={(e) => setNewKind(e.target.value as FormTemplateKind)}
+              >
+                <option value="registration">Workshop registration</option>
+                <option value="trainingRequest">Training request</option>
+              </select>
+              <span className="field-hint">
+                {newKind === 'trainingRequest'
+                  ? 'Submissions appear on the Training requests screen.'
+                  : 'Submissions create a participant and a registration.'}
+              </span>
             </div>
             <div className="row-actions">
               <button

@@ -349,6 +349,22 @@ export const api = {
         `/api/workshops/${workshopId}/registration-link`,
       ),
 
+    /** A standalone form's public link — no workshop involved. */
+    getForForm: (formTemplateId: number) =>
+      request<import('@pe/shared').FormLinkState>(`/api/forms/${formTemplateId}/link`),
+
+    createForForm: (formTemplateId: number, body: { rotate?: boolean } = {}) =>
+      request<{ registrationLinkId: number; slug: string; url: string; isActive: boolean }>(
+        `/api/forms/${formTemplateId}/link`,
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+
+    updateForForm: (formTemplateId: number, body: { isActive?: boolean }) =>
+      request<{ ok: true }>(`/api/forms/${formTemplateId}/link`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+
     create: (workshopId: number, body: { rotate?: boolean; webSeatCap?: number | null } = {}) =>
       request<{ registrationLinkId: number; slug: string; url: string; isActive: boolean }>(
         `/api/workshops/${workshopId}/registration-link`,
@@ -675,7 +691,11 @@ export const api = {
         `/api/forms${includeArchived ? '?includeArchived=true' : ''}`,
       ),
 
-    create: (body: { name: string; description?: string | null }) =>
+    create: (body: {
+      name: string;
+      description?: string | null;
+      kind?: import('@pe/shared').FormTemplateKind;
+    }) =>
       request<{ formTemplateId: number; versionId: number }>('/api/forms', {
         method: 'POST',
         body: JSON.stringify(body),
