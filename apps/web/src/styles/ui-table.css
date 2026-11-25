@@ -158,11 +158,3 @@
   .drawer-wide { width: 100%; }
   .field-row { grid-template-columns: 1fr; }
 }
-
-/* A row reached by a deep link (a payment traced back to its School Cash
-   line). Marked so the eye lands on it after the scroll, and outlined rather
-   than filled so the zebra striping stays readable. */
-.data-table tbody tr.is-focus-row {
-  background: var(--badge-green-bg, #eef7c9);
-  box-shadow: inset 3px 0 0 var(--primary-color);
-}

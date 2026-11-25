@@ -424,14 +424,12 @@ export function SchoolCashReview({
                 {visible.map((r) => {
                   // ScoRowID is a BIGINT, which the driver hands back as a
                   // string, so compare as strings rather than by identity.
+                  // The row is scrolled to, not tinted — the table's own
+                  // striping is what tells staff where they are.
                   const isFocus =
                     focusRowId !== null && String(focusRowId) === String(r.ScoRowID);
                   return (
-                  <tr
-                    key={r.ScoRowID}
-                    ref={isFocus ? focusRef : undefined}
-                    className={isFocus ? 'is-focus-row' : undefined}
-                  >
+                  <tr key={r.ScoRowID} ref={isFocus ? focusRef : undefined}>
                     <td data-label="Purchaser">
                       {r.PurchaserName ?? 'Unknown purchaser'}
                       <div className="muted" style={{ fontSize: 12 }}>{r.PurchaserEmail ?? '—'}</div>
