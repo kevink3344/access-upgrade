@@ -6,7 +6,19 @@ import { z } from 'zod';
  * a confusing runtime error later.
  */
 const schema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  /**
+   * Only three values are meaningful, but a typo here must not stop the app.
+   *
+   * `NODE_ENV=staging` is a natural mistake on an App Service slot, and
+   * rejecting it made the process exit before it could listen - the site then
+   * answered 503, which reads as a missing-configuration problem rather than a
+   * bad value. Anything unrecognised is treated as production, the safe
+   * default: secure cookies and no error details in responses.
+   */
+  NODE_ENV: z
+    .string()
+    .optional()
+    .transform((v) => (v === 'development' || v === 'test' ? v : 'production')),
   PORT: z.coerce.number().int().positive().default(3001),
 
   /**
@@ -50,7 +62,13 @@ if (!parsed.success) {
   } else {
     console.error('\n❌ Invalid environment configuration:\n');
     for (const issue of parsed.error.issues) {
-      console.error(`   ${issue.path.join('.')}: ${issue.message}`);
+      const name = issue.path.join('.');
+      // Name the offending value, not just the missing ones. A wrong value is
+      // indistinguishable from a missing one in a 503, and that costs real
+      // time to diagnose from the outside.
+      const given = process.env[name];
+      const detail = given === undefined ? '(not set)' : `got "${given}"`;
+      console.error(`   ${name}: ${issue.message} ${detail}`);
     }
     console.error('\n   Copy database/.env.example to apps/api/.env and fill in the values.\n');
     process.exit(1);
