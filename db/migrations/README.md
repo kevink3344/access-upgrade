@@ -36,12 +36,25 @@ Examples: `001-add-participant-pronouns.sql`, `002-widen-agency-name.sql`.
 
 3. **Update `db/schema.sql`** so a from-scratch build produces the same result.
 
-4. **Verify:**
+4. **Verify both the schemas and the code:**
 
    ```powershell
-   powershell -File db/etl/compare-schema.ps1
+   powershell -File db/etl/compare-schema.ps1     # schemas match
+   powershell -File db/etl/verify-inserts.ps1     # code works on both
    ```
 
-   Must report `NO DRIFT`.
+   The first must report `NO DRIFT`. The second runs every create statement
+   against both databases inside a rollback, and fails if one works on only
+   one of them.
+
+5. **If the migration changes how a column is generated** — identity, a
+   default, a computed expression — say in the header which code depends on
+   it. Migration 025 added IDENTITY and its header claimed the application
+   "no longer" allocated ids, but the code still did. Nothing compared the
+   claim to the code, and both databases ended up in a state where every
+   create failed.
+
+Both checks run in the deploy workflow, and a failure stops the deploy before
+it reaches a slot.
 
 See [docs/features/schema-environments.md](../../docs/features/schema-environments.md).

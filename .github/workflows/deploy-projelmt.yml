@@ -22,9 +22,73 @@ env:
   AZURE_WEBAPP_SLOT: dev
 
 jobs:
+  # Refuses to deploy when production and test have drifted apart.
+  #
+  # A schema difference is not cosmetic: migration 025 added IDENTITY to
+  # Participant and Registration on test only, and the code was written
+  # against test. It deployed cleanly and then every create failed in
+  # production with "Cannot insert the value NULL". compare-schema.ps1 caught
+  # it the whole time - nothing ran it. This job is that missing step.
+  #
+  # Runs first and gates the build, so a drifted schema never reaches a slot.
+  schema-drift:
+    name: Schema drift check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # compare-schema.ps1 shells out to sqlcmd, which is not on the runner.
+      - name: Install sqlcmd
+        run: |
+          curl -sSL https://packages.microsoft.com/keys/microsoft.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+          curl -sSL https://packages.microsoft.com/config/ubuntu/22.04/prod.list \
+            | sudo tee /etc/apt/sources.list.d/mssql-release.list > /dev/null
+          sudo apt-get update -qq
+          sudo ACCEPT_EULA=Y apt-get install -y -qq mssql-tools18 unixodbc-dev
+          echo "/opt/mssql-tools18/bin" >> $GITHUB_PATH
+
+      # The check reads apps/api/.env, which is gitignored. Recreate it from
+      # repository secrets rather than committing credentials.
+      - name: Write connection settings
+        run: |
+          {
+            echo "AZURE_SQL_SERVER=${{ secrets.AZURE_SQL_SERVER }}"
+            echo "AZURE_SQL_DATABASE=${{ secrets.AZURE_SQL_DATABASE }}"
+            echo "AZURE_SQL_USER=${{ secrets.AZURE_SQL_USER }}"
+            echo "AZURE_SQL_PASSWORD=${{ secrets.AZURE_SQL_PASSWORD }}"
+            echo "AZURE_SQL_SERVER_PROD=${{ secrets.AZURE_SQL_SERVER_PROD }}"
+            echo "AZURE_SQL_DATABASE_PROD=${{ secrets.AZURE_SQL_DATABASE_PROD }}"
+            echo "AZURE_SQL_USER_PROD=${{ secrets.AZURE_SQL_USER_PROD }}"
+            echo "AZURE_SQL_PASSWORD_PROD=${{ secrets.AZURE_SQL_PASSWORD_PROD }}"
+          } > apps/api/.env
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The two schemas must be identical.
+      - name: Compare test and production schema
+        shell: pwsh
+        run: ./db/etl/compare-schema.ps1
+
+      # The code must work against both. Catches the case where the schemas
+      # match but an INSERT is written for only one of them.
+      - name: Verify create statements on both databases
+        shell: pwsh
+        run: ./db/etl/verify-inserts.ps1
+
   build:
     name: Build
     runs-on: ubuntu-latest
+    needs: schema-drift
     permissions:
       contents: read
 

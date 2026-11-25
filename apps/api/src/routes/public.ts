@@ -632,19 +632,16 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
       );
     } else {
       const created = await query<{ ParticipantID: number }>(
-        // ParticipantID is a legacy plain int, not IDENTITY, so the id is
-        // allocated inside the INSERT (see db/migrations/019). Omitting it
-        // works on the test database, which has IDENTITY, and fails in
-        // production with "Cannot insert the value NULL".
+        // ParticipantID is IDENTITY (migration 025): the database allocates
+        // it, so the id is omitted.
         `INSERT INTO core.Participant
-                (ParticipantID, FirstName, LastName, Email, HomePhone, AgencyID, GradeLevel,
+                (FirstName, LastName, Email, HomePhone, AgencyID, GradeLevel,
                  ChildrenAges, SecondCaregiverInfo,
                  IsTeacherMailingList, IsParentMailingList, DateOfEntry)
          OUTPUT INSERTED.ParticipantID
-         SELECT ISNULL(MAX(ParticipantID), 0) + 1, @fn, @ln, @email, @phone, @agency, @classAges,
-                @childrenAges, @secondCaregiver,
-                @teacher, @parent, SYSUTCDATETIME()
-           FROM core.Participant WITH (UPDLOCK, HOLDLOCK)`,
+         VALUES (@fn, @ln, @email, @phone, @agency, @classAges,
+                 @childrenAges, @secondCaregiver,
+                 @teacher, @parent, SYSUTCDATETIME())`,
         {
           fn: { type: sql.NVarChar(30), value: data.firstName!.trim() },
           ln: { type: sql.NVarChar(30), value: data.lastName!.trim() },
@@ -697,15 +694,12 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
       };
 
       const created = await query<{ RegistrationID: number }>(
-        // RegistrationID is a legacy plain int, not IDENTITY; allocate it in
-        // the INSERT (see db/migrations/019).
+        // RegistrationID is IDENTITY (migration 025): omit it.
         `INSERT INTO core.Registration
-                (RegistrationID, ParticipantID, WorkshopID, RegistrationDate, IsCancelled,
+                (ParticipantID, WorkshopID, RegistrationDate, IsCancelled,
                  Attended, EmailConfirmation, Source, RegistrationLinkID, ConfirmationToken, Notes)
          OUTPUT INSERTED.RegistrationID
-         SELECT ISNULL(MAX(RegistrationID), 0) + 1,
-                @pid, @wid, CAST(SYSUTCDATETIME() AS DATE), 0, 0, 0, 'Web', @lid, @token, @notes
-           FROM core.Registration WITH (UPDLOCK, HOLDLOCK)`,
+         VALUES (@pid, @wid, CAST(SYSUTCDATETIME() AS DATE), 0, 0, 0, 'Web', @lid, @token, @notes)`,
         params,
       );
       registrationId = created.recordset[0]!.RegistrationID;

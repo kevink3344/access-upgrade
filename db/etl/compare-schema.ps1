@@ -100,8 +100,13 @@ ORDER BY kind, obj;
     $tmp = [System.IO.Path]::GetTempFileName() + '.sql'
     try {
         $sql | Out-File -FilePath $tmp -Encoding utf8
+        # -C trusts the server certificate. Azure SQL presents a valid chain,
+        # but mssql-tools18 (the Linux package used by CI) encrypts strictly by
+        # default and has no local CA store to verify against; without -C it
+        # fails with a certificate error on the runner. Harmless on Windows,
+        # where mssql-tools17 ignores it.
         $out = & sqlcmd -S $Settings.Server -d $Settings.Database -U $Settings.User -P $Settings.Password `
-                        -i $tmp -b -W -s '~' -h -1 2>&1
+                        -i $tmp -b -W -s '~' -h -1 -C 2>&1
         if ($LASTEXITCODE -ne 0) { throw "Fingerprint failed on $($Settings.Database):`n$($out -join "`n")" }
         return ($out | Where-Object { $_ -match '~' } | ForEach-Object { $_.Trim() })
     } finally {

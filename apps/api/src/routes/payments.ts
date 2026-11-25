@@ -373,17 +373,12 @@ paymentsRouter.post(
           registrationId = found.RegistrationID;
         } else {
           const created = await query<{ RegistrationID: number }>(
-            // RegistrationID is a legacy plain int, not IDENTITY, so the id is
-            // allocated inside the INSERT (see db/migrations/019). The test
-            // database has IDENTITY here; production does not, so omitting the
-            // id passes in test and fails in production.
+            // RegistrationID is IDENTITY (migration 025): omit it.
             `INSERT INTO core.Registration
-                    (RegistrationID, ParticipantID, WorkshopID, RegistrationDate, IsCancelled,
+                    (ParticipantID, WorkshopID, RegistrationDate, IsCancelled,
                      IsLate, Attended, EmailConfirmation, Source, ${PAY_COLUMNS})
              OUTPUT INSERTED.RegistrationID
-             SELECT ISNULL(MAX(RegistrationID), 0) + 1,
-                    @pid, @wid, CAST(SYSUTCDATETIME() AS DATE), 0, 0, 0, 0, 'Manual', ${PAY_VALUES}
-               FROM core.Registration WITH (UPDLOCK, HOLDLOCK)`,
+             VALUES (@pid, @wid, CAST(SYSUTCDATETIME() AS DATE), 0, 0, 0, 0, 'Manual', ${PAY_VALUES})`,
             {
               ...payParams,
               pid: { type: sql.Int, value: d.participantId },
@@ -398,14 +393,12 @@ paymentsRouter.post(
         // shape the legacy data uses for payments that were never tied to a
         // workshop.
         const created = await query<{ RegistrationID: number }>(
-          // Same legacy key as above: allocate RegistrationID in the INSERT.
+          // Same IDENTITY key as above: omit RegistrationID.
           `INSERT INTO core.Registration
-                  (RegistrationID, ParticipantID, RegistrationDate, IsCancelled, IsLate, Attended,
+                  (ParticipantID, RegistrationDate, IsCancelled, IsLate, Attended,
                    EmailConfirmation, Source, ${PAY_COLUMNS})
            OUTPUT INSERTED.RegistrationID
-           SELECT ISNULL(MAX(RegistrationID), 0) + 1,
-                  @pid, CAST(SYSUTCDATETIME() AS DATE), 0, 0, 0, 0, 'Manual', ${PAY_VALUES}
-             FROM core.Registration WITH (UPDLOCK, HOLDLOCK)`,
+           VALUES (@pid, CAST(SYSUTCDATETIME() AS DATE), 0, 0, 0, 0, 'Manual', ${PAY_VALUES})`,
           { ...payParams, pid: { type: sql.Int, value: d.participantId } },
         );
         registrationId = created.recordset[0]!.RegistrationID;
