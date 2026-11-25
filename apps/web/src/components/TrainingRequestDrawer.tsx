@@ -62,6 +62,10 @@ export function TrainingRequestDrawer({
 
   const [contactDate, setContactDate] = useState('');
   const [contactNote, setContactNote] = useState('');
+  /** Which tab is showing. Only meaningful when editing an existing request. */
+  const [tab, setTab] = useState<'request' | 'quotes' | 'scheduled' | 'payments' | 'contacts'>(
+    'request',
+  );
 
   const { data: existing, isLoading } = useQuery({
     queryKey: ['training-request', trainingRequestId],
@@ -77,6 +81,7 @@ export function TrainingRequestDrawer({
       requestPhone: existing.RequestPhone ?? '',
       requestExt: existing.RequestExt?.toString() ?? '',
       requestEmail: existing.RequestEmail ?? '',
+      description: existing.Description ?? '',
       participantCount: existing.ParticipantCount ?? '',
       invoiceNum: existing.InvoiceNum ?? '',
       invoiceDate: dateInput(existing.InvoiceDate),
@@ -116,6 +121,7 @@ export function TrainingRequestDrawer({
         requestPhone: str(form.requestPhone),
         requestExt: num(form.requestExt),
         requestEmail: str(form.requestEmail),
+        description: str(form.description),
         participantCount: str(form.participantCount),
         invoiceNum: str(form.invoiceNum),
         invoiceDate: str(form.invoiceDate),
@@ -199,14 +205,93 @@ export function TrainingRequestDrawer({
           </button>
         </header>
 
+        {isEdit && existing && (
+          <div className="drawer-tabs" role="tablist" aria-label="Training request sections">
+            <button
+              type="button"
+              role="tab"
+              id="tab-request"
+              className="drawer-tab"
+              aria-selected={tab === 'request'}
+              aria-controls="panel-request"
+              onClick={() => setTab('request')}
+            >
+              Request
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-quotes"
+              className="drawer-tab"
+              aria-selected={tab === 'quotes'}
+              aria-controls="panel-quotes"
+              onClick={() => setTab('quotes')}
+            >
+              Quotes
+              {existing.quotes.length > 0 && (
+                <span className="drawer-tab-count">{existing.quotes.length}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-scheduled"
+              className="drawer-tab"
+              aria-selected={tab === 'scheduled'}
+              aria-controls="panel-scheduled"
+              onClick={() => setTab('scheduled')}
+            >
+              Scheduled workshops
+              {existing.scheduled.length > 0 && (
+                <span className="drawer-tab-count">{existing.scheduled.length}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-payments"
+              className="drawer-tab"
+              aria-selected={tab === 'payments'}
+              aria-controls="panel-payments"
+              onClick={() => setTab('payments')}
+            >
+              Payments
+              {existing.payments.length > 0 && (
+                <span className="drawer-tab-count">{existing.payments.length}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-contacts"
+              className="drawer-tab"
+              aria-selected={tab === 'contacts'}
+              aria-controls="panel-contacts"
+              onClick={() => setTab('contacts')}
+            >
+              Contact log
+              {existing.contacts.length > 0 && (
+                <span className="drawer-tab-count">{existing.contacts.length}</span>
+              )}
+            </button>
+          </div>
+        )}
+
         {isEdit && isLoading ? (
           <div className="drawer-body">
             {[0, 1, 2].map((i) => (
               <div key={i} className="skeleton" style={{ height: 44, marginBottom: 12 }} />
             ))}
           </div>
-        ) : (
-          <form className="drawer-body" onSubmit={onSubmit} noValidate>
+        ) : !isEdit || tab === 'request' ? (
+          <form
+            className="drawer-body"
+            onSubmit={onSubmit}
+            noValidate
+            role="tabpanel"
+            id="panel-request"
+            aria-labelledby="tab-request"
+          >
             {formError && (
               <div className="alert alert-error" role="alert">
                 <IconAlert width={18} height={18} />
@@ -226,6 +311,18 @@ export function TrainingRequestDrawer({
                   onChange={(id, label) => setAgency({ id, label })}
                   disabled={!canEdit}
                   placeholder="Start typing the agency…"
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="tr-desc">Description</label>
+                <textarea
+                  id="tr-desc"
+                  rows={3}
+                  maxLength={4000}
+                  placeholder="What training was requested?"
+                  value={form.description ?? ''}
+                  onChange={(e) => set('description', e.target.value)}
                 />
               </div>
 
@@ -386,10 +483,15 @@ export function TrainingRequestDrawer({
               </div>
             )}
           </form>
-        )}
+        ) : null}
 
-        {isEdit && existing && (
-          <div className="drawer-body">
+        {isEdit && existing && tab === 'quotes' && (
+          <div
+            className="drawer-body"
+            role="tabpanel"
+            id="panel-quotes"
+            aria-labelledby="tab-quotes"
+          >
             <div className="tab-section">
               <fieldset className="fieldset"><legend>Quotes ({existing.quotes.length})</legend>
               {existing.quotes.length === 0 ? (
@@ -430,7 +532,16 @@ export function TrainingRequestDrawer({
               )}
               </fieldset>
             </div>
+          </div>
+        )}
 
+        {isEdit && existing && tab === 'scheduled' && (
+          <div
+            className="drawer-body"
+            role="tabpanel"
+            id="panel-scheduled"
+            aria-labelledby="tab-scheduled"
+          >
             <div className="tab-section">
               <fieldset className="fieldset"><legend>Scheduled workshops ({existing.scheduled.length})</legend>
               {existing.scheduled.length === 0 ? (
@@ -456,7 +567,16 @@ export function TrainingRequestDrawer({
               )}
               </fieldset>
             </div>
+          </div>
+        )}
 
+        {isEdit && existing && tab === 'payments' && (
+          <div
+            className="drawer-body"
+            role="tabpanel"
+            id="panel-payments"
+            aria-labelledby="tab-payments"
+          >
             <div className="tab-section">
               <fieldset className="fieldset"><legend>Payments ({existing.payments.length})</legend>
               {existing.payments.length === 0 ? (
@@ -483,7 +603,16 @@ export function TrainingRequestDrawer({
               )}
               </fieldset>
             </div>
+          </div>
+        )}
 
+        {isEdit && existing && tab === 'contacts' && (
+          <div
+            className="drawer-body"
+            role="tabpanel"
+            id="panel-contacts"
+            aria-labelledby="tab-contacts"
+          >
             <div className="tab-section">
               <fieldset className="fieldset"><legend>Contact log ({existing.contacts.length})</legend>
 
