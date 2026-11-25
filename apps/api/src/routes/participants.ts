@@ -489,15 +489,23 @@ participantsRouter.post('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', 'M
       params[key] = { type: paramType(col), value: value ?? null };
     }
 
-    // ParticipantID is IDENTITY (migration 019): the database allocates it, so
-    // two concurrent creates cannot collide on the primary key.
+    // ParticipantID is a legacy plain int, NOT IDENTITY. Migration 019 left it
+    // that way and moved allocation into the INSERT: the read and the write
+    // are one statement, and the locks hold until it commits, so two
+    // concurrent creates cannot collide. The test database happens to have
+    // IDENTITY on this column, which is why omitting the id passed there and
+    // failed in production with "Cannot insert the value NULL".
+    cols.unshift('ParticipantID');
+    vals.unshift('ISNULL(MAX(ParticipantID), 0) + 1');
+
     cols.push('DateOfEntry');
     vals.push('SYSUTCDATETIME()');
 
     const created = await query<{ ParticipantID: number }>(
       `INSERT INTO core.Participant (${cols.join(', ')})
        OUTPUT INSERTED.ParticipantID
-       VALUES (${vals.join(', ')})`,
+       SELECT ${vals.join(', ')}
+         FROM core.Participant WITH (UPDLOCK, HOLDLOCK)`,
       params,
     );
 

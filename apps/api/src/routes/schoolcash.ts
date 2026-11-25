@@ -661,12 +661,18 @@ async function createRegistrationFor(
 
   if (participantId === null) {
     const name = splitName(row.PurchaserName);
+    // ParticipantID is a legacy plain int, not IDENTITY, so the id is
+    // allocated inside the INSERT — the same pattern as the other legacy keys
+    // (see db/migrations/019). Production does not have IDENTITY on this
+    // column even though the test database does, so omitting the id works in
+    // test and fails in production with "Cannot insert the value NULL".
     const created = await txQuery<{ ParticipantID: number }>(
       tx,
       `INSERT INTO core.Participant
-              (FirstName, LastName, Email, DateOfEntry)
+              (ParticipantID, FirstName, LastName, Email, DateOfEntry)
        OUTPUT INSERTED.ParticipantID AS ParticipantID
-       VALUES (@fn, @ln, @email, SYSUTCDATETIME())`,
+       SELECT ISNULL(MAX(ParticipantID), 0) + 1, @fn, @ln, @email, SYSUTCDATETIME()
+         FROM core.Participant WITH (UPDLOCK, HOLDLOCK)`,
       {
         fn: { type: sql.NVarChar(30), value: name.first },
         ln: { type: sql.NVarChar(30), value: name.last },
@@ -676,13 +682,15 @@ async function createRegistrationFor(
     participantId = created.recordset[0]!.ParticipantID;
   }
 
+  // RegistrationID is a legacy plain int too; allocate it in the INSERT.
   const created = await txQuery<{ RegistrationID: number }>(
     tx,
     `INSERT INTO core.Registration
-            (ParticipantID, WorkshopID, RegistrationDate, IsCancelled,
+            (RegistrationID, ParticipantID, WorkshopID, RegistrationDate, IsCancelled,
              Attended, EmailConfirmation, Source)
      OUTPUT INSERTED.RegistrationID AS RegistrationID
-     VALUES (@pid, @wid, @date, 0, 0, 0, 'SchoolCash')`,
+     SELECT ISNULL(MAX(RegistrationID), 0) + 1, @pid, @wid, @date, 0, 0, 0, 'SchoolCash'
+       FROM core.Registration WITH (UPDLOCK, HOLDLOCK)`,
     {
       pid: { type: sql.Int, value: participantId },
       wid: { type: sql.Int, value: workshopId },

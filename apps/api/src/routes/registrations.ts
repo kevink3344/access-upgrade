@@ -423,12 +423,20 @@ registrationsRouter.post('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', '
     cols.push('Source');
     vals.push("'Manual'");
 
-    // RegistrationID is IDENTITY (migration 019): the database allocates it, so
-    // two concurrent creates cannot collide on the primary key.
+    // RegistrationID is a legacy plain int, NOT IDENTITY. Migration 019 left
+    // it that way and moved allocation into the INSERT: the read and the write
+    // are one statement, and the locks hold until it commits, so two
+    // concurrent creates cannot collide. The test database happens to have
+    // IDENTITY on this column, which is why omitting the id passed there and
+    // failed in production with "Cannot insert the value NULL".
+    cols.unshift('RegistrationID');
+    vals.unshift('ISNULL(MAX(RegistrationID), 0) + 1');
+
     const created = await query<{ RegistrationID: number }>(
       `INSERT INTO core.Registration (${cols.join(', ')})
        OUTPUT INSERTED.RegistrationID
-       VALUES (${vals.join(', ')})`,
+       SELECT ${vals.join(', ')}
+         FROM core.Registration WITH (UPDLOCK, HOLDLOCK)`,
       params,
     );
 
