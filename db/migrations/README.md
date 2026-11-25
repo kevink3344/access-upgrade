@@ -54,7 +54,14 @@ Examples: `001-add-participant-pronouns.sql`, `002-widen-agency-name.sql`.
    claim to the code, and both databases ended up in a state where every
    create failed.
 
-Both checks run in the deploy workflow, and a failure stops the deploy before
-it reaches a slot.
+**These checks are run by hand, not by CI.** The deploy workflow deliberately
+has no database credentials — they live in the App Service application
+settings, which a GitHub runner cannot see — so nothing enforces this. That is
+exactly how migration 025 reached production alone: the check existed and
+nobody ran it.
+
+So: run both before every deploy that includes a migration, and treat a
+failure as blocking. If the checks are ever wired into CI, the runner will
+need its own read-only SQL login, not the writer credential.
 
 See [docs/features/schema-environments.md](../../docs/features/schema-environments.md).
