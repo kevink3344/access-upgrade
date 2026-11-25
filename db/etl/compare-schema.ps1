@@ -25,6 +25,19 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Where sqlcmd lives. On the Linux CI runner the package installs to
+# /opt/mssql-tools18/bin and that directory may not be on PATH yet, so the
+# known location is checked before falling back to a bare command name.
+$script:SqlcmdPath = if (Get-Command sqlcmd -ErrorAction SilentlyContinue) {
+    'sqlcmd'
+} elseif (Test-Path '/opt/mssql-tools18/bin/sqlcmd') {
+    '/opt/mssql-tools18/bin/sqlcmd'
+} elseif (Test-Path '/opt/mssql-tools/bin/sqlcmd') {
+    '/opt/mssql-tools/bin/sqlcmd'
+} else {
+    'sqlcmd'
+}
+
 $envFile = Join-Path $PSScriptRoot '..\..\apps\api\.env'
 $cfg = @{}
 Get-Content $envFile | Where-Object { $_ -match '^\s*[A-Z_]+\s*=' } | ForEach-Object {
@@ -99,14 +112,22 @@ ORDER BY kind, obj;
 '@
     $tmp = [System.IO.Path]::GetTempFileName() + '.sql'
     try {
-        $sql | Out-File -FilePath $tmp -Encoding utf8
+        # Written as UTF-8 WITHOUT a BOM. `Out-File -Encoding utf8` in Windows
+        # PowerShell 5.1 emits a BOM, which the Windows sqlcmd tolerates but
+        # the Linux mssql-tools18 build rejects, so the CI run failed on the
+        # first statement while the same script passed locally.
+        [System.IO.File]::WriteAllText($tmp, $sql, (New-Object System.Text.UTF8Encoding($false)))
         # -C trusts the server certificate. Azure SQL presents a valid chain,
         # but mssql-tools18 (the Linux package used by CI) encrypts strictly by
         # default and has no local CA store to verify against; without -C it
         # fails with a certificate error on the runner. Harmless on Windows,
         # where mssql-tools17 ignores it.
-        $out = & sqlcmd -S $Settings.Server -d $Settings.Database -U $Settings.User -P $Settings.Password `
-                        -i $tmp -b -W -s '~' -h -1 -C 2>&1
+        # Resolved explicitly: on the Linux runner the tool lives in
+        # /opt/mssql-tools18/bin, and a step that appends to GITHUB_PATH only
+        # takes effect for later steps, not the one that set it.
+        $exe = if ($script:SqlcmdPath) { $script:SqlcmdPath } else { 'sqlcmd' }
+        $out = & $exe -S $Settings.Server -d $Settings.Database -U $Settings.User -P $Settings.Password `
+                      -i $tmp -b -W -s '~' -h -1 -C 2>&1
         if ($LASTEXITCODE -ne 0) { throw "Fingerprint failed on $($Settings.Database):`n$($out -join "`n")" }
         return ($out | Where-Object { $_ -match '~' } | ForEach-Object { $_.Trim() })
     } finally {
