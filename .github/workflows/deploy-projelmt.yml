@@ -92,13 +92,17 @@ jobs:
       - name: Compare test and production schema
         shell: pwsh
         run: |
-          $out = & ./db/etl/compare-schema.ps1 2>&1 | Out-String
+          # Captured rather than piped so the reason survives even when the
+          # script dies before its own try/catch - a failure there printed
+          # nothing and the annotation came out empty.
+          $out = & ./db/etl/compare-schema.ps1 *>&1 | Out-String
           $code = $LASTEXITCODE
           Write-Host $out
           if ($code -ne 0) {
-              $first = ($out -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 3) -join ' / '
-              Write-Host "::error::Schema comparison failed: $first"
-              exit $code
+              $reason = ($out -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 4) -join ' | '
+              if (-not $reason) { $reason = "(no output; exit $code)" }
+              Write-Host "::error::Schema comparison failed: $reason"
+              exit 1
           }
 
       # The code must work against both. Catches the case where the schemas

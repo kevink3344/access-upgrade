@@ -38,7 +38,25 @@ $script:SqlcmdPath = if (Get-Command sqlcmd -ErrorAction SilentlyContinue) {
     'sqlcmd'
 }
 
-$envFile = Join-Path $PSScriptRoot '..\..\apps\api\.env'
+# The repo root is found by walking up for apps/api/.env rather than by
+# stepping a fixed number of directories. On the Linux runner the path
+# separator in a hard-coded '..\..\' is not a separator, so the file was never
+# found and the script died before printing anything - which is why the CI
+# failure carried no message.
+$envFile = $null
+$dir = $PSScriptRoot
+while ($dir -and -not $envFile) {
+    $candidate = Join-Path (Join-Path (Join-Path $dir 'apps') 'api') '.env'
+    if (Test-Path $candidate) { $envFile = $candidate; break }
+    $parent = Split-Path $dir -Parent
+    if ($parent -eq $dir) { break }
+    $dir = $parent
+}
+
+if (-not $envFile) {
+    throw "Could not find apps/api/.env above $PSScriptRoot. The check needs the connection settings for both databases."
+}
+
 $cfg = @{}
 Get-Content $envFile | Where-Object { $_ -match '^\s*[A-Z_]+\s*=' } | ForEach-Object {
     $k, $v = $_ -split '=', 2
