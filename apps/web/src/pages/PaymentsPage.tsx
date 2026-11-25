@@ -348,28 +348,20 @@ export function PaymentsPage() {
                     <td>{p.ReceiptNumber ?? '—'}</td>
                     <td className="num">
                       <span className="row-actions">
-                        {canEdit && (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={() =>
-                              openAddPayment({
-                                id: p.ParticipantID ?? 0,
-                                label:
-                                  [p.FirstName, p.LastName].filter(Boolean).join(' ') ||
-                                  'Unknown participant',
-                              })
-                            }
-                            disabled={!p.ParticipantID}
-                            title={
-                              p.ParticipantID
-                                ? 'Record another payment for this participant'
-                                : 'This registration has no participant'
-                            }
-                          >
-                            Add payment
-                          </button>
-                        )}
+                        {/*
+                          Opens the same record as the participant name. This
+                          screen is the register of payments already taken, so
+                          the action is to look at one — recording a new
+                          payment is the page-level "Add payment" button.
+                        */}
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setDrawerId(p.RegistrationID)}
+                          title="Open this payment record"
+                        >
+                          View
+                        </button>
                       </span>
                     </td>
                   </tr>
