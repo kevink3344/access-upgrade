@@ -431,7 +431,24 @@ export function SchoolCashReview({
                   return (
                   <tr key={r.ScoRowID} ref={isFocus ? focusRef : undefined}>
                     <td data-label="Purchaser">
-                      {r.PurchaserName ?? 'Unknown purchaser'}
+                      {/*
+                        Once the row has produced a payment, the purchaser name
+                        is the way back to the money: it opens that
+                        registration's record on Payments & receipts. Before
+                        that there is nothing to link to, so it stays plain
+                        text.
+                      */}
+                      {r.AppliedPaymentID !== null && r.MatchedRegistrationID !== null ? (
+                        <a
+                          className="link-button"
+                          href={`/payments?edit=${r.MatchedRegistrationID}`}
+                          title="Open this payment on Payments & receipts"
+                        >
+                          {r.PurchaserName ?? 'Unknown purchaser'}
+                        </a>
+                      ) : (
+                        (r.PurchaserName ?? 'Unknown purchaser')
+                      )}
                       <div className="muted" style={{ fontSize: 12 }}>{r.PurchaserEmail ?? '—'}</div>
                       {r.PurchaserFound === 0 && (
                         <span className="pill pill-full" style={{ marginTop: 4 }}>Not found</span>
