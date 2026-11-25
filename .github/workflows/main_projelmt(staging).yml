@@ -90,7 +90,23 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
-      
+
+      # download-artifact does not preserve file modes, so startup.sh arrives
+      # without its executable bit and App Service cannot run it - the site
+      # then answers 503 because nothing is listening. Restore the bit here
+      # rather than asserting it, and fail before deploying if the package is
+      # incomplete.
+      - name: Verify package
+        run: |
+          set -euo pipefail
+          test -f dist/server.js || { echo "::error::dist/server.js missing"; exit 1; }
+          test -f web/dist/index.html || { echo "::error::web/dist/index.html missing"; exit 1; }
+          test -d node_modules || { echo "::error::node_modules missing"; exit 1; }
+          test -f startup.sh || { echo "::error::startup.sh missing"; exit 1; }
+          chmod +x startup.sh
+          test -x startup.sh || { echo "::error::startup.sh is not executable"; exit 1; }
+          echo "Package looks complete."
+
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
