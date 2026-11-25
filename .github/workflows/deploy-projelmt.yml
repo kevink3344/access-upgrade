@@ -63,17 +63,51 @@ jobs:
       # The check reads apps/api/.env, which is gitignored. Recreate it from
       # repository secrets rather than committing credentials.
       - name: Write connection settings
+        # Secrets are passed through env rather than interpolated into the
+        # shell, so a value containing $ or backticks cannot break the script.
+        env:
+          S_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
+          S_DATABASE: ${{ secrets.AZURE_SQL_DATABASE }}
+          S_USER: ${{ secrets.AZURE_SQL_USER }}
+          S_PASSWORD: ${{ secrets.AZURE_SQL_PASSWORD }}
+          P_SERVER: ${{ secrets.AZURE_SQL_SERVER_PROD }}
+          P_DATABASE: ${{ secrets.AZURE_SQL_DATABASE_PROD }}
+          P_USER: ${{ secrets.AZURE_SQL_USER_PROD }}
+          P_PASSWORD: ${{ secrets.AZURE_SQL_PASSWORD_PROD }}
         run: |
+          set -euo pipefail
+
+          # An unset secret expands to an empty string, which would be written
+          # as "AZURE_SQL_SERVER=" and then read as a blank server. The check
+          # would fail with "Login timeout" and name no database, which says
+          # nothing about the real problem. Fail here instead, naming it.
+          check() {
+            if [ -z "${2:-}" ]; then
+              echo "::error::Repository secret $1 is not set. Add it under Settings > Secrets and variables > Actions."
+              exit 1
+            fi
+          }
+          check AZURE_SQL_SERVER "$S_SERVER"
+          check AZURE_SQL_DATABASE "$S_DATABASE"
+          check AZURE_SQL_USER "$S_USER"
+          check AZURE_SQL_PASSWORD "$S_PASSWORD"
+          check AZURE_SQL_SERVER_PROD "$P_SERVER"
+          check AZURE_SQL_DATABASE_PROD "$P_DATABASE"
+          check AZURE_SQL_USER_PROD "$P_USER"
+          check AZURE_SQL_PASSWORD_PROD "$P_PASSWORD"
+
           {
-            echo "AZURE_SQL_SERVER=${{ secrets.AZURE_SQL_SERVER }}"
-            echo "AZURE_SQL_DATABASE=${{ secrets.AZURE_SQL_DATABASE }}"
-            echo "AZURE_SQL_USER=${{ secrets.AZURE_SQL_USER }}"
-            echo "AZURE_SQL_PASSWORD=${{ secrets.AZURE_SQL_PASSWORD }}"
-            echo "AZURE_SQL_SERVER_PROD=${{ secrets.AZURE_SQL_SERVER_PROD }}"
-            echo "AZURE_SQL_DATABASE_PROD=${{ secrets.AZURE_SQL_DATABASE_PROD }}"
-            echo "AZURE_SQL_USER_PROD=${{ secrets.AZURE_SQL_USER_PROD }}"
-            echo "AZURE_SQL_PASSWORD_PROD=${{ secrets.AZURE_SQL_PASSWORD_PROD }}"
+            echo "AZURE_SQL_SERVER=$S_SERVER"
+            echo "AZURE_SQL_DATABASE=$S_DATABASE"
+            echo "AZURE_SQL_USER=$S_USER"
+            echo "AZURE_SQL_PASSWORD=$S_PASSWORD"
+            echo "AZURE_SQL_SERVER_PROD=$P_SERVER"
+            echo "AZURE_SQL_DATABASE_PROD=$P_DATABASE"
+            echo "AZURE_SQL_USER_PROD=$P_USER"
+            echo "AZURE_SQL_PASSWORD_PROD=$P_PASSWORD"
           } > apps/api/.env
+
+          echo "Wrote apps/api/.env with 8 settings."
 
       - uses: actions/setup-node@v4
         with:
