@@ -135,33 +135,54 @@ ORDER BY kind, obj;
     }
 }
 
-Write-Host "Source: $($src.Server) / $($src.Database)" -ForegroundColor Cyan
-Write-Host "Target: $($dst.Server) / $($dst.Database)" -ForegroundColor Cyan
-Write-Host ""
-
-$a = Get-Fingerprint $src
-$b = Get-Fingerprint $dst
-
-$diff = Compare-Object $a $b
-if (-not $diff) {
-    Write-Host "NO DRIFT - $($a.Count) schema objects identical." -ForegroundColor Green
-    exit 0
-}
-
-Write-Host "SCHEMA DRIFT DETECTED" -ForegroundColor Red
-Write-Host ""
-
-$missing = $diff | Where-Object { $_.SideIndicator -eq '<=' }
-$extra   = $diff | Where-Object { $_.SideIndicator -eq '=>' }
-
-if ($missing) {
-    Write-Host "Only in source ($($missing.Count)):" -ForegroundColor Yellow
-    $missing | ForEach-Object { Write-Host "  $($_.InputObject)" }
+# The comparison runs inside a try so a failure can be surfaced where CI
+# shows it. The job log needs admin rights to download, so the error is
+# also written to the step summary - otherwise a failed run says only
+# "step failed" with no reason.
+try {
+    Write-Host "Source: $($src.Server) / $($src.Database)" -ForegroundColor Cyan
+    Write-Host "Target: $($dst.Server) / $($dst.Database)" -ForegroundColor Cyan
     Write-Host ""
+    
+    $a = Get-Fingerprint $src
+    $b = Get-Fingerprint $dst
+    
+    $diff = Compare-Object $a $b
+    if (-not $diff) {
+        Write-Host "NO DRIFT - $($a.Count) schema objects identical." -ForegroundColor Green
+        exit 0
+    }
+    
+    Write-Host "SCHEMA DRIFT DETECTED" -ForegroundColor Red
+    Write-Host ""
+    
+    $missing = $diff | Where-Object { $_.SideIndicator -eq '<=' }
+    $extra   = $diff | Where-Object { $_.SideIndicator -eq '=>' }
+    
+    if ($missing) {
+        Write-Host "Only in source ($($missing.Count)):" -ForegroundColor Yellow
+        $missing | ForEach-Object { Write-Host "  $($_.InputObject)" }
+        Write-Host ""
+    }
+    if ($extra) {
+        Write-Host "Only in target ($($extra.Count)):" -ForegroundColor Yellow
+        $extra | ForEach-Object { Write-Host "  $($_.InputObject)" }
+    }
+    
+    exit 1
 }
-if ($extra) {
-    Write-Host "Only in target ($($extra.Count)):" -ForegroundColor Yellow
-    $extra | ForEach-Object { Write-Host "  $($_.InputObject)" }
-}
+catch {
+    $msg = $_.Exception.Message
+    Write-Host $msg -ForegroundColor Red
+    if ($env:GITHUB_STEP_SUMMARY) {
+        @"
 
-exit 1
+### Schema comparison failed
+
+```
+$msg
+```
+"@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    }
+    exit 1
+}
