@@ -41,15 +41,24 @@ jobs:
       - uses: actions/checkout@v4
 
       # compare-schema.ps1 shells out to sqlcmd, which is not on the runner.
+      #
+      # The Microsoft repo is pinned to the runner's own Ubuntu release rather
+      # than a hard-coded one: ubuntu-latest has moved past 22.04, and a
+      # 22.04 repo list on a 24.04 image either 404s or resolves packages
+      # against the wrong dependency set. $VERSION_ID is read from
+      # /etc/os-release, so this keeps working when the image moves again.
       - name: Install sqlcmd
         run: |
-          curl -sSL https://packages.microsoft.com/keys/microsoft.asc \
-            | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
-          curl -sSL https://packages.microsoft.com/config/ubuntu/22.04/prod.list \
+          set -euo pipefail
+          . /etc/os-release
+          echo "Runner is Ubuntu $VERSION_ID"
+          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+            | sudo gpg --dearmor --yes -o /usr/share/keyrings/microsoft-prod.gpg
+          curl -fsSL "https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/prod.list" \
             | sudo tee /etc/apt/sources.list.d/mssql-release.list > /dev/null
           sudo apt-get update -qq
           sudo ACCEPT_EULA=Y apt-get install -y -qq mssql-tools18 unixodbc-dev
-          echo "/opt/mssql-tools18/bin" >> $GITHUB_PATH
+          echo "/opt/mssql-tools18/bin" >> "$GITHUB_PATH"
 
       # The check reads apps/api/.env, which is gitignored. Recreate it from
       # repository secrets rather than committing credentials.
