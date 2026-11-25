@@ -33,7 +33,7 @@ interface NavGroup {
 }
 
 /**
- * Full navigation, mirroring the Access switchboard (plan Â§7.1) so staff
+ * Full navigation, mirroring the Access switchboard (plan §7.1) so staff
  * recognise where things live. Grouped rather than flat because there are
  * now 16 destinations.
  */
@@ -130,7 +130,7 @@ export function AppShell({
 
   // Keep the document title in sync with the screen.
   useEffect(() => {
-    document.title = `${title} Â· Project Enlightenment`;
+    document.title = `${title} · Project Enlightenment, workshop database`;
   }, [title]);
 
   const isActive = (to: string) =>
@@ -154,7 +154,7 @@ export function AppShell({
             />
             <span className="mark-text">
               <b>Project Enlightenment</b>
-              <small>Training Database</small>
+              <small>Workshop database</small>
             </span>
           </a>
         </div>

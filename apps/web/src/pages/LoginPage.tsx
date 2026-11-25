@@ -82,7 +82,7 @@ export function LoginPage() {
             <span className="login-kicker">Wake County Public School System</span>
             {mode && <span className="login-mode-badge">{mode}</span>}
           </div>
-          <h1>Project Enlightenment Training Database</h1>
+          <h1>Project Enlightenment, workshop database</h1>
           <p>
             Workshop scheduling, participant records, registrations, payments and
             certificates — in one place.
