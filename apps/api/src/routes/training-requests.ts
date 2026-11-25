@@ -325,18 +325,13 @@ trainingRequestsRouter.post('/', requireAuth, requireRole(...EDIT_ROLES), async 
     }
 
     // TrainingRequestID is not IDENTITY — the legacy key was preserved by the
-    // ETL, so new rows take the current maximum + 1.
-    const next = await query<{ NextId: number }>(
-      'SELECT ISNULL(MAX(TrainingRequestID), 0) + 1 AS NextId FROM core.TrainingRequest',
-    );
-    cols.push('TrainingRequestID');
-    vals.push('@nextId');
-    params.nextId = { type: sql.Int, value: next.recordset[0]!.NextId };
-
+    // ETL. The id is allocated in the same statement as the insert, so two
+    // concurrent creates cannot both read the same maximum.
     const created = await query<{ TrainingRequestID: number }>(
-      `INSERT INTO core.TrainingRequest (${cols.join(', ')})
+      `INSERT INTO core.TrainingRequest (TrainingRequestID, ${cols.join(', ')})
        OUTPUT INSERTED.TrainingRequestID
-       VALUES (${vals.join(', ')})`,
+       SELECT ISNULL(MAX(TrainingRequestID), 0) + 1, ${vals.join(', ')}
+         FROM core.TrainingRequest WITH (UPDLOCK, HOLDLOCK)`,
       params,
     );
 
@@ -460,17 +455,13 @@ trainingRequestsRouter.post(
         return;
       }
 
-      const next = await query<{ NextId: number }>(
-        'SELECT ISNULL(MAX(TrainingRequestContactID), 0) + 1 AS NextId FROM core.TrainingRequestContact',
-      );
-
       const created = await query<{ id: number }>(
         `INSERT INTO core.TrainingRequestContact
                 (TrainingRequestContactID, TrainingRequestID, ContactDate, Note)
          OUTPUT INSERTED.TrainingRequestContactID AS id
-         VALUES (@nextId, @id, @date, @note)`,
+         SELECT ISNULL(MAX(TrainingRequestContactID), 0) + 1, @id, @date, @note
+           FROM core.TrainingRequestContact WITH (UPDLOCK, HOLDLOCK)`,
         {
-          nextId: { type: sql.Int, value: next.recordset[0]!.NextId },
           id: { type: sql.Int, value: id },
           date: { type: sql.Date, value: parsed.data.contactDate },
           note: { type: sql.NVarChar(sql.MAX), value: parsed.data.note ?? null },

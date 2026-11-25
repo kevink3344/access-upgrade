@@ -6,12 +6,10 @@ import {
   IconWorkshops,
   IconCatalog,
   IconParticipants,
-  IconAgencies,
   IconPresenters,
   IconRegistrations,
   IconPayments,
   IconCreditSlips,
-  IconSchoolCash,
   IconRequests,
   IconFolder,
   IconReports,
@@ -21,7 +19,7 @@ import {
   IconLayoutSidebar,
 } from './icons';
 import { NotificationBell } from './NotificationBell';
-import { canSeeSettings } from '../settings';
+import { canSeeSettings, isSettingsDestination } from '../settings';
 
 interface NavItem {
   to: string;
@@ -50,13 +48,10 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/workshops', label: 'Workshops', icon: IconWorkshops },
       { to: '/workshop-names', label: 'Workshop catalog', icon: IconCatalog },
-      { to: '/participants', label: 'Participants', icon: IconParticipants },
-      { to: '/agencies', label: 'Agencies', icon: IconAgencies },
       { to: '/presenters', label: 'Presenters & staff', icon: IconPresenters },
       { to: '/registrations', label: 'Registrations', icon: IconRegistrations },
       { to: '/payments', label: 'Payments & receipts', icon: IconPayments },
       { to: '/credit-slips', label: 'Credit slips', icon: IconCreditSlips },
-      { to: '/school-cash', label: 'School Cash matching', icon: IconSchoolCash },
       { to: '/training-requests', label: 'Training requests', icon: IconRequests },
     ],
   },
@@ -75,7 +70,7 @@ const NAV_GROUPS: NavGroup[] = [
 const MOBILE_NAV: NavItem[] = [
   { to: '/', label: 'Home', icon: IconDashboard },
   { to: '/workshops', label: 'Workshops', icon: IconWorkshops },
-  { to: '/participants', label: 'People', icon: IconParticipants },
+  { to: '/admin/participants', label: 'People', icon: IconParticipants },
   { to: '/registrations', label: 'Register', icon: IconRegistrations },
   { to: '/reports', label: 'Reports', icon: IconReports },
 ];
@@ -219,9 +214,7 @@ export function AppShell({
               <a
                 href="/settings"
                 className={`topbar-settings${
-                  currentPath === '/settings' || currentPath.startsWith('/admin') || currentPath === '/api-docs'
-                    ? ' active'
-                    : ''
+                  isSettingsDestination(currentPath, user.role) ? ' active' : ''
                 }`}
                 title="Settings"
                 aria-label="Settings"

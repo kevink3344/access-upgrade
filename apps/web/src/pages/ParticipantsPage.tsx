@@ -25,7 +25,7 @@ export function ParticipantsPage() {
 
   const pageSize = 25;
 
-  // Deep link: /participants?edit=<id>
+  // Deep link: /admin/participants?edit=<id>
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('edit');
     if (id && /^\d+$/.test(id)) {
@@ -90,7 +90,7 @@ export function ParticipantsPage() {
   }
 
   return (
-    <AppShell currentPath="/participants" title="Participants">
+    <AppShell currentPath="/admin/participants" title="Participants">
       <div className="page-head">
         <div>
           <h2>Participants</h2>

@@ -289,18 +289,14 @@ creditSlipsRouter.post('/', requireAuth, requireRole(...EDIT_ROLES), async (req,
       return;
     }
 
-    const next = await query<{ NextId: number }>(
-      'SELECT ISNULL(MAX(CreditSlipID), 0) + 1 AS NextId FROM core.CreditSlip',
-    );
-
     const created = await query<{ CreditSlipID: number }>(
       `INSERT INTO core.CreditSlip
               (CreditSlipID, CreditSlipsCategoryID, ParticipantID, WorkshopID,
                DateIssued, Amount, TrackingYear, Email)
        OUTPUT INSERTED.CreditSlipID
-       VALUES (@id, @cat, @pid, @wid, @issued, @amount, @year, @email)`,
+       SELECT ISNULL(MAX(CreditSlipID), 0) + 1, @cat, @pid, @wid, @issued, @amount, @year, @email
+         FROM core.CreditSlip WITH (UPDLOCK, HOLDLOCK)`,
       {
-        id: { type: sql.Int, value: next.recordset[0]!.NextId },
         cat: { type: sql.Int, value: d.categoryId ?? null },
         pid: { type: sql.Int, value: d.participantId },
         wid: { type: sql.Int, value: d.workshopId ?? null },

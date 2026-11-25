@@ -1,0 +1,215 @@
+/* =====================================================================
+   Folder builder — packet preview.
+
+   Two columns: the packet's options on the left, the pages themselves on
+   the right. The right pane is an iframe showing the real printed document,
+   so its job is only to frame it — the packet owns its own typography.
+   ===================================================================== */
+
+.fb-head {
+  align-items: flex-start;
+}
+
+.fb-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .fb-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.fb-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 12px;
+}
+
+.fb-panel {
+  margin: 0;
+}
+
+.fb-panel-head {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-heading);
+}
+
+.fb-panel-body {
+  padding: 12px 14px;
+}
+
+/* ---- workshop picker ---- */
+
+.fb-workshop-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.fb-workshop {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  padding: 7px 8px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.fb-workshop:hover {
+  background: var(--surface-subtle);
+}
+
+.fb-workshop.is-active {
+  background: var(--badge-green-bg, #eef7c9);
+  border-color: var(--primary-color);
+}
+
+.fb-workshop-code {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary-color);
+  letter-spacing: 0.02em;
+}
+
+.fb-workshop-name {
+  display: block;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text-heading);
+}
+
+.fb-workshop-meta {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.fb-workshop-empty {
+  padding: 10px 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---- packet contents ---- */
+
+.fb-contents {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fb-contents li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.fb-contents-row {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.fb-contents-row input {
+  margin-top: 3px;
+}
+
+.fb-contents-text {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.fb-contents-text strong {
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.fb-contents-pages {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.fb-contents-note {
+  font-size: 11px;
+  color: var(--secondary-color);
+  font-style: italic;
+}
+
+.fb-contents li.is-blank .fb-contents-text strong {
+  color: var(--text-muted);
+}
+
+/* ---- print setup ---- */
+
+.fb-setup {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  margin: 0;
+  align-items: center;
+  font-size: 13px;
+}
+
+.fb-setup dt {
+  color: var(--text-muted);
+}
+
+.fb-setup dd {
+  margin: 0;
+}
+
+.fb-setup select,
+.fb-setup input {
+  width: 100%;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  background: var(--surface-card);
+}
+
+/* ---- preview ---- */
+
+.fb-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fb-preview {
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  background: var(--surface-page);
+  overflow: hidden;
+  min-height: 640px;
+}
+
+.fb-frame {
+  display: block;
+  width: 100%;
+  height: 78vh;
+  min-height: 640px;
+  border: 0;
+  background: #5b6670;
+}

@@ -439,7 +439,9 @@ CREATE TABLE core.Payment (
     -- Provenance for payments created outside this app (see migration 016).
     Source          NVARCHAR(20)   NOT NULL CONSTRAINT DF_Payment_Source DEFAULT 'Manual',
     ExternalReceipt   NVARCHAR(100) NULL,
-    ExternalPaymentId NVARCHAR(100) NULL,
+    -- 400, not 100: this holds the row identity built from the vendor row's
+-- content (see db/migrations/026), which runs past 100 characters.
+ExternalPaymentId NVARCHAR(400) NULL,
     -- The online transaction fee, kept apart from the item price so revenue
     -- reports do not overstate income.
     FeeAmount       DECIMAL(19,4)  NULL

@@ -29,7 +29,7 @@ export function AgenciesPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
 
-  // Deep link: /agencies?edit=<id> opens that agency straight away.
+  // Deep link: /admin/agencies?edit=<id> opens that agency straight away.
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('edit');
     if (id && /^\d+$/.test(id)) {
@@ -73,7 +73,7 @@ export function AgenciesPage() {
   }
 
   return (
-    <AppShell currentPath="/agencies" title="Agencies">
+    <AppShell currentPath="/admin/agencies" title="Agencies">
       <div className="page-head">
         <div>
           <h2>Agencies</h2>

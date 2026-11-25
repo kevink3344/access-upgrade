@@ -20,6 +20,25 @@ export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY);
 }
 
+/**
+ * Query string for a folder packet.
+ *
+ * The preview iframe and the PDF link both need it, and both must describe
+ * the same packet as the JSON call, so the encoding lives in one place.
+ */
+function packetQuery(
+  sections: string[],
+  setup: import('@pe/shared').PacketPrintSetup,
+): string {
+  const qs = new URLSearchParams();
+  if (sections.length) qs.set('sections', sections.join(','));
+  qs.set('paper', setup.paper);
+  qs.set('orientation', setup.orientation);
+  qs.set('margin', String(setup.margin));
+  qs.set('copies', String(setup.copies));
+  return `?${qs.toString()}`;
+}
+
 export function setToken(token: string | null, remember = false): void {
   // Always clear both stores so switching modes can't leave a stale token
   // behind in the other one.
@@ -31,7 +50,7 @@ export function setToken(token: string | null, remember = false): void {
   else sessionStorage.setItem(TOKEN_KEY, token);
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const token = getToken();
 
   const res = await fetch(path, {
@@ -43,6 +62,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init.headers,
     },
   });
+
+  // An expired access token is expected, not a sign-out: exchange the refresh
+  // cookie for a new one and replay the request once. Only a failed refresh
+  // (no cookie, revoked, reused) ends the session.
+  if (res.status === 401 && retry && !path.startsWith('/api/auth/')) {
+    const renewed = await refreshSession();
+    if (renewed) return request<T>(path, init, false);
+  }
 
   if (res.status === 204) return undefined as T;
 
@@ -60,6 +87,40 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 
   return body as T;
+}
+
+/**
+ * Exchange the refresh cookie for a new access token.
+ *
+ * Concurrent 401s would otherwise each fire a refresh; because the token
+ * rotates, the second would present an already-revoked value and the server
+ * would kill the whole session. One in-flight promise is shared instead.
+ */
+let refreshInFlight: Promise<boolean> | null = null;
+
+export function refreshSession(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) return false;
+
+      const body = (await res.json()) as LoginResponse;
+      // Keep the token where it already lived so "remember me" survives.
+      setToken(body.token, localStorage.getItem(TOKEN_KEY) !== null);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
 }
 
 export const api = {
@@ -496,6 +557,11 @@ export const api = {
     get: (registrationId: number) =>
       request<import('@pe/shared').PaymentDetail>(`/api/payments/${registrationId}`),
     summary: () => request<import('@pe/shared').PaymentSummary>('/api/payments/summary'),
+    create: (body: import('@pe/shared').PaymentCreate) =>
+      request<import('@pe/shared').PaymentCreateResponse>('/api/payments', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
     update: (registrationId: number, body: Partial<import('@pe/shared').PaymentWrite>) =>
       request<{ registrationId: number }>(`/api/payments/${registrationId}`, {
         method: 'PATCH',
@@ -632,7 +698,14 @@ export const api = {
         };
       },
     ) =>
-      request<{ ScoItemID: number; WorkshopID: number; ResolvedBy: string }>(
+      request<{
+        ScoItemID: number;
+        WorkshopID: number;
+        ResolvedBy: string;
+        matched: number;
+        review: number;
+        ignored: number;
+      }>(
         `/api/school-cash/items/${itemId}`,
         { method: 'PATCH', body: JSON.stringify(body) },
       ),
@@ -765,6 +838,10 @@ export const api = {
   },
 
   notifications: {
+    /** What the system notifies staff about, plus recent volume. */
+    catalogue: () =>
+      request<import('@pe/shared').NotificationCatalogueResponse>('/api/notifications/catalogue'),
+
     list: (limit = 20, opts: { offset?: number; view?: import('@pe/shared').NotificationView } = {}) => {
       const qs = new URLSearchParams({ limit: String(limit) });
       if (opts.offset) qs.set('offset', String(opts.offset));
@@ -884,6 +961,45 @@ export const api = {
     ) =>
       `/api/certificates/preview/${participantId}?schoolYearId=${schoolYearId}&certificateType=${certificateType}` +
       (templateId ? `&templateId=${templateId}` : ''),
+  },
+
+  folders: {
+    /** Workshops the builder can open, newest first. */
+    workshops: (params: { q?: string; limit?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.limit) qs.set('limit', String(params.limit));
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<{ rows: import('@pe/shared').PacketWorkshopOption[] }>(
+        `/api/folders/workshops${suffix}`,
+      );
+    },
+
+    packet: (
+      workshopId: number,
+      sections: string[],
+      setup: import('@pe/shared').PacketPrintSetup,
+    ) =>
+      request<import('@pe/shared').PacketDetail>(
+        `/api/folders/workshops/${workshopId}/packet${packetQuery(sections, setup)}`,
+      ),
+
+    /**
+     * URL for the HTML preview. Returned as a URL rather than fetched because
+     * it is loaded straight into an iframe, so the browser handles it and the
+     * packet renders in its own document.
+     */
+    previewUrl: (
+      workshopId: number,
+      sections: string[],
+      setup: import('@pe/shared').PacketPrintSetup,
+    ) => `/api/folders/workshops/${workshopId}/preview${packetQuery(sections, setup)}`,
+
+    pdfUrl: (
+      workshopId: number,
+      sections: string[],
+      setup: import('@pe/shared').PacketPrintSetup,
+    ) => `/api/folders/workshops/${workshopId}/pdf${packetQuery(sections, setup)}`,
   },
 
   registrations: {

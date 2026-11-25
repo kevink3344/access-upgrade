@@ -995,10 +995,13 @@ workshopsRouter.post(
       }
 
       // WorkshopPresenterID is not IDENTITY (legacy key preserved by the ETL).
+      // Allocated in the same statement as the insert so concurrent adds
+      // cannot collide.
       const created = await query<{ id: number }>(
         `INSERT INTO core.WorkshopPresenter (WorkshopPresenterID, PresenterID, WorkshopID)
          OUTPUT INSERTED.WorkshopPresenterID AS id
-         VALUES ((SELECT ISNULL(MAX(WorkshopPresenterID), 0) + 1 FROM core.WorkshopPresenter), @p, @w)`,
+         SELECT ISNULL(MAX(WorkshopPresenterID), 0) + 1, @p, @w
+           FROM core.WorkshopPresenter WITH (UPDLOCK, HOLDLOCK)`,
         {
           w: { type: sql.Int, value: id },
           p: { type: sql.Int, value: parsed.data.presenterStaffId },
@@ -1131,8 +1134,9 @@ workshopsRouter.post(
                 (WorkshopSessionID, WorkshopID, SessionDate,
                  StartTime, EndTime, MaxEnrollment, MinEnrollment, Notes)
          OUTPUT INSERTED.WorkshopSessionID AS id
-         VALUES ((SELECT ISNULL(MAX(WorkshopSessionID), 0) + 1 FROM core.WorkshopSession),
-                 @w, @date, @start, @end, @max, @min, @notes)`,
+         SELECT ISNULL(MAX(WorkshopSessionID), 0) + 1,
+                @w, @date, @start, @end, @max, @min, @notes
+           FROM core.WorkshopSession WITH (UPDLOCK, HOLDLOCK)`,
         {
           w: { type: sql.Int, value: id },
           date: { type: sql.Date, value: parsed.data.sessionDate },
@@ -1229,19 +1233,11 @@ workshopsRouter.post(
       await tx.begin();
 
       try {
-        const maxRow = await tx
-          .request()
-          .query<{ NextId: number }>(
-            'SELECT ISNULL(MAX(WorkshopSessionID), 0) + 1 AS NextId FROM core.WorkshopSession',
-          );
-        let nextId = maxRow.recordset[0]!.NextId;
-
         const created: Array<{ workshopSessionId: number; startTime: string; endTime: string }> = [];
 
         for (const slot of plan) {
           const r = await tx
             .request()
-            .input('id', sql.Int, nextId)
             .input('w', sql.Int, id)
             .input('date', sql.Date, sessionDate)
             .input('start', sql.VarChar(8), slot.startTime)
@@ -1252,7 +1248,8 @@ workshopsRouter.post(
                       (WorkshopSessionID, WorkshopID, SessionDate,
                        StartTime, EndTime, MaxEnrollment)
                OUTPUT INSERTED.WorkshopSessionID AS id
-               VALUES (@id, @w, @date, @start, @end, @max)`,
+               SELECT ISNULL(MAX(WorkshopSessionID), 0) + 1, @w, @date, @start, @end, @max
+                 FROM core.WorkshopSession WITH (UPDLOCK, HOLDLOCK)`,
             );
 
           created.push({
@@ -1260,7 +1257,6 @@ workshopsRouter.post(
             startTime: slot.startTime,
             endTime: slot.endTime,
           });
-          nextId += 1;
         }
 
         await tx.commit();
@@ -1792,21 +1788,13 @@ workshopsRouter.post('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', 'MANA
       return;
     }
 
+    // WorkshopID is not an IDENTITY column — it was created as a plain INT so
+    // the legacy Access IDs could be loaded verbatim. The id is allocated in
+    // the same statement as the insert, so two concurrent creates cannot both
+    // read the same maximum.
     const cols: string[] = [];
     const vals: string[] = [];
     const params: Record<string, SqlParam> = {};
-
-    // WorkshopID is not an IDENTITY column — it was created as a plain INT so
-    // the legacy Access IDs could be loaded verbatim. New rows therefore need
-    // an explicit ID, taken from the current maximum.
-    const next = await query<{ NextId: number }>(
-      'SELECT ISNULL(MAX(WorkshopID), 0) + 1 AS NextId FROM core.Workshop',
-    );
-    const nextId = next.recordset[0]!.NextId;
-
-    cols.push('WorkshopID');
-    vals.push('@nextId');
-    params.nextId = { type: sql.Int, value: nextId };
 
     for (const [key, value] of Object.entries(parsed.data)) {
       const col = COLUMN_MAP[key];
@@ -1822,9 +1810,10 @@ workshopsRouter.post('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', 'MANA
     }
 
     const created = await query<{ WorkshopID: number }>(
-      `INSERT INTO core.Workshop (${cols.join(', ')}, CreatedAt, UpdatedAt)
+      `INSERT INTO core.Workshop (WorkshopID, ${cols.join(', ')}, CreatedAt, UpdatedAt)
        OUTPUT INSERTED.WorkshopID
-       VALUES (${vals.join(', ')}, SYSUTCDATETIME(), SYSUTCDATETIME())`,
+       SELECT ISNULL(MAX(WorkshopID), 0) + 1, ${vals.join(', ')}, SYSUTCDATETIME(), SYSUTCDATETIME()
+         FROM core.Workshop WITH (UPDLOCK, HOLDLOCK)`,
       params,
     );
 

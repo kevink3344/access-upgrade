@@ -25,15 +25,39 @@ const listQuery = z.object({
   paymentMethodId: z.coerce.number().int().optional(),
   /** all | paid | unpaid | refunded */
   status: z.enum(['all', 'paid', 'unpaid', 'refunded']).default('all'),
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /** YYYY-MM-DD. Omitted means "the current month"; empty means no bound. */
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).or(z.literal('')).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).or(z.literal('')).optional(),
   includeCancelled: queryBoolean(false),
 });
 
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+
+function firstOfMonth(now: Date): string {
+  return isoDate(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)));
+}
+
+function lastOfMonth(now: Date): string {
+  return isoDate(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)));
+}
+
+/**
+ * The date window for a list request. The screen opens on the current month
+ * rather than all history, so an omitted bound falls back to the month the
+ * server is in; an empty one means the caller deliberately cleared it.
+ */
+function resolveWindow(p: z.infer<typeof listQuery>, now = new Date()) {
+  return {
+    from: p.from === undefined ? firstOfMonth(now) : p.from || null,
+    to: p.to === undefined ? lastOfMonth(now) : p.to || null,
+  };
+}
+
 /** Shared WHERE builder so the totals always match the rows. */
-function buildWhere(p: z.infer<typeof listQuery>) {
+function buildWhere(p: z.infer<typeof listQuery>, now = new Date()) {
   const where: string[] = [];
   const params: Record<string, SqlParam> = {};
+  const { from, to } = resolveWindow(p, now);
 
   if (p.q) {
     where.push(
@@ -52,17 +76,17 @@ function buildWhere(p: z.infer<typeof listQuery>) {
   if (p.status === 'unpaid') where.push('(r.PaidAmount IS NULL OR r.PaidAmount = 0)');
   if (p.status === 'refunded') where.push('r.PaidAmount < 0');
 
-  if (p.from) {
-    // PaidDate is only populated on 6,925 of 41,341 registrations and stops
-    // at 2013-09-16, so filtering on it alone would silently hide most
-    // payments. Fall back to the registration date, which is present on
-    // every row.
+  // PaidDate is only populated on 6,925 of 41,341 registrations and stops
+  // at 2013-09-16, so filtering on it alone would silently hide most
+  // payments. Fall back to the registration date, which is present on
+  // every row.
+  if (from) {
     where.push('COALESCE(r.PaidDate, r.RegistrationDate) >= @from');
-    params.from = { type: sql.Date, value: p.from };
+    params.from = { type: sql.Date, value: from };
   }
-  if (p.to) {
+  if (to) {
     where.push('COALESCE(r.PaidDate, r.RegistrationDate) < DATEADD(DAY, 1, @to)');
-    params.to = { type: sql.Date, value: p.to };
+    params.to = { type: sql.Date, value: to };
   }
   if (!p.includeCancelled) where.push('r.IsCancelled = 0');
 
@@ -86,8 +110,8 @@ function buildWhere(p: z.infer<typeof listQuery>) {
  *       - { in: query, name: q, schema: { type: string } }
  *       - { in: query, name: paymentMethodId, schema: { type: integer } }
  *       - { in: query, name: status, schema: { type: string, enum: [all, paid, unpaid, refunded] } }
- *       - { in: query, name: from, schema: { type: string, format: date } }
- *       - { in: query, name: to, schema: { type: string, format: date } }
+ *       - { in: query, name: from, schema: { type: string, format: date }, description: Defaults to the first day of the current month; send an empty value for no lower bound }
+ *       - { in: query, name: to, schema: { type: string, format: date }, description: Defaults to the last day of the current month; send an empty value for no upper bound }
  *       - { in: query, name: includeCancelled, schema: { type: boolean, default: false } }
  *     responses:
  *       200:
@@ -107,7 +131,8 @@ paymentsRouter.get('/', requireAuth, async (req, res, next) => {
     }
 
     const p = parsed.data;
-    const { whereSql, params } = buildWhere(p);
+    const now = new Date();
+    const { whereSql, params } = buildWhere(p, now);
 
     const base = `
       FROM core.Registration r
@@ -133,7 +158,7 @@ paymentsRouter.get('/', requireAuth, async (req, res, next) => {
 
     const rows = await query(
       `SELECT r.RegistrationID, r.PaidAmount, r.PaidDate, r.ReceiptNumber,
-              r.CheckNumber, r.CheckTotal, r.IsCancelled, r.IsScholarship,
+              r.CheckNumber, r.CheckTotal, r.IsCancelled, r.IsScholarship, r.Notes,
               pm.PaymentMethod,
               pt.ParticipantID, pt.FirstName, pt.LastName,
               w.WorkshopID, w.WorkshopCode, n.WorkshopName,
@@ -155,6 +180,9 @@ paymentsRouter.get('/', requireAuth, async (req, res, next) => {
       pageSize: p.pageSize,
       total: t.n,
       totals: { total: t.total, paid: t.paid, refunded: t.refunded },
+      // The window actually applied, so the cards can say which period they
+      // cover even when the caller left the dates to default.
+      window: resolveWindow(p, now),
     });
   } catch (err) {
     next(err);
@@ -202,6 +230,185 @@ paymentsRouter.get('/summary', requireAuth, async (_req, res, next) => {
   }
 });
 
+const createSchema = z.object({
+  participantId: z.number().int().positive(),
+  workshopId: z.number().int().positive().nullable().optional(),
+  paidDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullable().optional(),
+  paidAmount: z.number().finite(),
+  paymentMethodId: z.number().int().nullable().optional(),
+  receiptNumber: z.number().int().nullable().optional(),
+  checkNumber: z.number().int().nullable().optional(),
+  notes: z.string().max(255).nullable().optional(),
+});
+
+/**
+ * @openapi
+ * /api/payments:
+ *   post:
+ *     tags: [Payments]
+ *     summary: Record a payment taken by staff
+ *     description: >
+ *       Money is held on the registration, so a payment for a workshop
+ *       creates the registration when the participant has none. Without a
+ *       workshop the payment is recorded on its own rather than inventing a
+ *       registration with no workshop behind it.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [participantId, paidAmount]
+ *             properties:
+ *               participantId: { type: integer }
+ *               workshopId: { type: integer, nullable: true }
+ *               paidDate: { type: string, format: date, nullable: true }
+ *               paidAmount: { type: number }
+ *               paymentMethodId: { type: integer, nullable: true }
+ *               receiptNumber: { type: integer, nullable: true }
+ *               checkNumber: { type: integer, nullable: true }
+ *               notes: { type: string, nullable: true }
+ *     responses:
+ *       201: { description: Recorded }
+ *       409: { description: That registration already has a payment }
+ *       422: { description: Validation failed }
+ */
+paymentsRouter.post(
+  '/',
+  requireAuth,
+  requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'),
+  async (req, res, next) => {
+    try {
+      const parsed = createSchema.safeParse(req.body);
+
+      if (!parsed.success) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: 'Invalid payment data',
+          details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+        });
+        return;
+      }
+
+      const d = parsed.data;
+      const workshopId = d.workshopId ?? null;
+
+      const participant = await query<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM core.Participant WHERE ParticipantID = @id',
+        { id: { type: sql.Int, value: d.participantId } },
+      );
+      if ((participant.recordset[0]?.n ?? 0) === 0) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: 'Participant not found',
+          details: [{ path: 'participantId', message: 'No participant with that id' }],
+        });
+        return;
+      }
+
+      if (workshopId !== null) {
+        const workshop = await query<{ n: number }>(
+          'SELECT COUNT(*) AS n FROM core.Workshop WHERE WorkshopID = @id',
+          { id: { type: sql.Int, value: workshopId } },
+        );
+        if ((workshop.recordset[0]?.n ?? 0) === 0) {
+          res.status(422).json({
+            error: 'validation_failed',
+            message: 'Workshop not found',
+            details: [{ path: 'workshopId', message: 'No workshop with that id' }],
+          });
+          return;
+        }
+      }
+
+      const payParams: Record<string, SqlParam> = {
+        amount: { type: sql.Decimal(19, 4), value: d.paidAmount },
+        paidDate: { type: sql.Date, value: d.paidDate ?? isoDate(new Date()) },
+        method: { type: sql.Int, value: d.paymentMethodId ?? null },
+        receipt: { type: sql.Int, value: d.receiptNumber ?? null },
+        check: { type: sql.Int, value: d.checkNumber ?? null },
+        notes: { type: sql.NVarChar(255), value: d.notes ?? null },
+      };
+
+      // The money columns, shared by the update and the insert so the two
+      // cannot drift apart.
+      const PAY_SET = `PaidAmount = @amount, PaidDate = @paidDate, PaymentMethodID = @method,
+                       ReceiptNumber = @receipt, CheckNumber = @check, Notes = @notes,
+                       UpdatedAt = SYSUTCDATETIME()`;
+      const PAY_COLUMNS = 'PaidAmount, PaidDate, PaymentMethodID, ReceiptNumber, CheckNumber, Notes, UpdatedAt';
+      const PAY_VALUES = '@amount, @paidDate, @method, @receipt, @check, @notes, SYSUTCDATETIME()';
+
+      let registrationId: number | null = null;
+
+      if (workshopId !== null) {
+        const existing = await query<{ RegistrationID: number; PaidAmount: number | null }>(
+          `SELECT TOP 1 RegistrationID, PaidAmount FROM core.Registration
+            WHERE ParticipantID = @pid AND WorkshopID = @wid AND IsCancelled = 0
+            ORDER BY RegistrationID`,
+          {
+            pid: { type: sql.Int, value: d.participantId },
+            wid: { type: sql.Int, value: workshopId },
+          },
+        );
+
+        const found = existing.recordset[0];
+
+        if (found) {
+          // The registration is already there, so this is the late payment
+          // for it. Never overwrite money that was already recorded: that
+          // would silently replace one payment with another.
+          if (found.PaidAmount !== null && Number(found.PaidAmount) !== 0) {
+            res.status(409).json({
+              error: 'conflict',
+              message: 'That registration already has a payment recorded',
+            });
+            return;
+          }
+
+          await query(
+            `UPDATE core.Registration SET ${PAY_SET} WHERE RegistrationID = @id`,
+            { ...payParams, id: { type: sql.Int, value: found.RegistrationID } },
+          );
+          registrationId = found.RegistrationID;
+        } else {
+          const created = await query<{ RegistrationID: number }>(
+            `INSERT INTO core.Registration
+                    (ParticipantID, WorkshopID, RegistrationDate, IsCancelled,
+                     IsLate, Attended, EmailConfirmation, Source, ${PAY_COLUMNS})
+             OUTPUT INSERTED.RegistrationID
+             VALUES (@pid, @wid, CAST(SYSUTCDATETIME() AS DATE), 0, 0, 0, 0, 'Manual', ${PAY_VALUES})`,
+            {
+              ...payParams,
+              pid: { type: sql.Int, value: d.participantId },
+              wid: { type: sql.Int, value: workshopId },
+            },
+          );
+          registrationId = created.recordset[0]!.RegistrationID;
+        }
+      } else {
+        // No workshop to enrol the participant in, so the payment gets its
+        // own registration row with nothing but the money on it — the same
+        // shape the legacy data uses for payments that were never tied to a
+        // workshop.
+        const created = await query<{ RegistrationID: number }>(
+          `INSERT INTO core.Registration
+                  (ParticipantID, RegistrationDate, IsCancelled, IsLate, Attended,
+                   EmailConfirmation, Source, ${PAY_COLUMNS})
+           OUTPUT INSERTED.RegistrationID
+           VALUES (@pid, CAST(SYSUTCDATETIME() AS DATE), 0, 0, 0, 0, 'Manual', ${PAY_VALUES})`,
+          { ...payParams, pid: { type: sql.Int, value: d.participantId } },
+        );
+        registrationId = created.recordset[0]!.RegistrationID;
+      }
+
+      res.status(201).json({ registrationId, participantId: d.participantId });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 /**
  * @openapi
  * /api/payments/{registrationId}:
@@ -225,7 +432,7 @@ paymentsRouter.get('/:registrationId', requireAuth, async (req, res, next) => {
 
     const result = await query(
       `SELECT r.RegistrationID, r.PaidAmount, r.PaidDate, r.ReceiptNumber,
-              r.CheckNumber, r.CheckTotal, r.IsCancelled, r.IsScholarship,
+              r.CheckNumber, r.CheckTotal, r.IsCancelled, r.IsScholarship, r.Notes,
               r.PaymentMethodID, pm.PaymentMethod,
               r.PaymentID, pay.PaymentTotal AS PaymentRecordTotal,
               pay.CheckNumber AS PaymentCheckNumber, pay.ReceiptNumber AS PaymentReceiptNumber,

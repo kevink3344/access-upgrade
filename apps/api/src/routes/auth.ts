@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import {
   findUserByEmail,
+  findUserById,
   verifyPassword,
   signAccessToken,
   toAuthUser,
@@ -10,14 +11,34 @@ import {
   recordLoginAttempt,
   recentFailedAttempts,
   touchLastLogin,
+  hashToken,
+  findRefreshToken,
+  rotateRefreshToken,
+  revokeRefreshFamily,
+  revokeRefreshToken,
 } from '../auth/service.js';
 import { requireAuth } from '../auth/middleware.js';
-import { env } from '../env.js';
+import { env, isProd } from '../env.js';
 import type { LoginResponse } from '@pe/shared';
 
 export const authRouter = Router();
 
 const MAX_FAILED_ATTEMPTS = 10;
+
+/** The refresh cookie. Scoped to /api/auth so it is never sent to other routes. */
+const REFRESH_COOKIE = 'pe_refresh';
+const REFRESH_COOKIE_PATH = '/api/auth';
+
+function refreshCookieOptions(maxAgeMs?: number) {
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: 'strict' as const,
+    path: REFRESH_COOKIE_PATH,
+    // Omitting maxAge makes this a session cookie: it dies with the browser.
+    ...(maxAgeMs ? { maxAge: maxAgeMs } : {}),
+  };
+}
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -133,14 +154,9 @@ authRouter.post('/login', async (req, res, next) => {
     const refreshDays = rememberMe ? env.REFRESH_TOKEN_DAYS : 1;
     await storeRefreshToken(user.UserID, refresh.hash, req.get('user-agent') ?? null, ip, refreshDays);
 
-    res.cookie('pe_refresh', refresh.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/api/auth',
-      // Omitting maxAge makes this a session cookie: it dies with the browser.
-      ...(rememberMe ? { maxAge: refreshDays * 24 * 60 * 60 * 1000 } : {}),
-    });
+    res.cookie(REFRESH_COOKIE, refresh.token, refreshCookieOptions(
+      rememberMe ? refreshDays * 24 * 60 * 60 * 1000 : undefined,
+    ));
 
     await touchLastLogin(user.UserID);
     await recordLoginAttempt(email, true, null, ip);
@@ -173,14 +189,127 @@ authRouter.get('/me', requireAuth, (req, res) => {
 
 /**
  * @openapi
+ * /api/auth/refresh:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Exchange the refresh cookie for a new access token
+ *     description: >
+ *       Rotates the refresh token: the presented token is revoked and a new
+ *       one is set on the response. Presenting a token that was already
+ *       rotated is treated as theft and revokes every live token for the
+ *       user, so a stolen cookie cannot outlive the session it was taken from.
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: A new access token and rotated refresh cookie
+ *       401: { description: No cookie, expired token, or reused token }
+ */
+authRouter.post('/refresh', async (req, res, next) => {
+  try {
+    const presented = req.cookies?.[REFRESH_COOKIE] as string | undefined;
+
+    if (!presented) {
+      res.status(401).json({ error: 'no_refresh_token', message: 'Not signed in' });
+      return;
+    }
+
+    const hash = hashToken(presented);
+    const row = await findRefreshToken(hash);
+
+    // Unknown or expired: nothing to rotate. Clear the cookie so the browser
+    // stops presenting a value that can never work.
+    if (!row || row.ExpiresAt.getTime() <= Date.now()) {
+      res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+      res.status(401).json({ error: 'invalid_refresh_token', message: 'Session expired' });
+      return;
+    }
+
+    // A revoked token being presented again is the reuse signal. Revoke the
+    // whole family and refuse: whoever holds the other copy is now locked out
+    // too, and the legitimate user is asked to sign in again.
+    if (row.RevokedAt !== null) {
+      await revokeRefreshFamily(row.UserID, hash);
+      res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+      res.status(401).json({
+        error: 'refresh_token_reused',
+        message: 'Session ended for security. Please sign in again.',
+      });
+      return;
+    }
+
+    const user = await findUserById(row.UserID);
+
+    if (!user || !user.IsActive) {
+      await revokeRefreshFamily(row.UserID, hash);
+      res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+      res.status(401).json({ error: 'account_inactive', message: 'Account is inactive' });
+      return;
+    }
+
+    const replacement = createRefreshToken();
+    const rotated = await rotateRefreshToken(row.RefreshTokenID, replacement.hash);
+
+    // Lost the compare-and-swap: another request rotated this token first, so
+    // this one is presenting a value that is now revoked. Same response as
+    // reuse, which is what it is.
+    if (!rotated) {
+      await revokeRefreshFamily(row.UserID, hash);
+      res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+      res.status(401).json({
+        error: 'refresh_token_reused',
+        message: 'Session ended for security. Please sign in again.',
+      });
+      return;
+    }
+
+    const authUser = toAuthUser(user);
+    // The access token keeps its short life; only the refresh token is long.
+    const { token, expiresAt } = signAccessToken(authUser, false);
+
+    // Preserve the original lifetime: a rotated token inherits the remaining
+    // window rather than silently extending a session forever.
+    const remainingMs = row.ExpiresAt.getTime() - Date.now();
+    const days = Math.max(1, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
+    await storeRefreshToken(
+      user.UserID,
+      replacement.hash,
+      req.get('user-agent') ?? null,
+      req.ip ?? null,
+      days,
+    );
+
+    res.cookie(REFRESH_COOKIE, replacement.token, refreshCookieOptions(
+      remainingMs > 24 * 60 * 60 * 1000 ? remainingMs : undefined,
+    ));
+
+    const body: LoginResponse = { token, expiresAt, user: authUser, rememberMe: true };
+    res.json(body);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
  * /api/auth/logout:
  *   post:
  *     tags: [Auth]
- *     summary: Clear the refresh cookie
+ *     summary: Revoke the refresh token and clear the cookie
+ *     security: []
  *     responses:
  *       204: { description: Signed out }
  */
-authRouter.post('/logout', (_req, res) => {
-  res.clearCookie('pe_refresh', { path: '/api/auth' });
-  res.status(204).end();
+authRouter.post('/logout', async (req, res, next) => {
+  try {
+    const presented = req.cookies?.[REFRESH_COOKIE] as string | undefined;
+
+    // Revoke server-side, not just in the browser: clearing a cookie does not
+    // stop a copy of its value from being replayed.
+    if (presented) await revokeRefreshToken(hashToken(presented));
+
+    res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
 });

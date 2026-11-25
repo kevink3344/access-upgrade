@@ -145,7 +145,10 @@ Verified at 1440×900 and 390×844: **no horizontal scroll at 390px**, tab bar s
 
 - **No CRUD yet** — as scoped. `/workshops`, `/participants`, `/agencies`, `/reports`, `/admin` are placeholder screens.
 - **User management UI** — the `core.AppUser` table and roles exist; the Admin screen to add users is next.
-- **Refresh token rotation** — tokens are issued and stored; the refresh endpoint is not built.
+- **Refresh token rotation** — ~~tokens are issued and stored; the refresh endpoint is not built.~~ **Done** — see
+  [auth-and-sessions.md](../features/auth-and-sessions.md). `POST /api/auth/refresh` rotates the
+  token, detects reuse and revokes the chain; the web client retries once on a 401 instead of
+  dropping the user at the login screen.
 - **Rate limiting** — lockout is per-email; per-IP throttling is not implemented.
 - **Tests** — no unit or E2E tests yet.
 

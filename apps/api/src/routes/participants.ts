@@ -489,15 +489,8 @@ participantsRouter.post('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', 'M
       params[key] = { type: paramType(col), value: value ?? null };
     }
 
-    // ParticipantID is not an IDENTITY column (legacy IDs are preserved),
-    // so new rows take the next free id.
-    const next = await query<{ NextId: number }>(
-      'SELECT ISNULL(MAX(ParticipantID), 0) + 1 AS NextId FROM core.Participant',
-    );
-    cols.push('ParticipantID');
-    vals.push('@nextId');
-    params.nextId = { type: sql.Int, value: next.recordset[0]!.NextId };
-
+    // ParticipantID is IDENTITY (migration 019): the database allocates it, so
+    // two concurrent creates cannot collide on the primary key.
     cols.push('DateOfEntry');
     vals.push('SYSUTCDATETIME()');
 

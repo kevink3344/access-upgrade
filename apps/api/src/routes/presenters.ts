@@ -282,16 +282,11 @@ presentersRouter.post('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', 'MAN
     }
 
     // PresenterStaffID is not an IDENTITY column - the legacy Access IDs were
-    // loaded verbatim, so new rows take MAX + 1.
-    const next = await query<{ NextId: number }>(
-      'SELECT ISNULL(MAX(PresenterStaffID), 0) + 1 AS NextId FROM core.PresenterStaff',
-    );
-
-    const cols: string[] = ['PresenterStaffID'];
-    const vals: string[] = ['@nextId'];
-    const params: Record<string, SqlParam> = {
-      nextId: { type: sql.Int, value: next.recordset[0]!.NextId },
-    };
+    // loaded verbatim. The id is allocated in the same statement as the
+    // insert, so two concurrent creates cannot both read the same maximum.
+    const cols: string[] = [];
+    const vals: string[] = [];
+    const params: Record<string, SqlParam> = {};
 
     for (const [key, value] of Object.entries(parsed.data)) {
       const col = COLUMN_MAP[key];
@@ -307,9 +302,10 @@ presentersRouter.post('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', 'MAN
     }
 
     const created = await query<{ PresenterStaffID: number }>(
-      `INSERT INTO core.PresenterStaff (${cols.join(', ')}, DateOfEntry)
+      `INSERT INTO core.PresenterStaff (PresenterStaffID, ${cols.join(', ')}, DateOfEntry)
        OUTPUT INSERTED.PresenterStaffID
-       VALUES (${vals.join(', ')}, SYSUTCDATETIME())`,
+       SELECT ISNULL(MAX(PresenterStaffID), 0) + 1, ${vals.join(', ')}, SYSUTCDATETIME()
+         FROM core.PresenterStaff WITH (UPDLOCK, HOLDLOCK)`,
       params,
     );
 

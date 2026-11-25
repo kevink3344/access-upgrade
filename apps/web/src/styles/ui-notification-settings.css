@@ -1,0 +1,105 @@
+/* =====================================================================
+   Notifications settings hub.
+
+   A catalogue, not an inbox: each row describes one kind of notification
+   the system can raise. The layout mirrors the Settings cards so the two
+   screens read as the same family.
+   ===================================================================== */
+
+.notif-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.notif-stat {
+  background: var(--surface-card);
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notif-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary-color);
+  line-height: 1.1;
+}
+
+.notif-stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.notif-kind-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.notif-kind {
+  display: flex;
+  gap: 12px;
+  padding: 14px 4px;
+  align-items: flex-start;
+}
+
+.notif-kind + .notif-kind {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.notif-kind-icon {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 2px;
+  background: var(--surface-subtle);
+  color: var(--primary-color);
+}
+
+.notif-kind-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.notif-kind-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.notif-kind-head b {
+  font-size: 14px;
+  color: var(--text-heading);
+}
+
+.notif-kind-desc {
+  margin: 4px 0 6px;
+  font-size: 13px;
+  color: var(--text-body);
+  line-height: 1.45;
+}
+
+.notif-kind-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.notif-kind-meta code {
+  font-size: 11px;
+  background: var(--surface-subtle);
+  padding: 1px 5px;
+  border-radius: 2px;
+  color: var(--text-body);
+}

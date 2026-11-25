@@ -7,6 +7,33 @@ import { countForUser, listForUser, unreadCount } from '../services/notification
 export const notificationsRouter = Router();
 
 /**
+ * Every kind of notification the app can raise.
+ *
+ * Kept beside the routes rather than in the database: a kind only exists
+ * because some piece of code calls `createNotification` with it, so a table
+ * would be a second place to forget to update. Adding a kind means adding a
+ * row here and the call that produces it.
+ */
+const NOTIFICATION_KINDS = [
+  {
+    kind: 'school-cash-applied',
+    label: 'School Cash matching completed',
+    description:
+      'A summary after an upload is applied: how many payments were taken, and anything left needing review.',
+    audience: 'Super administrators and administrators',
+    active: true,
+  },
+  {
+    kind: 'workshop-capacity',
+    label: 'Workshop nearing capacity',
+    description:
+      'Raised once when a workshop crosses its alert threshold, and again only after it drops below and refills.',
+    audience: 'Super administrators and administrators',
+    active: true,
+  },
+];
+
+/**
  * @openapi
  * /api/notifications:
  *   get:
@@ -49,6 +76,61 @@ notificationsRouter.get('/', requireAuth, async (req, res, next) => {
     ]);
 
     res.json({ data: rows, unread, total, archived, limit, offset });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/notifications/catalogue:
+ *   get:
+ *     tags: [Notifications]
+ *     summary: What the system notifies staff about
+ *     description: >
+ *       The list of notification kinds, how they are delivered, and recent
+ *       volume. Declared in code because each kind is produced by specific
+ *       logic — this endpoint reports it, it does not configure it.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Catalogue plus stats }
+ */
+notificationsRouter.get('/catalogue', requireAuth, async (req, res, next) => {
+  try {
+    const userId = req.user!.userId;
+
+    const [stats, unread] = await Promise.all([
+      query<{ total: number; last7Days: number }>(
+        `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN CreatedAt >= DATEADD(day, -7, SYSUTCDATETIME()) THEN 1 ELSE 0 END) AS last7Days
+           FROM core.Notification`,
+      ),
+      unreadCount(userId),
+    ]);
+
+    res.json({
+      kinds: NOTIFICATION_KINDS,
+      channels: [
+        {
+          key: 'in-app',
+          label: 'In-app bell',
+          description: 'Every notification appears under the bell and on the Notifications page.',
+          enabled: true,
+        },
+        {
+          key: 'email',
+          label: 'Email to administrators',
+          description:
+            'Sent through the admin webhook when one is configured. The in-app record is written either way.',
+          enabled: true,
+        },
+      ],
+      stats: {
+        total: stats.recordset[0]?.total ?? 0,
+        last7Days: stats.recordset[0]?.last7Days ?? 0,
+        unreadForMe: unread,
+      },
+    });
   } catch (err) {
     next(err);
   }

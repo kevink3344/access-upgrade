@@ -28,6 +28,9 @@ SQL Server database, a documented REST API, and a responsive web application.
 ## What it does
 
 - **Staff application** — workshops, participants, registrations, agencies, users, and a dashboard.
+- **School Cash matching** — admins upload the School Cash Online Item Order Report, resolve
+  workshop names, review what matched, and apply the result as payments. Live in production;
+  see [docs/features/school-cash-production.md](docs/features/school-cash-production.md).
 - **Public registration** — each workshop can be opened for online registration via an
   unguessable, individually revocable link. The form branches on whether the registrant is
   an educator or a parent/caregiver. See
@@ -43,6 +46,9 @@ SQL Server database, a documented REST API, and a responsive web application.
 | API | Node.js, Express, TypeScript, `mssql`, Zod |
 | Web | React 19, Vite, TanStack Query, Recharts |
 | Auth | JWT access token + httpOnly refresh cookie, role-based access |
+
+Session renewal, rotation and reuse detection are described in
+[docs/features/auth-and-sessions.md](docs/features/auth-and-sessions.md).
 
 ### Stylesheets
 

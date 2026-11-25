@@ -48,6 +48,10 @@ BEGIN
         TokenHash      VARBINARY(32) NOT NULL,   -- SHA-256 of the opaque token
         ExpiresAt      DATETIME2(0)  NOT NULL,
         RevokedAt      DATETIME2(0)  NULL,
+        -- Set when this token was rotated: the hash of the token that
+        -- replaced it. Makes a chain per session, so replaying an old token
+        -- can be traced forward and the whole chain revoked (migration 020).
+        ReplacedByHash VARBINARY(32) NULL,
         CreatedAt      DATETIME2(0)  NOT NULL CONSTRAINT DF_RefreshToken_CreatedAt DEFAULT SYSUTCDATETIME(),
         UserAgent      NVARCHAR(400) NULL,
         IpHash         VARBINARY(32) NULL

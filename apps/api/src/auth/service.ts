@@ -157,3 +157,104 @@ export async function storeRefreshToken(
     },
   );
 }
+
+/**
+ * A refresh token row, joined to its user so a rotation needs one round trip
+ * rather than two.
+ */
+export interface RefreshTokenRow {
+  RefreshTokenID: number;
+  UserID: number;
+  ExpiresAt: Date;
+  RevokedAt: Date | null;
+  /** Set when this token was already rotated; points at its replacement. */
+  ReplacedByHash: Buffer | null;
+}
+
+/**
+ * Find a refresh token by the hash of the value presented.
+ *
+ * The caller decides what to do with expired and revoked rows, because the
+ * two cases mean different things: an expired token is a normal end of life,
+ * while a *revoked* one being presented again means the token leaked.
+ */
+export async function findRefreshToken(hash: Buffer): Promise<RefreshTokenRow | null> {
+  const result = await query<RefreshTokenRow>(
+    `SELECT RefreshTokenID, UserID, ExpiresAt, RevokedAt, ReplacedByHash
+       FROM core.RefreshToken
+      WHERE TokenHash = @hash`,
+    { hash: { type: sql.VarBinary(32), value: hash } },
+  );
+  return result.recordset[0] ?? null;
+}
+
+/**
+ * Rotate: revoke the presented token and record which token replaced it.
+ *
+ * The `RevokedAt IS NULL` predicate makes this a compare-and-swap. Two
+ * requests presenting the same token race here; exactly one updates a row,
+ * and the loser sees zero rows affected and must treat the token as reused.
+ */
+export async function rotateRefreshToken(
+  refreshTokenId: number,
+  replacementHash: Buffer,
+): Promise<boolean> {
+  const result = await query(
+    `UPDATE core.RefreshToken
+        SET RevokedAt = SYSUTCDATETIME(), ReplacedByHash = @new
+      WHERE RefreshTokenID = @id AND RevokedAt IS NULL`,
+    {
+      id: { type: sql.Int, value: refreshTokenId },
+      new: { type: sql.VarBinary(32), value: replacementHash },
+    },
+  );
+  return (result.rowsAffected[0] ?? 0) === 1;
+}
+
+/**
+ * Revoke every live token in a rotation family.
+ *
+ * Called when a token that was already rotated is presented again: either the
+ * value leaked and two parties are using it, or the user replayed an old tab.
+ * Both warrant signing the session out everywhere rather than guessing which
+ * holder is legitimate.
+ */
+export async function revokeRefreshFamily(userId: number, fromHash: Buffer): Promise<void> {
+  // Walk forward from the replayed token to the newest member of its family,
+  // revoking each. Bounded so a corrupt chain cannot loop forever.
+  let cursor: Buffer | null = fromHash;
+  const seen = new Set<string>();
+
+  for (let depth = 0; cursor && depth < 50; depth++) {
+    const key = cursor.toString('hex');
+    if (seen.has(key)) break;
+    seen.add(key);
+
+    const row = await findRefreshToken(cursor);
+    if (!row) break;
+
+    await query(
+      `UPDATE core.RefreshToken SET RevokedAt = SYSUTCDATETIME()
+        WHERE RefreshTokenID = @id AND RevokedAt IS NULL`,
+      { id: { type: sql.Int, value: row.RefreshTokenID } },
+    );
+
+    cursor = row.ReplacedByHash;
+  }
+
+  // Anything still live for this user is part of the same session tree.
+  await query(
+    `UPDATE core.RefreshToken SET RevokedAt = SYSUTCDATETIME()
+      WHERE UserID = @uid AND RevokedAt IS NULL`,
+    { uid: { type: sql.Int, value: userId } },
+  );
+}
+
+/** Revoke one token — used at sign-out so the cookie cannot be replayed. */
+export async function revokeRefreshToken(hash: Buffer): Promise<void> {
+  await query(
+    `UPDATE core.RefreshToken SET RevokedAt = SYSUTCDATETIME()
+      WHERE TokenHash = @hash AND RevokedAt IS NULL`,
+    { hash: { type: sql.VarBinary(32), value: hash } },
+  );
+}

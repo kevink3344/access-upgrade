@@ -26,6 +26,7 @@ import { SchoolCashPage } from './pages/SchoolCashPage';
 import { CertificateDesignerPage } from './pages/CertificateDesignerPage';
 import { CertificatesPage } from './pages/CertificatesPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { FolderBuilderPage } from './pages/FolderBuilderPage';
 
 /**
  * Recharts is ~500 KB of the bundle, and only this one screen uses it. Loading
@@ -37,6 +38,7 @@ const VisualReportsPage = lazy(() =>
 
 import { WebhooksPage } from './pages/WebhooksPage';
 import { NotificationsPage } from './pages/NotificationsPage';
+import { NotificationsSettingsPage } from './pages/NotificationsSettingsPage';
 import { FormsPage } from './pages/FormsPage';
 import { FormEditorPage } from './pages/FormEditorPage';
 import { ApiDocsPage } from './pages/ApiDocsPage';
@@ -51,6 +53,19 @@ const queryClient = new QueryClient({
     queries: { retry: 1, refetchOnWindowFocus: false },
   },
 });
+
+/**
+ * Client-side redirect. Replaces the history entry rather than pushing one,
+ * so the browser's Back button does not bounce between the old path and this.
+ */
+function Redirect({ to, search = '' }: { to: string; search?: string }) {
+  useEffect(() => {
+    window.history.replaceState({}, '', `${to}${search}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, [to, search]);
+
+  return null;
+}
 
 /** Minimal router — swap for TanStack Router once there are more screens. */
 function usePathname(): string {
@@ -87,8 +102,8 @@ function usePathname(): string {
 const ROUTES: Record<string, string> = {
   '/workshops': 'Workshops',
   '/workshop-names': 'Workshop catalog',
-  '/participants': 'Participants',
-  '/agencies': 'Agencies',
+  '/admin/participants': 'Participants',
+  '/admin/agencies': 'Agencies',
   '/presenters': 'Presenters & staff',
   '/registrations': 'Registrations',
   '/payments': 'Payments & receipts',
@@ -98,7 +113,7 @@ const ROUTES: Record<string, string> = {
   '/training-requests': 'Training requests',
   '/folders': 'Folder builder',
   '/reports': 'Reports hub',
-  '/admin': 'Admin',
+  '/admin': 'Notifications',
   '/admin/users': 'Users',
   '/admin/utilities': 'Utilities',
   '/api-docs': 'API documentation',
@@ -135,9 +150,18 @@ function Router() {
 
   if (path === '/registrations') return <RegistrationsPage />;
 
-  if (path === '/participants') return <ParticipantsPage />;
+  // Participants and agencies now live in Settings > Administration. The old
+  // paths are kept as redirects so bookmarks and links keep working.
+  if (path === '/participants') {
+    return <Redirect to="/admin/participants" search={window.location.search} />;
+  }
+  if (path === '/agencies') {
+    return <Redirect to="/admin/agencies" search={window.location.search} />;
+  }
 
-  if (path === '/agencies') return <AgenciesPage />;
+  if (path === '/admin/participants') return <ParticipantsPage />;
+
+  if (path === '/admin/agencies') return <AgenciesPage />;
 
   if (path === '/presenters') return <PresentersPage />;
 
@@ -148,6 +172,7 @@ function Router() {
   if (path === '/credit-slips') return <CreditSlipsPage />;
   if (path === '/school-cash') return <SchoolCashPage />;
   if (path === '/certificates') return <CertificatesPage />;
+  if (path === '/folders') return <FolderBuilderPage />;
   if (path === '/reports') return <ReportsPage />;
   if (path === '/reports/visual') {
     return (
@@ -167,6 +192,13 @@ function Router() {
 
   if (path === '/settings') {
     return canSeeSettings(user.role) ? <SettingsPage /> : <SettingsUnavailable />;
+  }
+
+  if (path === '/admin') {
+    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
+      return <PlaceholderPage path={path} title="Not available" />;
+    }
+    return <NotificationsSettingsPage />;
   }
 
   if (path === '/admin/users') {

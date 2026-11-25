@@ -11,6 +11,7 @@ import {
   normaliseItemName,
   nameSimilarity,
   bestWorkshop,
+  classifyItem,
   NAME_MATCH_THRESHOLD,
   REQUIRED_COLUMNS,
   type MatchCandidate,
@@ -245,7 +246,76 @@ describe('matchRow', () => {
     expect(r.note).toContain('after this purchase');
   });
 
-  it('rule 4: an email with no participant matches nothing', () => {
+  it('matches a purchaser who is already enrolled and paid for the workshop', () => {
+    // Regression: "Early Childhood Directors' Forum" has 29 registrations and
+    // all 29 are paid. The purchaser holds a place on the resolved workshop,
+    // so this is a match — the money simply arrived another way. Reporting it
+    // as unmatched left 29 people looking unaccounted for.
+    const r = matchRow(
+      {
+        purchaserEmail: 'bria@appleseedspreschool.org',
+        itemBalance: 100,
+        alreadyApplied: false,
+        enrolledInWorkshop: true,
+      },
+      [{ registrationId: 767017, owed: 0, paidAmount: 100, paidOn: '2026-09-22' }],
+    );
+    expect(r.confidence).toBe('High');
+    expect(r.registrationId).toBe(767017);
+    expect(r.alreadyPaid).toBe(true);
+    // No note: every row in the file is a payment already made, so saying so
+    // on each row is noise. `alreadyPaid` is what keeps it out of apply.
+    expect(r.note).toBeNull();
+  });
+
+  it('does not call it already paid when the purchaser is not enrolled', () => {
+    const r = matchRow(
+      {
+        purchaserEmail: 'nobody@example.org',
+        itemBalance: 100,
+        alreadyApplied: false,
+        enrolledInWorkshop: false,
+      },
+      [],
+    );
+    expect(r.confidence).toBe('None');
+    expect(r.alreadyPaid).toBeFalsy();
+    expect(r.note).toBe('No unpaid registration for this workshop.');
+  });
+
+  it('still matches an unpaid place when the purchaser is enrolled', () => {
+    const r = matchRow(
+      {
+        purchaserEmail: 'bria@appleseedspreschool.org',
+        itemBalance: 100,
+        alreadyApplied: false,
+        enrolledInWorkshop: true,
+      },
+      [{ registrationId: 41, owed: 100, paidAmount: 0 }],
+    );
+    expect(r.confidence).toBe('High');
+    expect(r.registrationId).toBe(41);
+    expect(r.alreadyPaid).toBeFalsy();
+  });
+
+  it('says why a purchaser with no registration on the workshop stays unmatched', () => {
+    // Regression: these rows were reported as "no workshop resolved yet" even
+    // though the workshop was resolved, which sent an admin looking in the
+    // wrong place. The note must name the real reason. (A purchaser who *is*
+    // enrolled and already paid is a match — see the already-paid test above.)
+    const r = matchRow(
+      { purchaserEmail: 'bria@appleseedspreschool.org', itemBalance: 100, alreadyApplied: false },
+      [],
+    );
+    expect(r.confidence).toBe('None');
+    expect(r.note).toBe('No unpaid registration for this workshop.');
+    expect(r.note).not.toContain('workshop resolved');
+  });
+
+  it('rule 4: an email with no participant is still "None" for the pure matcher', () => {
+    // The pure matcher cannot see the participant table. The caller decides
+    // that an unknown email is a new purchaser and promotes it to High —
+    // see the "new purchaser" case in the route tests below.
     const r = matchRow({ purchaserEmail: 'nobody@example.org', itemBalance: 300, alreadyApplied: false }, []);
     expect(r).toMatchObject({ confidence: 'None', registrationId: null });
   });
@@ -399,6 +469,59 @@ describe('bestWorkshop', () => {
 
   it('returns null when nothing is close enough', () => {
     expect(bestWorkshop('Arts Together- Group Registration (Fall)', options)).toBeNull();
+  });
+
+  // Regression: the case above passed only because `options` happened to hold
+  // no "Group Registration" workshop. Against the real database, the word
+  // "group" is shared with 34 workshops, and a site booking paired with
+  // "A Guided Observation Group Follow Up" at 0.50 — above the 0.25 suggest
+  // threshold, so it was offered as a confident suggestion for a booking that
+  // is not a workshop at all.
+  it('does not pair a site booking with a workshop that merely shares "group"', () => {
+    const realWorld = [
+      ...options,
+      { workshopId: 5, workshopName: 'A Guided Observation Group Follow Up', workshopCode: 'GO5', startDate: '2026-09-01', price: 300 },
+      { workshopId: 6, workshopName: 'PAT Group Meeting Positive Discipline', workshopCode: 'PG6', startDate: '2026-09-01', price: 0 },
+      { workshopId: 7, workshopName: 'TLC Study Group', workshopCode: 'TG7', startDate: '2026-09-01', price: 0 },
+    ];
+
+    expect(bestWorkshop('Arts Together- Group Registration (Fall)', realWorld)).toBeNull();
+    expect(bestWorkshop('Hudson Memorial Preschool- Group Registration', realWorld)).toBeNull();
+  });
+
+  it('does not trust a site booking even when a workshop shares its name', () => {
+    // "Soapstone Preschool- Group Registration" exists as a workshop, but a
+    // booking is a school buying a day — the workshop record is a different
+    // thing that happens to share the name. Resolving it automatically would
+    // put one school's money on the wrong record, so it waits for a human.
+    const realWorld = [
+      ...options,
+      { workshopId: 8, workshopName: 'Soapstone Preschool- Group Registration', workshopCode: 'SP8', startDate: '2026-09-01', price: 235 },
+    ];
+
+    expect(bestWorkshop('Soapstone Preschool- Group Registration', realWorld)).toBeNull();
+    expect(bestWorkshop('Hudson Memorial Preschool- Group Registration', realWorld)).toBeNull();
+    expect(bestWorkshop('Arts Together- Group Registration (Fall)', realWorld)).toBeNull();
+  });
+
+  it('still suggests the real workshop behind a classroom discount', () => {
+    // A discount names the workshop it belongs to, so it should resolve.
+    const realWorld = [
+      ...options,
+      { workshopId: 9, workshopName: 'Beyond the Battle: Mastering Positive Discipline- A 3-Week Blueprint for Parents', workshopCode: 'BB9', startDate: '2026-09-01', price: 25 },
+    ];
+    const best = bestWorkshop(
+      'Beyond the Battle: Mastering Positive Discipline- Classroom Discount',
+      realWorld,
+    );
+    expect(best?.workshopId).toBe(9);
+  });
+
+  it('classifies the three kinds of item', () => {
+    expect(classifyItem('Handwriting: The Building Blocks')).toBe('Workshop');
+    expect(classifyItem('Hudson Memorial Preschool- Group Registration')).toBe('SiteBooking');
+    expect(classifyItem('Beyond the Battle: Mastering Positive Discipline- Classroom Discount')).toBe('Discount');
+    expect(classifyItem(null)).toBe('Workshop');
   });
 
   it('returns null for a blank or missing name', () => {

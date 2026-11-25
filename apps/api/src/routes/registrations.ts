@@ -423,16 +423,8 @@ registrationsRouter.post('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', '
     cols.push('Source');
     vals.push("'Manual'");
 
-    // RegistrationID is not an IDENTITY column — it was created as a plain INT
-    // so the legacy Access IDs could be loaded verbatim. New rows need an
-    // explicit ID, taken from the current maximum.
-    const next = await query<{ NextId: number }>(
-      'SELECT ISNULL(MAX(RegistrationID), 0) + 1 AS NextId FROM core.Registration',
-    );
-    cols.push('RegistrationID');
-    vals.push('@nextId');
-    params.nextId = { type: sql.Int, value: next.recordset[0]!.NextId };
-
+    // RegistrationID is IDENTITY (migration 019): the database allocates it, so
+    // two concurrent creates cannot collide on the primary key.
     const created = await query<{ RegistrationID: number }>(
       `INSERT INTO core.Registration (${cols.join(', ')})
        OUTPUT INSERTED.RegistrationID

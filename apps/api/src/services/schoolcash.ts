@@ -276,6 +276,10 @@ export interface MatchCandidate {
   owed: number | null;
   /** When the registration was made, ISO `YYYY-MM-DD`. */
   registeredOn?: string | null;
+  /** How much has already been paid against this registration. */
+  paidAmount?: number | null;
+  /** The registration's own paid date, ISO `YYYY-MM-DD`. */
+  paidOn?: string | null;
 }
 
 export interface MatchInput {
@@ -291,6 +295,16 @@ export interface MatchInput {
    * cannot be for a registration that did not exist yet.
    */
   purchasedOn?: string | null;
+  /**
+   * Whether the purchaser is enrolled in the resolved workshop at all —
+   * paid or not. Counted by the caller, which can see every registration.
+   *
+   * This is what separates "we cannot find this person" from "this person is
+   * enrolled and their place is already paid for". Without it a fully paid
+   * workshop looked identical to one nobody had signed up for, and the two
+   * were reported as the same thing.
+   */
+  enrolledInWorkshop?: boolean;
 }
 
 export interface MatchOutcome {
@@ -298,6 +312,11 @@ export interface MatchOutcome {
   method: MatchMethod;
   registrationId: number | null;
   note: string | null;
+  /**
+   * The match is real but the place is already paid for, so applying must not
+   * write a payment. Only set on the already-enrolled case above.
+   */
+  alreadyPaid?: boolean;
 }
 
 /** Drops candidates that did not exist when the purchase was made. */
@@ -321,6 +340,32 @@ export interface WorkshopOption {
   startDate: string | null;
   price: number | null;
   score: number;
+}
+
+/**
+ * What kind of thing an item name refers to.
+ *
+ * School Cash sells more than workshops. A site books a whole day as
+ * "<Site> - Group Registration", and a workshop offers "<Workshop> -
+ * Classroom Discount" to a second teacher from the same school. Neither is a
+ * workshop, so neither can ever resolve to one — but they arrive in the same
+ * file and, without a label, sit in the review queue looking like items
+ * nobody has got round to yet.
+ *
+ * The label is advisory. It does not stop an admin resolving the item by
+ * hand; it tells them what they are looking at, and lets the screen separate
+ * "needs a workshop chosen" from "this is a booking, not a workshop".
+ */
+export type ItemKind = 'Workshop' | 'SiteBooking' | 'Discount';
+
+const SITE_BOOKING = /\bgroup\s+registration\b/i;
+const DISCOUNT = /\bdiscount\b/i;
+
+export function classifyItem(name: string | null): ItemKind {
+  if (!name) return 'Workshop';
+  if (SITE_BOOKING.test(name)) return 'SiteBooking';
+  if (DISCOUNT.test(name)) return 'Discount';
+  return 'Workshop';
 }
 
 /**
@@ -349,6 +394,19 @@ export function nameSimilarity(a: string | null, b: string | null): number {
 
   let shared = 0;
   for (const w of wa) if (wb.has(w)) shared += 1;
+
+  // Two site bookings are "<Site> - Group Registration". Once "group" and
+  // "registration" are generic, the only word left is the site name, and two
+  // different sites still share "preschool" — enough to clear the 0.25
+  // suggestion threshold and offer one school's booking as a match for
+  // another's. A booking only ever matches its own site, so require the site
+  // names to be equal.
+  if (classifyItem(a) === 'SiteBooking' && classifyItem(b) === 'SiteBooking') {
+    const siteOf = (s: string) =>
+      s.replace(SITE_BOOKING, '').replace(/[\s\-–—:,()]+$/g, '').trim().toLowerCase();
+    return siteOf(a!) === siteOf(b!) ? 1 : 0;
+  }
+
   return shared / (wa.size + wb.size - shared);
 }
 
@@ -382,6 +440,11 @@ export function bestWorkshop(
   itemName: string | null,
   options: Omit<WorkshopOption, 'score'>[],
 ): WorkshopOption | null {
+  // A site booking is a school buying a day, not a workshop. Offering the
+  // closest workshop name as a "suggestion" invites someone to confirm a
+  // match that does not exist, so nothing is suggested for one.
+  if (classifyItem(itemName) === 'SiteBooking') return null;
+
   let best: WorkshopOption | null = null;
   for (const o of options) {
     const score = nameSimilarity(itemName, o.workshopName);
@@ -398,11 +461,23 @@ export function bestWorkshop(
  * Without this, two different "Guided Observation" workshops look alike. The
  * similarity score is not enough on its own: it counts shared words, and
  * generic words are shared by unrelated workshops.
+ *
+ * `group` and `registration` belong here for the same reason. School Cash
+ * sells site bookings as "<Site> - Group Registration" and discounts as
+ * "<Workshop> - Classroom Discount", so an item name is often a *site* plus
+ * one of these words. No workshop is named that way — the only one in the
+ * database is "Soapstone Preschool- Group Registration" — yet the word
+ * "group" alone is shared with 34 unrelated workshops ("PAT Group Meeting",
+ * "TLC Study Group", "Triple P Group"). Leaving it distinctive paired
+ * "Arts Together- Group Registration" with "A Guided Observation Group
+ * Follow Up" at 0.50. With it generic, a site booking has no workshop to
+ * match and correctly waits for a human.
  */
 const GENERIC_WORDS = new Set([
   'a', 'an', 'the', 'of', 'for', 'and', 'in', 'to', 'with', 'your',
   'guided', 'observation', 'full', 'center', 'classroom', 'classrooms',
   'workshop', 'session', 'sessions', 'series', 'part',
+  'group', 'registration', 'discount',
 ]);
 
 /** The words that actually identify a workshop. */
@@ -438,6 +513,12 @@ function distinctiveWords(s: string | null): Set<string> {
  * Recency is deliberately not used. Two unpaid registrations for the same
  * workshop are rare, and picking the newer one silently would hide a real
  * ambiguity rather than surface it.
+ *
+ * One case outranks all of these: the purchaser is enrolled in the workshop
+ * and their place is already paid for. That is a match, not a miss — the
+ * person is accounted for, and the payment simply arrived another way. It is
+ * reported as High so the record reflects reality, but with `alreadyPaid` set
+ * so the caller never writes a second payment for it.
  */
 export function matchRow(input: MatchInput, candidates: MatchCandidate[]): MatchOutcome {
   if (input.alreadyApplied) {
@@ -446,6 +527,23 @@ export function matchRow(input: MatchInput, candidates: MatchCandidate[]): Match
 
   if (!input.purchaserEmail) {
     return { confidence: 'None', method: 'none', registrationId: null, note: 'No purchaser email on this row.' };
+  }
+
+  // The purchaser already holds a paid place on this workshop. The registration
+  // is theirs; the money is already on it. Matched, nothing to collect.
+  if (input.enrolledInWorkshop) {
+    const paid = candidates.find((c) => (c.paidAmount ?? 0) > 0);
+    if (paid) {
+      return {
+        confidence: 'High',
+        method: 'email',
+        registrationId: paid.registrationId,
+        // No note: the file lists people who have paid, so saying so on every
+        // row is noise. `alreadyPaid` is what keeps it out of the apply run.
+        note: null,
+        alreadyPaid: true,
+      };
+    }
   }
 
   if (candidates.length === 0) {

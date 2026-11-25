@@ -77,7 +77,9 @@ export function SchoolCashWorkshops({
           <h2>Step 1 — Which workshop is each item?</h2>
           <p>
             {rows.length.toLocaleString()} distinct item{rows.length === 1 ? '' : 's'} in this
-            file · {resolved.toLocaleString()} resolved
+            file · {resolved.toLocaleString()} ready ·{' '}
+            {(rows.length - resolved).toLocaleString()} need{rows.length - resolved === 1 ? 's' : ''}{' '}
+            review
           </p>
         </div>
         <div className="row-actions">
@@ -162,12 +164,17 @@ export function SchoolCashWorkshops({
                       )}
                     </td>
                     <td data-label="Status">
-                      {r.WorkshopID ? (
-                        <span className="pill pill-open">
-                          {r.ResolvedBy === 'Created' ? 'Created' : 'Matched'}
-                        </span>
+                      {/*
+                        Two states, and only two. Every row in the file is a
+                        payment that has already been made, so "how many will
+                        be paid" is not a question this screen can answer
+                        usefully — the only thing left to settle is which
+                        workshop each item belongs to.
+                      */}
+                      {!r.WorkshopID ? (
+                        <span className="pill pill-full">Needs review</span>
                       ) : (
-                        <span className="pill pill-full">Select or create</span>
+                        <span className="pill pill-open">Ready</span>
                       )}
                     </td>
                     <td data-label="Actions" className="num">

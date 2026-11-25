@@ -165,6 +165,70 @@ export async function checkWorkshopCapacity(workshopId: number): Promise<void> {
   );
 }
 
+/**
+ * Tells administrators that a School Cash upload has been applied.
+ *
+ * The apply screen shows its result once and then it is gone; this is the
+ * record that survives. It is written after the transaction commits, so a
+ * notification can never describe an apply that rolled back.
+ *
+ * The summary leads with what staff need to act on — rows still needing
+ * review, and items with no workshop — because a bare "applied 13 payments"
+ * reads as finished when it may not be.
+ */
+export async function notifySchoolCashApplied(input: {
+  importId: number;
+  fileName: string;
+  applied: number;
+  skipped: number;
+  unresolved: number;
+  needsReview: number;
+  appliedBy: string;
+  stillStaged: boolean;
+}): Promise<number | null> {
+  const payments = `${input.applied.toLocaleString()} payment${input.applied === 1 ? '' : 's'}`;
+
+  const title = `School Cash: ${payments} applied from ${input.fileName}`;
+
+  const parts: string[] = [`${input.appliedBy} applied ${payments}.`];
+  if (input.skipped > 0) {
+    parts.push(`${input.skipped} row${input.skipped === 1 ? '' : 's'} could not be applied.`);
+  }
+  if (input.needsReview > 0) {
+    parts.push(
+      `${input.needsReview} row${input.needsReview === 1 ? '' : 's'} still need review.`,
+    );
+  }
+  if (input.unresolved > 0) {
+    parts.push(
+      `${input.unresolved} item${input.unresolved === 1 ? '' : 's'} had no workshop, so their rows were not matched.`,
+    );
+  }
+  if (input.stillStaged) {
+    parts.push('The upload stays staged so the remainder can be finished.');
+  }
+
+  const body = parts.join(' ');
+
+  const notificationId = await createNotification({
+    kind: 'school-cash-applied',
+    title: title.slice(0, 200),
+    body: body.slice(0, 1000),
+    linkPath: `/school-cash?import=${input.importId}`,
+  });
+
+  // The same summary goes out by email through whatever webhook declares
+  // `notify_type: admin`. Fire-and-forget: mail being down must not stop the
+  // in-app record above from existing.
+  void sendAdminEmail({ subject: title, body, linkPath: `/school-cash?import=${input.importId}` }).catch(
+    (e: Error) => {
+      console.error('[notifications] admin email failed:', e.message);
+    },
+  );
+
+  return notificationId;
+}
+
 /** Unread count for the bell badge. */
 export async function unreadCount(userId: number): Promise<number> {
   const r = await query<{ n: number }>(

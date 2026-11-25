@@ -283,16 +283,11 @@ workshopNamesRouter.post('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', '
     }
 
     // WorkshopNameID is not an IDENTITY column - the legacy Access IDs were
-    // loaded verbatim, so new rows take MAX + 1.
-    const next = await query<{ NextId: number }>(
-      'SELECT ISNULL(MAX(WorkshopNameID), 0) + 1 AS NextId FROM core.WorkshopName',
-    );
-
-    const cols: string[] = ['WorkshopNameID'];
-    const vals: string[] = ['@nextId'];
-    const params: Record<string, SqlParam> = {
-      nextId: { type: sql.Int, value: next.recordset[0]!.NextId },
-    };
+    // loaded verbatim. The id is allocated in the same statement as the
+    // insert, so two concurrent creates cannot both read the same maximum.
+    const cols: string[] = [];
+    const vals: string[] = [];
+    const params: Record<string, SqlParam> = {};
 
     for (const [key, value] of Object.entries(parsed.data)) {
       const col = COLUMN_MAP[key];
@@ -306,9 +301,10 @@ workshopNamesRouter.post('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', '
     }
 
     const created = await query<{ WorkshopNameID: number }>(
-      `INSERT INTO core.WorkshopName (${cols.join(', ')})
+      `INSERT INTO core.WorkshopName (WorkshopNameID, ${cols.join(', ')})
        OUTPUT INSERTED.WorkshopNameID
-       VALUES (${vals.join(', ')})`,
+       SELECT ISNULL(MAX(WorkshopNameID), 0) + 1, ${vals.join(', ')}
+         FROM core.WorkshopName WITH (UPDLOCK, HOLDLOCK)`,
       params,
     );
 

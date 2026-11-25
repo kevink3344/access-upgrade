@@ -6,6 +6,19 @@ import { useAuth } from '../auth';
 import { AppShell } from '../components/AppShell';
 import { IconPayments } from '../components/icons';
 import { PaymentDrawer } from '../components/PaymentDrawer';
+import { AddPaymentDrawer } from '../components/AddPaymentDrawer';
+
+/** First and last day of the current month, as YYYY-MM-DD. */
+function currentMonth(): { from: string; to: string } {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  return {
+    from: `${y}-${pad(m + 1)}-01`,
+    to: `${y}-${pad(m + 1)}-${pad(new Date(y, m + 1, 0).getDate())}`,
+  };
+}
 
 function money(v: number | null | undefined): string {
   if (v === null || v === undefined) return '—';
@@ -15,13 +28,44 @@ function money(v: number | null | undefined): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
+/**
+ * Dates arrive as UTC midnight and are stored as calendar dates, so they are
+ * formatted in UTC too - otherwise a browser west of Greenwich shows the
+ * previous day.
+ */
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+    timeZone: 'UTC',
   });
+}
+
+/** "Sep 1 – Sep 30, 2026", or "From Sep 1, 2026" when only one end is set. */
+function fmtWindow(from: string | null | undefined, to: string | null | undefined): string {
+  const short = (iso: string) =>
+    new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    });
+  const long = (iso: string) =>
+    new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+
+  if (from && to) {
+    const sameYear = from.slice(0, 4) === to.slice(0, 4);
+    return `${short(from)} – ${sameYear ? short(to) : long(to)}, ${to.slice(0, 4)}`;
+  }
+  if (from) return `From ${long(from)}`;
+  if (to) return `Through ${long(to)}`;
+  return 'All dates';
 }
 
 export function PaymentsPage() {
@@ -32,13 +76,18 @@ export function PaymentsPage() {
   const [debounced, setDebounced] = useState('');
   const [status, setStatus] = useState<'all' | 'paid' | 'unpaid' | 'refunded'>('all');
   const [methodId, setMethodId] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  // The screen opens on the current month. Staff widen it with the date
+  // fields when they need to look further back.
+  const month = currentMonth();
+  const [from, setFrom] = useState(month.from);
+  const [to, setTo] = useState(month.to);
   const [showCancelled, setShowCancelled] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
   const [drawerId, setDrawerId] = useState<number | null>(null);
+  const [addPayment, setAddPayment] = useState<{ id: number; label: string } | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
 
   // Deep link: /payments?edit=<registrationId> opens that payment.
   useEffect(() => {
@@ -82,15 +131,22 @@ export function PaymentsPage() {
   const total = data?.total ?? 0;
   const totals = data?.totals ?? { total: 0, paid: 0, refunded: 0 };
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const windowLabel = fmtWindow(data?.window?.from ?? from, data?.window?.to ?? to);
 
   function resetFilters() {
+    const m = currentMonth();
     setStatus('all');
     setMethodId('');
-    setFrom('');
-    setTo('');
+    setFrom(m.from);
+    setTo(m.to);
     setShowCancelled(false);
     setSearch('');
     setPage(1);
+  }
+
+  function openAddPayment(participant?: { id: number; label: string }) {
+    setAddPayment(participant ?? null);
+    setAddOpen(true);
   }
 
   return (
@@ -100,25 +156,31 @@ export function PaymentsPage() {
           <h2>Payments &amp; receipts</h2>
           <p>Money recorded against each registration.</p>
         </div>
+        {canEdit && (
+          <button type="button" className="btn btn-primary" onClick={() => openAddPayment()}>
+            Add payment
+          </button>
+        )}
       </div>
 
       {/* Totals cover the whole filtered set, not just this page - a
-          paginated total would mislead on a financial screen. */}
+          paginated total would mislead on a financial screen. The date
+          window is stated on every card so nobody reads a month as all time. */}
       <div className="stat-grid stat-grid-3">
         <div className="stat-card">
           <div className="label">Total</div>
           <div className="value">{money(totals.total)}</div>
-          <div className="sub">{total.toLocaleString()} registrations</div>
+          <div className="sub">{windowLabel}</div>
         </div>
         <div className="stat-card accent-2">
           <div className="label">Paid</div>
           <div className="value">{money(totals.paid)}</div>
-          <div className="sub">Positive amounts</div>
+          <div className="sub">{windowLabel}</div>
         </div>
         <div className="stat-card accent-3">
           <div className="label">Refunded</div>
           <div className="value">{money(totals.refunded)}</div>
-          <div className="sub">Negative amounts</div>
+          <div className="sub">{windowLabel}</div>
         </div>
       </div>
 
@@ -247,6 +309,7 @@ export function PaymentsPage() {
                   <th>Date</th>
                   <th className="num">Amount</th>
                   <th>Receipt</th>
+                  <th className="num">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -283,6 +346,32 @@ export function PaymentsPage() {
                       </span>
                     </td>
                     <td>{p.ReceiptNumber ?? '—'}</td>
+                    <td className="num">
+                      <span className="row-actions">
+                        {canEdit && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() =>
+                              openAddPayment({
+                                id: p.ParticipantID ?? 0,
+                                label:
+                                  [p.FirstName, p.LastName].filter(Boolean).join(' ') ||
+                                  'Unknown participant',
+                              })
+                            }
+                            disabled={!p.ParticipantID}
+                            title={
+                              p.ParticipantID
+                                ? 'Record another payment for this participant'
+                                : 'This registration has no participant'
+                            }
+                          >
+                            Add payment
+                          </button>
+                        )}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -320,6 +409,16 @@ export function PaymentsPage() {
           registrationId={drawerId}
           canEdit={canEdit}
           onClose={() => setDrawerId(null)}
+        />
+      )}
+
+      {addOpen && (
+        <AddPaymentDrawer
+          participant={addPayment}
+          onClose={() => {
+            setAddOpen(false);
+            setAddPayment(null);
+          }}
         />
       )}
     </AppShell>

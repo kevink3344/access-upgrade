@@ -1,6 +1,6 @@
 /**
  * Shared types between the API and the web app.
- * Kept deliberately small for now — grows as endpoints are added.
+ * Kept deliberately small for now â€” grows as endpoints are added.
  */
 
 export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'EDITOR' | 'VIEWER';
@@ -29,7 +29,7 @@ export interface LoginResponse {
   rememberMe: boolean;
 }
 
-/** Dashboard summary — real counts from the migrated database. */
+/** Dashboard summary â€” real counts from the migrated database. */
 export interface DashboardSummary {
   schoolYear: {
     id: number;
@@ -71,7 +71,7 @@ export interface ActivityItem {
   at: string;
   kind: 'registration' | 'payment' | 'workshop';
   description: string;
-  /** Present for registration events — links to the record. */
+  /** Present for registration events â€” links to the record. */
   registrationId?: number;
   isCancelled?: boolean;
 }
@@ -112,7 +112,7 @@ export interface WorkshopCalendarEntry {
   workshopId: number;
   workshopCode: string | null;
   workshopName: string | null;
-  /** YYYY-MM-DD — the workshop's StartDate. */
+  /** YYYY-MM-DD â€” the workshop's StartDate. */
   date: string;
   endDate: string | null;
   registered: number;
@@ -123,7 +123,7 @@ export interface WorkshopCalendarEntry {
 
 export interface WorkshopCalendarResponse {
   data: WorkshopCalendarEntry[];
-  /** Matching workshops with no StartDate — they cannot be placed on a calendar. */
+  /** Matching workshops with no StartDate â€” they cannot be placed on a calendar. */
   undated: number;
 }
 
@@ -147,7 +147,7 @@ export interface WorkshopSessionRow {
   MaxEnrollment: number | null;
   MinEnrollment: number | null;
   Notes: string | null;
-  /** Capacity after the workshop fallback — computed server-side. */
+  /** Capacity after the workshop fallback â€” computed server-side. */
   EffectiveCapacity: number | null;
   /** True when EffectiveCapacity came from the workshop, not the session. */
   CapacityInherited: boolean;
@@ -157,7 +157,7 @@ export interface WorkshopSessionRow {
   ESchoolAttend: number | null;
 }
 
-/** Writable session fields — camelCase, matches the API contract. */
+/** Writable session fields â€” camelCase, matches the API contract. */
 export interface WorkshopSessionWrite {
   sessionDate: string;
   startTime?: string | null;
@@ -188,7 +188,7 @@ export interface AttendanceRow {
   name: string | null;
   email: string | null;
   agencyName: string | null;
-  /** null means unmarked — distinct from false, which is never stored. */
+  /** null means unmarked â€” distinct from false, which is never stored. */
   attended: boolean | null;
   isLate: boolean;
 }
@@ -221,7 +221,7 @@ export interface WorkshopRegistrantsResponse {
   };
 }
 
-/** Raw detail row — column names as returned by SQL. */
+/** Raw detail row â€” column names as returned by SQL. */
 export interface WorkshopDetail {
   WorkshopID: number;
   WorkshopNameID: number | null;
@@ -263,12 +263,12 @@ export interface WorkshopDetail {
   Registered: number;
   /** Cancelled registrations, excluded from `Registered`. */
   CancelledCount: number;
-  /** `Registered + CancelledCount` — every registration on the workshop. */
+  /** `Registered + CancelledCount` â€” every registration on the workshop. */
   RegistrationCount: number;
   AttendedCount: number;
 }
 
-/** Writable fields — camelCase, matches the API contract. */
+/** Writable fields â€” camelCase, matches the API contract. */
 export interface WorkshopWrite {
   workshopNameId?: number | null;
   evalTypeId?: number | null;
@@ -350,7 +350,7 @@ export interface CreditSlipDetail extends CreditSlipRow {
   UsedWorkshopName: string | null;
 }
 
-/** Writable fields — camelCase, matches the API contract. */
+/** Writable fields â€” camelCase, matches the API contract. */
 export interface CreditSlipWrite {
   categoryId?: number | null;
   participantId?: number | null;
@@ -585,7 +585,7 @@ export interface TrainingRequestRow {
   RequestedBy: string | null;
   RequestEmail: string | null;
   RequestPhone: string | null;
-  /** Free text from Access, e.g. "20-30" — not a number. */
+  /** Free text from Access, e.g. "20-30" â€” not a number. */
   ParticipantCount: string | null;
   InvoiceNum: string | null;
   InvoiceDate: string | null;
@@ -672,7 +672,7 @@ export interface TrainingRequestDetail {
   payments: TrainingRequestPayment[];
 }
 
-/** Writable fields — camelCase, matches the API contract. */
+/** Writable fields â€” camelCase, matches the API contract. */
 export interface TrainingRequestWrite {
   agencyId?: number | null;
   requestDate?: string | null;
@@ -719,7 +719,7 @@ export interface AgencyDetail {
   County: string | null;
 }
 
-/** Writable fields — camelCase, matches the API contract. */
+/** Writable fields â€” camelCase, matches the API contract. */
 export interface AgencyWrite {
   agencyName?: string | null;
   agencyShortName?: string | null;
@@ -792,7 +792,7 @@ export interface PresenterDetail {
   Salutation: string | null;
 }
 
-/** Writable fields — camelCase, matches the API contract. */
+/** Writable fields â€” camelCase, matches the API contract. */
 export interface PresenterWrite {
   salutationId?: number | null;
   agencyId?: number | null;
@@ -849,7 +849,7 @@ export interface WorkshopNameDetail {
   Ages: string | null;
 }
 
-/** Writable fields — camelCase, matches the API contract. */
+/** Writable fields â€” camelCase, matches the API contract. */
 export interface WorkshopNameWrite {
   agesId?: number | null;
   workshopName?: string | null;
@@ -875,6 +875,7 @@ export interface PaymentRow {
   CheckTotal: number | null;
   IsCancelled: boolean;
   IsScholarship: boolean;
+  Notes: string | null;
   PaymentMethod: string | null;
   ParticipantID: number | null;
   FirstName: string | null;
@@ -894,6 +895,8 @@ export interface PaymentListResponse {
   total: number;
   /** Totals for the whole filtered set, not just the page. */
   totals: { total: number; paid: number; refunded: number };
+  /** The date window actually applied, after the current-month default. */
+  window: { from: string | null; to: string | null };
 }
 
 export interface PaymentDetail extends PaymentRow {
@@ -914,6 +917,32 @@ export interface PaymentWrite {
   receiptNumber?: number | null;
   checkNumber?: number | null;
   payeeId?: number | null;
+}
+
+/**
+ * A payment taken by staff for a registration that already exists â€” a check
+ * that arrived late, a cash payment, an invoice settled by transfer.
+ *
+ * The registration is created when `workshopId` is supplied. Without one the
+ * payment is recorded on its own: there is no workshop to enrol the
+ * participant in, so no registration is invented for it.
+ */
+export interface PaymentCreate {
+  participantId: number;
+  workshopId?: number | null;
+  /** Defaults to today. */
+  paidDate?: string | null;
+  paidAmount: number;
+  paymentMethodId?: number | null;
+  receiptNumber?: number | null;
+  checkNumber?: number | null;
+  notes?: string | null;
+}
+
+export interface PaymentCreateResponse {
+  /** The registration the payment landed on, or null when none was created. */
+  registrationId: number | null;
+  participantId: number;
 }
 
 export interface PaymentSummary {
@@ -984,7 +1013,7 @@ export interface RegistrationLinkState {
 /** One session option offered by a `session` form question. */
 export interface PublicSessionOption {
   workshopSessionId: number;
-  /** Stored as the answer, e.g. "10:00 AM – 11:00 AM". */
+  /** Stored as the answer, e.g. "10:00 AM â€“ 11:00 AM". */
   label: string;
   startTime: string | null;
   endTime: string | null;
@@ -1036,19 +1065,19 @@ export interface PublicRegisterRequest {
   firstName?: string;
   lastName?: string;
   email?: string;
-  /** Required for a registration form — it branches on this. */
+  /** Required for a registration form â€” it branches on this. */
   registrantRole?: RegistrantRole;
   phone?: string;
   agencyId?: number | null;
-  /** Educator only — ages of the students in the class. */
+  /** Educator only â€” ages of the students in the class. */
   classAges?: string;
-  /** Parent/caregiver only — ages of the registrant's children. */
+  /** Parent/caregiver only â€” ages of the registrant's children. */
   childrenAges?: string;
-  /** Parent/caregiver only — details for a second caregiver. */
+  /** Parent/caregiver only â€” details for a second caregiver. */
   secondCaregiverInfo?: string;
   paymentMethod?: string;
   notes?: string;
-  /** Honeypot — must stay empty. */
+  /** Honeypot â€” must stay empty. */
   website?: string;
   elapsedMs?: number;
   /** Custom answers keyed by QuestionKey, for links pinned to a form version. */
@@ -1248,7 +1277,7 @@ export interface ChartSeries {
   data: ChartPoint[];
   /** Sum of `value`, for the card subtitle. */
   total: number;
-  /** True when there is nothing to draw — the card shows a message instead. */
+  /** True when there is nothing to draw â€” the card shows a message instead. */
   isEmpty: boolean;
   note: string | null;
   /** Unit for the axis and tooltip, e.g. "registrations" or "USD". */
@@ -1284,12 +1313,38 @@ export type NotificationView = 'all' | 'unread' | 'archived';
 export interface NotificationListResponse {
   data: NotificationRow[];
   unread: number;
-  /** Rows matching the view, ignoring paging — drives the "view all" pager. */
+  /** Rows matching the view, ignoring paging â€” drives the "view all" pager. */
   total: number;
   /** Archived rows, so the filter can show a count without a second request. */
   archived: number;
   limit: number;
   offset: number;
+}
+
+/**
+ * One kind of notification the app can raise.
+ *
+ * Declared in code rather than stored, because each kind is produced by a
+ * specific piece of logic — a catalogue row cannot make one fire. This list
+ * exists so staff can see what the system will tell them about, and so adding
+ * a kind has an obvious home.
+ */
+export interface NotificationKindInfo {
+  kind: string;
+  label: string;
+  description: string;
+  /** Which roles receive it today. */
+  audience: string;
+  /** True once the producing code is wired up. */
+  active: boolean;
+}
+
+export interface NotificationCatalogueResponse {
+  kinds: NotificationKindInfo[];
+  /** How each notification reaches people. */
+  channels: { key: string; label: string; description: string; enabled: boolean }[];
+  /** Recent traffic, so the page is not just documentation. */
+  stats: { total: number; last7Days: number; unreadForMe: number };
 }
 
 export interface WorkshopNotificationSettings {
@@ -1315,7 +1370,7 @@ export type FormFieldType =
   | 'agency'
   /**
    * The workshop's own sessions, resolved when the page loads. Stores the
-   * chosen session's label (e.g. "10:00 AM – 11:00 AM"), so the answer stays
+   * chosen session's label (e.g. "10:00 AM â€“ 11:00 AM"), so the answer stays
    * readable even after a session is edited or removed.
    */
   | 'session';
@@ -1338,7 +1393,7 @@ export interface FormQuestion {
   branchOptionValue: string | null;
 }
 
-/** A question as sent by the editor — ids are assigned server-side. */
+/** A question as sent by the editor â€” ids are assigned server-side. */
 export interface FormQuestionDraft {
   sortOrder: number;
   questionKey: string;
@@ -1469,7 +1524,7 @@ export interface WebhookDeliveryRow {
  *
  *  - `High`      the row resolves to exactly one registration
  *  - `Low`       the purchaser has several unpaid registrations and the amount
- *                did not settle which one — an admin must choose
+ *                did not settle which one â€” an admin must choose
  *  - `None`      the purchaser email is unknown or has nothing unpaid
  *  - `Duplicate` this vendor row became a payment in an earlier upload
  *  - `Ignored`   an admin dismissed the row (e.g. a refund or a non-workshop item)
@@ -1505,13 +1560,44 @@ export interface ScoItemRow {
   WorkshopName: string | null;
   WorkshopCode: string | null;
   WorkshopDate: string | null;
+  /** Advisory label: a workshop, a site booking, or a classroom discount. */
+  ItemKind: 'Workshop' | 'SiteBooking' | 'Discount';
+  /**
+   * What the matcher would do with this item's rows, so the workshop screen
+   * can say "29 rows already paid" instead of leaving an admin to find out
+   * only after they continue.
+   */
+  MatchSummary: ScoItemMatchSummary;
+}
+
+/** How an item's rows stand against the matcher, counted when the item is resolved. */
+export interface ScoItemMatchSummary {
+  /** Rows whose registration is matched and waiting to be applied. */
+  ready: number;
+  /** Rows already paid by an earlier apply from this upload. */
+  applied: number;
+  /** Rows an admin matched by hand or dismissed. */
+  handled: number;
+  /** Rows the matcher could not settle â€” a person has to. */
+  needsReview: number;
+  /**
+   * Rows matched to a place that is already paid for. Counted as matched, but
+   * nothing will ever be applied for them.
+   */
+  alreadyPaid: number;
+  /** Rows that would become payments if this item were applied now. */
+  applicable: number;
 }
 
 export interface ScoItemsResponse {
   rows: ScoItemRow[];
   total: number;
   unresolved: number;
-  /** True once every item has a workshop — payment matching may then run. */
+  /** Items with no workshop that are not workshops at all (bookings, discounts). */
+  notWorkshops: number;
+  /** Items with no workshop that genuinely need one chosen. */
+  needsWorkshop: number;
+  /** True once every item has a workshop â€” payment matching may then run. */
   ready: boolean;
 }
 
@@ -1551,7 +1637,7 @@ export interface ScoImportListResponse {
 /**
  * A registration an admin can pick from when matching by hand.
  *
- * The PascalCase names are the SQL column names, passed through unchanged —
+ * The PascalCase names are the SQL column names, passed through unchanged â€”
  * the same convention the older row types use.
  */
 export interface ScoCandidate {
@@ -1585,7 +1671,7 @@ export interface ScoRowRow {
   PurchaserFound: number;
   ItemId: string | null;
   ItemName: string | null;
-  /** The item price — what the matcher compares against. */
+  /** The item price â€” what the matcher compares against. */
   ItemBalance: number | null;
   /** The gross charge, item price plus the online fee. */
   PaidAmount: number | null;
@@ -1626,6 +1712,17 @@ export interface ScoApplyResult {
   conflicts: { rowNumber: number; itemName: string | null; reason: string }[];
   /** Items with no workshop, whose rows were therefore not matched. */
   unresolved: number;
+  /** Per item, what became of its rows â€” the answer to "why were none of these paid?". */
+  items: {
+    ScoItemID: number;
+    ItemName: string;
+    WorkshopName: string | null;
+    TotalRows: number;
+    Applied: number;
+    /** Rows matched to a place that was already paid for. */
+    AlreadyPaid: number;
+    NeedsReview: number;
+  }[];
 }
 
 /** One entry in the permanent history of what was applied, for staff review. */
@@ -1656,4 +1753,96 @@ export interface ScoHistoryResponse {
   pageSize: number;
   totalAmount: number;
   totalFees: number;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Folder builder                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One sheet a workshop folder can contain.
+ *
+ * The set is fixed rather than free-form: staff assemble the same packet for
+ * every workshop, and a free-form list would let one folder quietly differ
+ * from the next. Each kind knows which pages it produces, so the contents
+ * list and the printed page numbers cannot drift apart.
+ */
+export type PacketSectionKind =
+  | 'roster'
+  | 'blank-roster'
+  | 'attendance'
+  | 'eval-teacher'
+  | 'eval-parent'
+  | 'contact-list'
+  | 'banner'
+  | 'instructor-notes'
+  | 'codification';
+
+export interface PacketSection {
+  kind: PacketSectionKind;
+  label: string;
+  /** First page number, 1-based, as printed in the footer. */
+  startPage: number;
+  endPage: number;
+  /** False when the section is included but has nothing to print. */
+  filled: boolean;
+  /** Why a section is blank or short — shown under its name. */
+  note: string | null;
+}
+
+/** Print settings the builder exposes. These reach the PDF renderer. */
+export interface PacketPrintSetup {
+  paper: 'Letter' | 'Legal';
+  orientation: 'Portrait' | 'Landscape';
+  /** Inches. */
+  margin: number;
+  copies: number;
+}
+
+export interface PacketRosterRow {
+  index: number;
+  name: string;
+  agency: string | null;
+  email: string | null;
+  credit: string | null;
+  attended: boolean | null;
+}
+
+export interface PacketWorkshop {
+  workshopId: number;
+  workshopCode: string | null;
+  workshopName: string;
+  schoolYear: string | null;
+  /** Human-readable, e.g. "Wednesday, April 8, 2027". */
+  dateText: string | null;
+  timeText: string | null;
+  room: string | null;
+  presenterNames: string[];
+  participantCount: number;
+  /** True when the workshop has no registrations yet. */
+  rosterEmpty: boolean;
+}
+
+export interface PacketDetail {
+  workshop: PacketWorkshop;
+  sections: PacketSection[];
+  roster: PacketRosterRow[];
+  printSetup: PacketPrintSetup;
+  /** Total printed pages, so the header can say "Page 1 of N". */
+  pageCount: number;
+  /** Sections the caller asked for that have nothing to print. */
+  warnings: string[];
+}
+
+/** A workshop the builder can open, for the picker. */
+export interface PacketWorkshopOption {
+  workshopId: number;
+  workshopCode: string | null;
+  workshopName: string;
+  startDate: string | null;
+  schoolYear: string | null;
+  participantCount: number;
+  isFolder: boolean;
+  isBrochure: boolean;
+  isLabel: boolean;
 }
