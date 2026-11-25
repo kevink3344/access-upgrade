@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ScoApplyResult, ScoMatchConfidence } from '@pe/shared';
 import { api } from '../api';
@@ -53,11 +53,14 @@ const FILTERS: { key: Filter; label: string }[] = [
 export function SchoolCashReview({
   importId,
   canAdmin,
+  focusRowId = null,
   onBack,
   onBackToWorkshops,
 }: {
   importId: number;
   canAdmin: boolean;
+  /** A vendor row to highlight, when arriving from a payment record. */
+  focusRowId?: number | null;
   onBack: () => void;
   onBackToWorkshops: () => void;
 }) {
@@ -72,6 +75,8 @@ export function SchoolCashReview({
     queryFn: () => api.schoolCash.items(importId),
   });
 
+  const focusRef = useRef<HTMLTableRowElement | null>(null);
+
   const unresolvedItems = useMemo(
     () => (items.data?.rows ?? []).filter((i) => i.WorkshopID === null),
     [items.data],
@@ -81,6 +86,18 @@ export function SchoolCashReview({
     queryKey: ['school-cash', 'import', importId],
     queryFn: () => api.schoolCash.import(importId),
   });
+
+  /**
+   * Bring the linked row into view once the table has rendered.
+   *
+   * Arriving from a payment record with a row id is a "show me this one"
+   * request, so the row is scrolled to rather than left somewhere in a
+   * 106-row table. It also carries a highlight, so the eye lands on it.
+   */
+  useEffect(() => {
+    if (focusRowId === null || !focusRef.current) return;
+    focusRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [focusRowId, detail.data]);
 
   const apply = useMutation({
     mutationFn: () => api.schoolCash.apply(importId),
@@ -404,8 +421,17 @@ export function SchoolCashReview({
                 </tr>
               </thead>
               <tbody>
-                {visible.map((r) => (
-                  <tr key={r.ScoRowID}>
+                {visible.map((r) => {
+                  // ScoRowID is a BIGINT, which the driver hands back as a
+                  // string, so compare as strings rather than by identity.
+                  const isFocus =
+                    focusRowId !== null && String(focusRowId) === String(r.ScoRowID);
+                  return (
+                  <tr
+                    key={r.ScoRowID}
+                    ref={isFocus ? focusRef : undefined}
+                    className={isFocus ? 'is-focus-row' : undefined}
+                  >
                     <td data-label="Purchaser">
                       {r.PurchaserName ?? 'Unknown purchaser'}
                       <div className="muted" style={{ fontSize: 12 }}>{r.PurchaserEmail ?? '—'}</div>
@@ -445,7 +471,8 @@ export function SchoolCashReview({
                     </td>
                     <td data-label="Confidence"><ConfidencePill c={r.MatchConfidence} /></td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}

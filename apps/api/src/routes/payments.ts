@@ -439,7 +439,14 @@ paymentsRouter.get('/:registrationId', requireAuth, async (req, res, next) => {
               py.Payee,
               pt.ParticipantID, pt.FirstName, pt.LastName, pt.Email,
               w.WorkshopID, w.WorkshopCode, n.WorkshopName, w.StartDate,
-              sy.SchoolYear
+              sy.SchoolYear,
+              -- Where this payment came from. A School Cash payment is
+              -- written by the matcher, which records the vendor row it paid
+              -- on ScoRow — so that row is the provenance, and it carries
+              -- both the upload and the line to point staff back at.
+              sco.ScoImportID, sco.ScoRowID, sco.RowNumber AS ScoRowNumber,
+              imp.FileName AS ScoFileName,
+              CONVERT(NVARCHAR(30), imp.UploadedAt, 126) AS ScoUploadedAt
          FROM core.Registration r
          LEFT JOIN ref.PaymentMethod pm ON pm.PaymentMethodID = r.PaymentMethodID
          LEFT JOIN core.Payment pay ON pay.PaymentID = r.PaymentID
@@ -448,6 +455,16 @@ paymentsRouter.get('/:registrationId', requireAuth, async (req, res, next) => {
          LEFT JOIN core.Workshop w ON w.WorkshopID = r.WorkshopID
          LEFT JOIN core.WorkshopName n ON n.WorkshopNameID = w.WorkshopNameID
          LEFT JOIN ref.SchoolYear sy ON sy.SchoolYearID = w.SchoolYearID
+         -- AppliedPaymentID is unique per row in practice; TOP 1 keeps the
+         -- join from fanning out if a payment were ever recorded twice.
+         OUTER APPLY (
+           SELECT TOP 1 s.ScoImportID, s.ScoRowID, s.RowNumber
+             FROM core.ScoRow s
+            WHERE s.AppliedPaymentID = r.PaymentID
+              AND r.PaymentID IS NOT NULL
+            ORDER BY s.ScoRowID
+         ) sco
+         LEFT JOIN core.ScoImport imp ON imp.ScoImportID = sco.ScoImportID
         WHERE r.RegistrationID = @id`,
       { id: { type: sql.Int, value: id } },
     );

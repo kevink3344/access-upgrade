@@ -53,14 +53,28 @@ export function SchoolCashPage() {
   const [step, setStep] = useState<'workshops' | 'payments'>('workshops');
   const [page, setPage] = useState(1);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  /** A vendor row to point at, from a link on a payment record. */
+  const [focusRowId, setFocusRowId] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Deep links: /school-cash?import=<id>
+  /**
+   * Deep links: /school-cash?import=<id>&row=<scoRowId>
+   *
+   * `row` comes from the Linked payment record on the Payments screen, so a
+   * payment can be traced back to the vendor line that produced it. It opens
+   * the payments step directly — the workshop is already settled for an
+   * applied upload, so step one would be a detour.
+   */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get('import');
+    const row = params.get('row');
     if (id && /^\d+$/.test(id)) {
       setOpenImportId(Number(id));
+      if (row && /^\d+$/.test(row)) {
+        setStep('payments');
+        setFocusRowId(Number(row));
+      }
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -144,12 +158,17 @@ export function SchoolCashPage() {
       <SchoolCashReview
         importId={openImportId}
         canAdmin={!!canAdmin}
+        focusRowId={focusRowId}
         onBack={() => {
           setOpenImportId(null);
           setStep('workshops');
+          setFocusRowId(null);
           qc.invalidateQueries({ queryKey: ['school-cash'] });
         }}
-        onBackToWorkshops={() => setStep('workshops')}
+        onBackToWorkshops={() => {
+          setFocusRowId(null);
+          setStep('workshops');
+        }}
       />
     );
   }

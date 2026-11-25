@@ -908,6 +908,19 @@ export interface PaymentDetail extends PaymentRow {
   Email: string | null;
   StartDate: string | null;
   SchoolYear: string | null;
+
+  /**
+   * Set when this payment was written by School Cash matching.
+   *
+   * The matcher records the vendor row it paid on `core.ScoRow`, so these
+   * point back at the upload and the exact line — the provenance of the
+   * money. Null for payments keyed in by hand.
+   */
+  ScoImportID: number | null;
+  ScoRowID: number | null;
+  ScoRowNumber: number | null;
+  ScoFileName: string | null;
+  ScoUploadedAt: string | null;
 }
 
 export interface PaymentWrite {

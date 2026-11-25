@@ -48,6 +48,19 @@ function money(v: number | null | undefined): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
+/** Timestamps arrive as UTC without a zone marker, so add one before parsing. */
+function fmtWhen(iso: string): string {
+  const d = new Date(iso.endsWith('Z') ? iso : `${iso}Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export function PaymentDrawer({
   registrationId,
   canEdit,
@@ -294,6 +307,28 @@ export function PaymentDrawer({
                     <dt>Payee</dt>
                     <dd>{existing.Payee ?? '—'}</dd>
                   </div>
+                  {existing.ScoImportID !== null && (
+                    <div>
+                      <dt>Source</dt>
+                      <dd>
+                        School Cash matching
+                        <div className="muted" style={{ fontSize: 12 }}>
+                          {existing.ScoFileName ?? 'Upload'} · row {existing.ScoRowNumber ?? '—'}
+                          {existing.ScoUploadedAt
+                            ? ` · uploaded ${fmtWhen(existing.ScoUploadedAt)}`
+                            : ''}
+                        </div>
+                        <div className="row-actions" style={{ marginTop: 6 }}>
+                          <a
+                            className="link-button"
+                            href={`/school-cash?import=${existing.ScoImportID}&row=${existing.ScoRowID}`}
+                          >
+                            Open in School Cash matching →
+                          </a>
+                        </div>
+                      </dd>
+                    </div>
+                  )}
                 </dl>
                 <p className="field-hint">
                   This registration points at a shared payment record. The record total covers
