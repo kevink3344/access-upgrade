@@ -44,7 +44,10 @@
 .notif-kind {
   display: flex;
   gap: 12px;
-  padding: 14px 4px;
+  /* 18px matches .panel-head, and .panel-body carries no horizontal padding
+     of its own, so the icon and the toggle line up with the section title
+     instead of sitting flush against the panel edge. */
+  padding: 14px 18px;
   align-items: flex-start;
 }
 
@@ -102,4 +105,52 @@
   padding: 1px 5px;
   border-radius: 2px;
   color: var(--text-body);
+}
+
+/* ---- on/off switch ---- */
+
+.notif-toggle {
+  flex: 0 0 auto;
+  margin-left: auto;
+  align-self: center;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  background: var(--surface-neutral);
+  cursor: pointer;
+  position: relative;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.notif-toggle:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.notif-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.notif-toggle.is-on {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.notif-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 120ms ease;
+}
+
+.notif-toggle.is-on .notif-toggle-knob {
+  transform: translateX(18px);
 }

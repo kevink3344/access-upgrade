@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, type ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { AppShell } from '../components/AppShell';
 import { IconBell, IconMail, IconSchoolCash, IconWorkshops } from '../components/icons';
@@ -22,7 +22,43 @@ const KIND_ICONS: Record<string, (p: { width?: number; height?: number }) => Rea
   'workshop-capacity': IconWorkshops,
 };
 
+/**
+ * A switch.
+ *
+ * A real `role="switch"` button rather than a styled checkbox, so it is
+ * announced as on/off and responds to Space and Enter. The label is passed in
+ * by the caller because the visible text lives in the row, not in the switch.
+ */
+function Toggle({
+  checked,
+  onChange,
+  label,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      className={`notif-toggle${checked ? ' is-on' : ''}`}
+      onClick={() => onChange(!checked)}
+      disabled={disabled}
+    >
+      <span className="notif-toggle-knob" aria-hidden="true" />
+    </button>
+  );
+}
+
 export function NotificationsSettingsPage() {
+  const qc = useQueryClient();
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['notifications', 'catalogue'],
     queryFn: () => api.notifications.catalogue(),
@@ -32,6 +68,23 @@ export function NotificationsSettingsPage() {
   const kinds = data?.kinds ?? [];
   const channels = data?.channels ?? [];
   const stats = data?.stats;
+
+  /**
+   * Turning a switch writes it and refreshes the catalogue, so the control
+   * shows what the server actually stored rather than an optimistic guess —
+   * a switch that looks off while the system still sends is worse than a
+   * brief spinner.
+   */
+  const save = useMutation({
+    mutationFn: (vars: { key: string; enabled: boolean }) =>
+      api.notifications.setSetting(vars.key, vars.enabled),
+    onSuccess: () => {
+      setSaveError(null);
+      qc.invalidateQueries({ queryKey: ['notifications', 'catalogue'] });
+    },
+    onError: (err: unknown) =>
+      setSaveError(err instanceof Error ? err.message : 'That setting could not be saved.'),
+  });
 
   return (
     <AppShell currentPath="/admin" title="Notifications">
@@ -55,6 +108,12 @@ export function NotificationsSettingsPage() {
             Could not load the notification catalogue.
             {error instanceof Error ? ` ${error.message}` : ''}
           </span>
+        </div>
+      )}
+
+      {saveError && (
+        <div className="alert alert-error" role="alert">
+          <span>{saveError}</span>
         </div>
       )}
 
@@ -106,9 +165,7 @@ export function NotificationsSettingsPage() {
                     <div className="notif-kind-text">
                       <div className="notif-kind-head">
                         <b>{k.label}</b>
-                        <span className={`pill ${k.active ? 'pill-open' : 'pill-muted'}`}>
-                          {k.active ? 'Active' : 'Planned'}
-                        </span>
+                        {!k.active && <span className="pill pill-muted">Planned</span>}
                       </div>
                       <p className="notif-kind-desc">{k.description}</p>
                       <div className="notif-kind-meta">
@@ -117,6 +174,12 @@ export function NotificationsSettingsPage() {
                         <code>{k.kind}</code>
                       </div>
                     </div>
+                    <Toggle
+                      checked={k.enabled}
+                      label={`${k.label} notifications`}
+                      disabled={!k.active || save.isPending}
+                      onChange={(next) => save.mutate({ key: `kind:${k.kind}`, enabled: next })}
+                    />
                   </li>
                 );
               })}
@@ -141,12 +204,15 @@ export function NotificationsSettingsPage() {
                   <div className="notif-kind-text">
                     <div className="notif-kind-head">
                       <b>{c.label}</b>
-                      <span className={`pill ${c.enabled ? 'pill-open' : 'pill-muted'}`}>
-                        {c.enabled ? 'On' : 'Off'}
-                      </span>
                     </div>
                     <p className="notif-kind-desc">{c.description}</p>
                   </div>
+                  <Toggle
+                    checked={c.enabled}
+                    label={`${c.label} delivery`}
+                    disabled={save.isPending}
+                    onChange={(next) => save.mutate({ key: `channel:${c.key}`, enabled: next })}
+                  />
                 </li>
               );
             })}

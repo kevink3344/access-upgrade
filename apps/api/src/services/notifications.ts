@@ -24,10 +24,96 @@ export interface NotificationRow {
 /** Roles that receive operational notifications. */
 const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN'];
 
+/* ------------------------------------------------------------------ */
+/*  Switches                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * On/off switches for notification types and delivery channels.
+ *
+ * Stored in `core.NotificationSetting`, one row per switch, and **a missing
+ * row means on**. That default matters: a notification kind added in code is
+ * live immediately without a matching INSERT, and if the settings table were
+ * ever unreadable the system keeps alerting rather than going quiet.
+ */
+export type NotificationChannel = 'in-app' | 'email';
+
+export function kindSettingKey(kind: string): string {
+  return `kind:${kind}`;
+}
+
+export function channelSettingKey(channel: NotificationChannel): string {
+  return `channel:${channel}`;
+}
+
+/** Every switch that has been set, keyed by SettingKey. Absent means on. */
+export async function loadSettings(): Promise<Map<string, boolean>> {
+  const r = await query<{ SettingKey: string; IsEnabled: boolean }>(
+    'SELECT SettingKey, IsEnabled FROM core.NotificationSetting',
+  );
+  return new Map(r.recordset.map((row) => [row.SettingKey, row.IsEnabled === true]));
+}
+
+/** True unless the switch has been explicitly turned off. */
+export async function isKindEnabled(kind: string): Promise<boolean> {
+  const settings = await loadSettings();
+  return settings.get(kindSettingKey(kind)) !== false;
+}
+
+/** True unless the channel has been explicitly turned off. */
+export async function isChannelEnabled(channel: NotificationChannel): Promise<boolean> {
+  const settings = await loadSettings();
+  return settings.get(channelSettingKey(channel)) !== false;
+}
+
+/**
+ * Sends the admin email for a notification, unless the email channel is off.
+ *
+ * Every notification goes through here rather than calling `sendAdminEmail`
+ * directly, so the channel switch is honoured in one place. Fire-and-forget:
+ * mail being down must never stop the in-app record from being written.
+ */
+async function emailAdmins(input: {
+  subject: string;
+  body: string;
+  linkPath: string | null;
+}): Promise<void> {
+  if (!(await isChannelEnabled('email'))) return;
+  void sendAdminEmail(input).catch((e: Error) => {
+    console.error('[notifications] admin email failed:', e.message);
+  });
+}
+
+/** Writes one switch. Upsert, so the first change on a default state works. */
+export async function setSetting(
+  key: string,
+  enabled: boolean,
+  updatedBy: string,
+): Promise<void> {
+  await query(
+    `MERGE core.NotificationSetting AS target
+       USING (SELECT @key AS SettingKey) AS source
+          ON target.SettingKey = source.SettingKey
+     WHEN MATCHED THEN
+       UPDATE SET IsEnabled = @enabled, UpdatedAt = SYSUTCDATETIME(), UpdatedBy = @by
+     WHEN NOT MATCHED THEN
+       INSERT (SettingKey, IsEnabled, UpdatedAt, UpdatedBy)
+       VALUES (@key, @enabled, SYSUTCDATETIME(), @by);`,
+    {
+      key: { type: sql.NVarChar(80), value: key },
+      enabled: { type: sql.Bit, value: enabled },
+      by: { type: sql.NVarChar(200), value: updatedBy },
+    },
+  );
+}
+
 /**
  * Creates a notification and fans it out to every active admin.
  *
  * Returns null when there is nobody to notify, so callers can skip work.
+ * Also returns null when the kind has been switched off in Settings — the
+ * check lives here rather than at each call site so a new kind cannot forget
+ * it, and so turning one off takes effect everywhere at once.
  */
 export async function createNotification(input: {
   kind: string;
@@ -36,6 +122,8 @@ export async function createNotification(input: {
   linkPath?: string | null;
   workshopId?: number | null;
 }): Promise<number | null> {
+  if (!(await isKindEnabled(input.kind))) return null;
+
   const recipients = await query<{ UserID: number }>(
     `SELECT UserID FROM core.AppUser
       WHERE IsActive = 1 AND Role IN (${ADMIN_ROLES.map((_, i) => `@r${i}`).join(', ')})`,
@@ -155,9 +243,8 @@ export async function checkWorkshopCapacity(workshopId: number): Promise<void> {
   // stop the in-app notification above from being recorded, and must not
   // stop the fired flag below from being set — otherwise every subsequent
   // registration would retry the alert.
-  void sendAdminEmail({ subject: title, body, linkPath }).catch((e: Error) => {
-    console.error('[notifications] admin email failed:', e.message);
-  });
+  void emailAdmins({ subject: title, body, linkPath });
+
 
   await query(
     `UPDATE core.Workshop SET NotifyFiredAt = SYSUTCDATETIME() WHERE WorkshopID = @id`,
@@ -217,14 +304,8 @@ export async function notifySchoolCashApplied(input: {
     linkPath: `/school-cash?import=${input.importId}`,
   });
 
-  // The same summary goes out by email through whatever webhook declares
-  // `notify_type: admin`. Fire-and-forget: mail being down must not stop the
-  // in-app record above from existing.
-  void sendAdminEmail({ subject: title, body, linkPath: `/school-cash?import=${input.importId}` }).catch(
-    (e: Error) => {
-      console.error('[notifications] admin email failed:', e.message);
-    },
-  );
+  // The same summary goes out by email, unless that channel is switched off.
+  void emailAdmins({ subject: title, body, linkPath: `/school-cash?import=${input.importId}` });
 
   return notificationId;
 }

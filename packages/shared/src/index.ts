@@ -1350,6 +1350,8 @@ export interface NotificationKindInfo {
   audience: string;
   /** True once the producing code is wired up. */
   active: boolean;
+  /** Whether this kind is switched on. Workspace-wide, not per user. */
+  enabled: boolean;
 }
 
 export interface NotificationCatalogueResponse {

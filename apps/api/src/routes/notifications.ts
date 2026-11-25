@@ -1,8 +1,16 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { query, sql } from '../db.js';
-import { requireAuth } from '../auth/middleware.js';
-import { countForUser, listForUser, unreadCount } from '../services/notifications.js';
+import { requireAuth, requireRole } from '../auth/middleware.js';
+import {
+  countForUser,
+  listForUser,
+  loadSettings,
+  setSetting,
+  unreadCount,
+  channelSettingKey,
+  kindSettingKey,
+} from '../services/notifications.js';
 
 export const notificationsRouter = Router();
 
@@ -99,30 +107,38 @@ notificationsRouter.get('/catalogue', requireAuth, async (req, res, next) => {
   try {
     const userId = req.user!.userId;
 
-    const [stats, unread] = await Promise.all([
+    const [stats, unread, settings] = await Promise.all([
       query<{ total: number; last7Days: number }>(
         `SELECT COUNT(*) AS total,
                 SUM(CASE WHEN CreatedAt >= DATEADD(day, -7, SYSUTCDATETIME()) THEN 1 ELSE 0 END) AS last7Days
            FROM core.Notification`,
       ),
       unreadCount(userId),
+      loadSettings(),
     ]);
 
+    // A switch with no row is on, so the page and the producer agree without
+    // needing a row seeded for every kind.
+    const isOn = (key: string) => settings.get(key) !== false;
+
     res.json({
-      kinds: NOTIFICATION_KINDS,
+      kinds: NOTIFICATION_KINDS.map((k) => ({
+        ...k,
+        enabled: isOn(kindSettingKey(k.kind)),
+      })),
       channels: [
         {
           key: 'in-app',
           label: 'In-app bell',
           description: 'Every notification appears under the bell and on the Notifications page.',
-          enabled: true,
+          enabled: isOn(channelSettingKey('in-app')),
         },
         {
           key: 'email',
           label: 'Email to administrators',
           description:
             'Sent through the admin webhook when one is configured. The in-app record is written either way.',
-          enabled: true,
+          enabled: isOn(channelSettingKey('email')),
         },
       ],
       stats: {
@@ -135,6 +151,60 @@ notificationsRouter.get('/catalogue', requireAuth, async (req, res, next) => {
     next(err);
   }
 });
+
+const settingPatch = z.object({
+  /** `kind:<notification-kind>` or `channel:<channel>`. */
+  key: z.string().trim().min(1).max(80),
+  enabled: z.boolean(),
+});
+
+/**
+ * @openapi
+ * /api/notifications/settings:
+ *   patch:
+ *     tags: [Notifications]
+ *     summary: Turn a notification type or delivery channel on or off
+ *     description: >
+ *       Workspace-wide, not per user: switching a kind off stops it for
+ *       everybody. The key is `kind:<kind>` or `channel:<channel>`.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: The switch as stored }
+ *       422: { description: Unknown key }
+ */
+notificationsRouter.patch(
+  '/settings',
+  requireAuth,
+  requireRole('SUPER_ADMIN', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const parsed = settingPatch.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(422).json({ error: 'validation_failed', details: parsed.error.issues });
+        return;
+      }
+
+      const { key, enabled } = parsed.data;
+
+      // Only keys this screen knows about. Without this, a typo would create
+      // a row that switches nothing and looks like it worked.
+      const known = new Set<string>([
+        ...NOTIFICATION_KINDS.map((k) => kindSettingKey(k.kind)),
+        channelSettingKey('in-app'),
+        channelSettingKey('email'),
+      ]);
+      if (!known.has(key)) {
+        res.status(422).json({ error: 'unknown_setting', message: `No such notification setting: ${key}` });
+        return;
+      }
+
+      await setSetting(key, enabled, req.user!.email);
+      res.json({ key, enabled });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /**
  * @openapi

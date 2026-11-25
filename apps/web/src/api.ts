@@ -842,6 +842,13 @@ export const api = {
     catalogue: () =>
       request<import('@pe/shared').NotificationCatalogueResponse>('/api/notifications/catalogue'),
 
+    /** Turns a notification type or delivery channel on or off. */
+    setSetting: (key: string, enabled: boolean) =>
+      request<{ key: string; enabled: boolean }>('/api/notifications/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ key, enabled }),
+      }),
+
     list: (limit = 20, opts: { offset?: number; view?: import('@pe/shared').NotificationView } = {}) => {
       const qs = new URLSearchParams({ limit: String(limit) });
       if (opts.offset) qs.set('offset', String(opts.offset));
