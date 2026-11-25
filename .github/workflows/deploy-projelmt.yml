@@ -84,9 +84,22 @@ jobs:
         run: npm ci
 
       # The two schemas must be identical.
+      #
+      # The reason is echoed as a ::error:: annotation as well as to the step
+      # summary. Annotations are readable from the API without admin rights,
+      # which the job log is not, so a failure here can be diagnosed from
+      # outside the browser.
       - name: Compare test and production schema
         shell: pwsh
-        run: ./db/etl/compare-schema.ps1
+        run: |
+          $out = & ./db/etl/compare-schema.ps1 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          if ($code -ne 0) {
+              $first = ($out -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 3) -join ' / '
+              Write-Host "::error::Schema comparison failed: $first"
+              exit $code
+          }
 
       # The code must work against both. Catches the case where the schemas
       # match but an INSERT is written for only one of them.
