@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { query, sql, type SqlParam } from '../db.js';
 import { env } from '../env.js';
 import { checkWorkshopCapacity } from '../services/notifications.js';
-import { getVersionForLink, saveAnswers, getKindForLink, createTrainingRequestFromAnswers } from '../services/forms.js';
+import { getVersionForLink, saveAnswers, getKindForLink, createTrainingRequestFromAnswers, saveTrainingRequestAnswers } from '../services/forms.js';
 
 /**
  * Public registration endpoints. Mounted at /api/public.
@@ -579,7 +579,15 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
     // core.TrainingRequest row and stops, so it never touches Participant or
     // Registration and never consumes a seat.
     if (formKind === 'trainingRequest') {
-      const trainingRequestId = await createTrainingRequestFromAnswers(data.answers ?? {});
+      const trainingRequestId = await createTrainingRequestFromAnswers(
+        data.answers ?? {},
+        formVersion ?? undefined,
+      );
+      // Keep every answer, not just the five that map to columns, so the
+      // request's Form answers tab shows what the agency actually submitted.
+      if (formVersion) {
+        await saveTrainingRequestAnswers(trainingRequestId, formVersion, data.answers ?? {});
+      }
       await logSubmission(link.RegistrationLinkID, ip, ua, 'Accepted', 'training-request');
 
       res.status(201).json({

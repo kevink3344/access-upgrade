@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { query, sql, type SqlParam } from '../db.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
+import { answersForTrainingRequest } from '../services/forms.js';
 
 /**
  * Training requests: an agency asking Project Enlightenment to deliver a
@@ -365,8 +366,7 @@ trainingRequestsRouter.get('/:id', requireAuth, async (req, res, next) => {
       return;
     }
 
-    const [quotes, contacts, scheduled, payments] = await Promise.all([
-      query(
+    const [quotes, contacts, scheduled, payments] = await Promise.all([      query(
         `SELECT q.TrainingRequestQuoteID, q.WorkshopTypeID, e.WorkshopType,
                 q.TopicRequested, q.Location, q.NumStudents, q.NumSessions,
                 q.DatesRequested, q.TimesRequested, q.Duration, q.SpecialEquip, q.RequestAmt
@@ -410,6 +410,8 @@ trainingRequestsRouter.get('/:id', requireAuth, async (req, res, next) => {
       contacts: contacts.recordset,
       scheduled: scheduled.recordset,
       payments: payments.recordset,
+      /** The submitted form's answers, grouped by page. Empty for older requests. */
+      formAnswers: await answersForTrainingRequest(id),
     });
   } catch (err) {
     next(err);

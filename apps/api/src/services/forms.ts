@@ -594,6 +594,7 @@ export async function getKindForLink(linkId: number): Promise<FormTemplateKind> 
  */
 export async function createTrainingRequestFromAnswers(
   answers: Record<string, unknown>,
+  version?: FormVersion,
 ): Promise<number> {
   const str = (key: string, max: number): string | null => {
     const v = answers[key];
@@ -633,6 +634,54 @@ export async function createTrainingRequestFromAnswers(
   );
 
   return created.recordset[0]!.TrainingRequestID;
+}
+
+/**
+ * Record every answer on a training-request form.
+ *
+ * Only the five mapped keys reach core.TrainingRequest; the rest would be
+ * lost without this. Built-in keys are stored too, so the Form answers tab
+ * shows exactly what the requester saw rather than only the extras.
+ */
+export async function saveTrainingRequestAnswers(
+  trainingRequestId: number,
+  version: FormVersion,
+  answers: Record<string, unknown>,
+): Promise<void> {
+  const byKey = new Map(version.questions.map((q) => [q.questionKey, q]));
+
+  for (const [key, raw] of Object.entries(answers)) {
+    const q = byKey.get(key);
+    if (!q) continue;
+
+    let answerText: string | null = null;
+    let answerJson: string | null = null;
+
+    if (Array.isArray(raw)) {
+      if (raw.length === 0) continue;
+      const list = raw.map(String);
+      answerJson = JSON.stringify(list);
+      answerText = list.join(', ');
+    } else if (raw === null || raw === undefined || raw === '') {
+      continue;
+    } else {
+      answerText = String(raw);
+    }
+
+    // The agency picker stores an id; keep the id as the answer so the read
+    // side can resolve the current name, exactly as registrations do.
+    await query(
+      `INSERT INTO core.FormAnswer (FormAnswerID, TrainingRequestID, FormQuestionID, AnswerText, AnswerJson)
+       SELECT ISNULL(MAX(FormAnswerID), 0) + 1, @tr, @q, @text, @json
+         FROM core.FormAnswer WITH (UPDLOCK, HOLDLOCK)`,
+      {
+        tr: { type: sql.Int, value: trainingRequestId },
+        q: { type: sql.Int, value: q.formQuestionId },
+        text: { type: sql.NVarChar(sql.MAX), value: answerText },
+        json: { type: sql.NVarChar(sql.MAX), value: answerJson },
+      },
+    );
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -1112,6 +1161,61 @@ export async function answersForRegistration(registrationId: number) {
     formVersionNumber: head?.VersionNumber ?? null,
     answers: [...builtIn, ...custom],
   };
+}
+
+/**
+ * The answers submitted on a training-request form, grouped by page.
+ *
+ * Ordered by the page the requester saw, then the question order on it, so
+ * staff can read the request the way it was filled in. Requests submitted
+ * before answers were recorded return an empty list rather than an error.
+ */
+export async function answersForTrainingRequest(trainingRequestId: number) {
+  const r = await query<{
+    QuestionKey: string;
+    Label: string;
+    FieldType: FieldType;
+    PageTitle: string | null;
+    PageSort: number | null;
+    SortOrder: number;
+    AnswerText: string | null;
+    AnswerJson: string | null;
+    AgencyName: string | null;
+  }>(
+    `SELECT q.QuestionKey, q.Label, q.FieldType, q.SortOrder,
+            p.Title AS PageTitle, p.SortOrder AS PageSort,
+            a.AnswerText, a.AnswerJson, ag.AgencyName
+       FROM core.FormAnswer a
+       JOIN core.FormQuestion q ON q.FormQuestionID = a.FormQuestionID
+       LEFT JOIN core.FormPage p ON p.FormPageID = q.FormPageID
+       -- An agency answer stores the AgencyID; resolve it so staff read a
+       -- school name rather than a number.
+       LEFT JOIN core.Agency ag
+              ON q.FieldType = 'agency'
+             AND TRY_CAST(a.AnswerText AS INT) = ag.AgencyID
+      WHERE a.TrainingRequestID = @id
+      ORDER BY ISNULL(p.SortOrder, 0), q.SortOrder, q.FormQuestionID`,
+    { id: { type: sql.Int, value: trainingRequestId } },
+  );
+
+  /** Page title -> answers, in the order the rows arrived. */
+  const pages: { title: string | null; answers: { label: string; value: string }[] }[] = [];
+
+  for (const x of r.recordset) {
+    const value =
+      x.FieldType === 'agency' ? (x.AgencyName ?? x.AnswerText ?? '') : (x.AnswerText ?? '');
+    if (!value) continue;
+
+    const title = x.PageTitle ?? null;
+    let group = pages.find((g) => g.title === title);
+    if (!group) {
+      group = { title, answers: [] };
+      pages.push(group);
+    }
+    group.answers.push({ label: x.Label, value });
+  }
+
+  return pages;
 }
 
 /** Answers for every registrant on a workshop, grouped by registration. */

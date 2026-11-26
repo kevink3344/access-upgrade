@@ -702,6 +702,18 @@ export interface TrainingRequestDetail {
   contacts: TrainingRequestContact[];
   scheduled: TrainingRequestScheduled[];
   payments: TrainingRequestPayment[];
+  /**
+   * The answers the agency submitted on the training-request form, grouped by
+   * the page they saw. Empty for requests made before answers were recorded.
+   */
+  formAnswers: TrainingRequestFormAnswerGroup[];
+}
+
+/** One page of a submitted training-request form, with its answers. */
+export interface TrainingRequestFormAnswerGroup {
+  /** The page title the requester saw. Null when the form had no pages. */
+  title: string | null;
+  answers: { label: string; value: string }[];
 }
 
 /** Writable fields â€” camelCase, matches the API contract. */

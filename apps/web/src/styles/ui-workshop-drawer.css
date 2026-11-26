@@ -25,6 +25,29 @@
   color: var(--text-muted);
 }
 
+/* ---------- submitted form answers ----------
+   A read-only label/value list, grouped one block per page the requester
+   saw. The label column is fixed so the values line up down the block. */
+.answer-list {
+  display: grid;
+  grid-template-columns: minmax(140px, 38%) 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.answer-list dt {
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
+.answer-list dd {
+  margin: 0;
+  color: var(--text-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .tab-add {
   display: flex;
   align-items: flex-end;

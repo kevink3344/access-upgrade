@@ -63,9 +63,9 @@ export function TrainingRequestDrawer({
   const [contactDate, setContactDate] = useState('');
   const [contactNote, setContactNote] = useState('');
   /** Which tab is showing. Only meaningful when editing an existing request. */
-  const [tab, setTab] = useState<'request' | 'quotes' | 'scheduled' | 'payments' | 'contacts'>(
-    'request',
-  );
+  const [tab, setTab] = useState<
+    'request' | 'quotes' | 'scheduled' | 'payments' | 'contacts' | 'form'
+  >('request');
 
   const { data: existing, isLoading } = useQuery({
     queryKey: ['training-request', trainingRequestId],
@@ -272,6 +272,22 @@ export function TrainingRequestDrawer({
               Contact log
               {existing.contacts.length > 0 && (
                 <span className="drawer-tab-count">{existing.contacts.length}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-form"
+              className="drawer-tab"
+              aria-selected={tab === 'form'}
+              aria-controls="panel-form"
+              onClick={() => setTab('form')}
+            >
+              Form answers
+              {existing.formAnswers.length > 0 && (
+                <span className="drawer-tab-count">
+                  {existing.formAnswers.reduce((n, g) => n + g.answers.length, 0)}
+                </span>
               )}
             </button>
           </div>
@@ -669,6 +685,38 @@ export function TrainingRequestDrawer({
               )}
               </fieldset>
             </div>
+          </div>
+        )}
+
+        {isEdit && existing && tab === 'form' && (
+          <div
+            className="drawer-body"
+            role="tabpanel"
+            id="panel-form"
+            aria-labelledby="tab-form"
+          >
+            {existing.formAnswers.length === 0 ? (
+              <p className="tab-empty">
+                No form answers recorded. Requests made before answers were saved, or
+                entered by hand on the Request tab, have none.
+              </p>
+            ) : (
+              existing.formAnswers.map((group, gi) => (
+                <div className="tab-section" key={group.title ?? `page-${gi}`}>
+                  <fieldset className="fieldset">
+                    <legend>{group.title ?? 'Your request'}</legend>
+                    <dl className="answer-list">
+                      {group.answers.map((a, ai) => (
+                        <div key={`${a.label}-${ai}`}>
+                          <dt>{a.label}</dt>
+                          <dd>{a.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </fieldset>
+                </div>
+              ))
+            )}
           </div>
         )}
       </aside>
