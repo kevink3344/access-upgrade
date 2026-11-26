@@ -5,6 +5,12 @@
   gap: 12px;
   margin-bottom: 18px;
   flex-wrap: wrap;
+  /* One control height across the whole toolbar. `.field select` (ui-forms.css)
+     and `.input` are 44px for forms; a toolbar row mixes a search input,
+     selects and a segmented toggle, so the row sets the height and every
+     control fills it. Without this the selects sit 4px taller than the search
+     box and the toggle 6px shorter than it. */
+  --toolbar-control-h: 40px;
 }
 
 .toolbar .field { margin-bottom: 0; }
@@ -13,7 +19,7 @@
 .toolbar-select { flex: 0 0 190px; }
 
 .toolbar input,
-.toolbar select {
+.toolbar .field select {
   width: 100%;
   padding: 9px 12px;
   font-size: 14px;
@@ -22,7 +28,20 @@
   background: var(--surface-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
-  min-height: 40px;
+  min-height: var(--toolbar-control-h);
+  height: var(--toolbar-control-h);
+}
+
+.toolbar .segmented {
+  height: var(--toolbar-control-h);
+  align-items: stretch;
+}
+
+.toolbar .segmented button {
+  display: inline-flex;
+  align-items: center;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .toolbar input:focus,

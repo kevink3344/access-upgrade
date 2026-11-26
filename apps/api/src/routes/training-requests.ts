@@ -82,6 +82,26 @@ const SORTS: Record<string, string> = {
 };
 
 /**
+ * The search + status filters shared by the list and the calendar, so the two
+ * views always agree on what "matching" means. Every column is aliased to
+ * `t` (request) and `a` (agency) in both queries.
+ */
+function buildFilters(q: string | undefined, status: string): { sql: string; params: Record<string, SqlParam> } {
+  const where: string[] = ['1 = 1'];
+  const params: Record<string, SqlParam> = {};
+
+  if (q) {
+    where.push(
+      '(a.AgencyName LIKE @q OR t.RequestedBy LIKE @q OR t.InvoiceNum LIKE @q OR t.RequestEmail LIKE @q OR t.Description LIKE @q)',
+    );
+    params.q = { type: sql.NVarChar(260), value: `%${q}%` };
+  }
+  if (STATUS_FILTERS[status]) where.push(STATUS_FILTERS[status].replace(/^AND /, ''));
+
+  return { sql: `WHERE ${where.join(' AND ')}`, params };
+}
+
+/**
  * @openapi
  * /api/training-requests:
  *   get:
@@ -123,18 +143,7 @@ trainingRequestsRouter.get('/', requireAuth, async (req, res, next) => {
 
     const { page, pageSize, q, status, sort } = parsed.data;
 
-    const where: string[] = ['1 = 1'];
-    const params: Record<string, SqlParam> = {};
-
-    if (q) {
-      where.push(
-        '(a.AgencyName LIKE @q OR t.RequestedBy LIKE @q OR t.InvoiceNum LIKE @q OR t.RequestEmail LIKE @q OR t.Description LIKE @q)',
-      );
-      params.q = { type: sql.NVarChar(260), value: `%${q}%` };
-    }
-    if (STATUS_FILTERS[status]) where.push(STATUS_FILTERS[status].replace(/^AND /, ''));
-
-    const whereSql = `WHERE ${where.join(' AND ')}`;
+    const { sql: whereSql, params } = buildFilters(q, status);
 
     const count = await query<{ n: number }>(
       `SELECT COUNT(*) AS n
@@ -192,6 +201,125 @@ trainingRequestsRouter.get('/', requireAuth, async (req, res, next) => {
       pageSize,
       total: count.recordset[0]?.n ?? 0,
       counts: counts.recordset[0] ?? { all: 0, active: 0, invoiced: 0, uninvoiced: 0 },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Calendar range. Bounded on purpose: the UI never needs more than a few
+ * months, and an unbounded range would pull the whole table.
+ */
+const calendarQuery = z
+  .object({
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+    q: z.string().trim().optional(),
+    status: z.enum(['all', 'active', 'inactive', 'invoiced', 'uninvoiced']).default('all'),
+  })
+  .refine((v) => v.from <= v.to, { message: '`from` must not be after `to`', path: ['from'] })
+  .refine(
+    (v) => (new Date(v.to).getTime() - new Date(v.from).getTime()) / 86_400_000 <= 400,
+    { message: 'Range must be 400 days or fewer', path: ['to'] },
+  );
+
+/**
+ * @openapi
+ * /api/training-requests/calendar:
+ *   get:
+ *     tags: [Training requests]
+ *     summary: Training requests in a date range, for the calendar view
+ *     description: >
+ *       Keyed on `TrainingRequest.RequestDate` — one entry per request, on the
+ *       day it was asked for. Requests with no RequestDate cannot be placed on
+ *       a calendar and are reported in `undated` rather than silently dropped.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: from, required: true, schema: { type: string, format: date } }
+ *       - { in: query, name: to, required: true, schema: { type: string, format: date } }
+ *       - { in: query, name: q, schema: { type: string } }
+ *       - { in: query, name: status, schema: { type: string, enum: [all, active, inactive, invoiced, uninvoiced] } }
+ *     responses:
+ *       200:
+ *         description: Calendar entries plus the count of undated requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data: { type: array, items: { $ref: '#/components/schemas/TrainingRequestCalendarEntry' } }
+ *                 undated: { type: integer, description: Matching requests with no RequestDate }
+ *       422: { description: Invalid range }
+ */
+trainingRequestsRouter.get('/calendar', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = calendarQuery.safeParse(req.query);
+
+    if (!parsed.success) {
+      res.status(422).json({
+        error: 'validation_failed',
+        message: 'Invalid query parameters',
+        details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      });
+      return;
+    }
+
+    const { from, to, q, status } = parsed.data;
+    const { sql: whereSql, params } = buildFilters(q, status);
+
+    const rows = await query<{
+      TrainingRequestID: number;
+      AgencyName: string | null;
+      RequestedBy: string | null;
+      RequestDate: Date;
+      ParticipantCount: string | null;
+      InvoiceNum: string | null;
+      IsActive: boolean;
+      QuoteCount: number;
+      ScheduledCount: number;
+    }>(
+      `SELECT t.TrainingRequestID, a.AgencyName, t.RequestedBy, t.RequestDate,
+              t.ParticipantCount, t.InvoiceNum, t.IsActive,
+              (SELECT COUNT(*) FROM core.TrainingRequestQuote qq
+                WHERE qq.TrainingRequestID = t.TrainingRequestID) AS QuoteCount,
+              (SELECT COUNT(*) FROM core.TrainingRequestScheduled ss
+                WHERE ss.TrainingRequestID = t.TrainingRequestID) AS ScheduledCount
+         FROM core.TrainingRequest t
+         LEFT JOIN core.Agency a ON a.AgencyID = t.AgencyID
+         ${whereSql}
+           AND t.RequestDate >= @from AND t.RequestDate <= @to
+        ORDER BY t.RequestDate, a.AgencyName`,
+      {
+        ...params,
+        from: { type: sql.Date, value: from },
+        to: { type: sql.Date, value: to },
+      },
+    );
+
+    // Same filters, but counting what the calendar cannot show.
+    const undated = await query<{ n: number }>(
+      `SELECT COUNT(*) AS n
+         FROM core.TrainingRequest t
+         LEFT JOIN core.Agency a ON a.AgencyID = t.AgencyID
+        ${whereSql}
+           AND t.RequestDate IS NULL`,
+      params,
+    );
+
+    res.json({
+      data: rows.recordset.map((r) => ({
+        trainingRequestId: r.TrainingRequestID,
+        agencyName: r.AgencyName,
+        requestedBy: r.RequestedBy,
+        date: r.RequestDate.toISOString().slice(0, 10),
+        participantCount: r.ParticipantCount,
+        invoiceNum: r.InvoiceNum,
+        isActive: r.IsActive,
+        quoteCount: r.QuoteCount,
+        scheduledCount: r.ScheduledCount,
+      })),
+      undated: undated.recordset[0]?.n ?? 0,
     });
   } catch (err) {
     next(err);

@@ -293,6 +293,52 @@
 
 .public-form input[aria-invalid='true'] { border-color: var(--cc-fifth-color); }
 
+/* Radio and checkbox groups.
+   The generic rule above stretches every input to full width, which turns a
+   radio button into a 630px bar. These choices are laid out as a stacked list
+   of clickable rows instead, with the control at its natural size. */
+.public-form .q-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.public-form .q-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--surface-input);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.public-form .q-choice:hover { border-color: var(--primary-color); }
+
+.public-form .q-choice:has(input:checked) {
+  border-color: var(--primary-color);
+  background: var(--surface-subtle);
+}
+
+.public-form .q-choice:has(input:focus-visible) {
+  outline: none;
+  box-shadow: 0 0 0 3px hsl(var(--primary-color-hsl) / .15);
+}
+
+.public-form .q-choice input[type='radio'],
+.public-form .q-choice input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
 .public-form .error {
   display: block;
   font-size: 12.5px;
@@ -307,6 +353,74 @@
   font-size: 16px;
   margin-top: 8px;
 }
+
+/* ---------- paginated forms ----------
+   A form split into pages shows a step rail above the questions and a
+   Back/Next pair below them. A single-page form renders none of this, so
+   older links look exactly as they did. */
+.form-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+}
+
+.form-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-faint);
+}
+
+/* The number and its title live inside one <span>, so the gap that separates
+   them has to be set here rather than on the <li>. */
+.form-steps li > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-steps li.is-current { color: var(--text-heading); font-weight: 700; }
+
+.form-steps li.is-done button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--primary-color);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.form-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.form-nav {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.form-nav .btn { flex: 1 1 auto; min-height: 52px; font-size: 16px; }
+
+/* The Back button is the quieter of the two, so Next keeps the emphasis. */
+.form-nav .btn-ghost { flex: 0 0 auto; min-width: 96px; }
+
+.form-nav .btn-primary { margin-top: 0; }
 
 /* Tells the registrant up front that submitting leads to a payment page,
    so the redirect is never a surprise. Sits above the button and uses a

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { TrainingRequestRow } from '@pe/shared';
 import { api } from '../api';
@@ -6,6 +6,21 @@ import { useAuth } from '../auth';
 import { AppShell } from '../components/AppShell';
 import { IconRequests } from '../components/icons';
 import { TrainingRequestDrawer } from '../components/TrainingRequestDrawer';
+import { TrainingRequestCalendar } from '../components/TrainingRequestCalendar';
+import { TrainingRequestDayPanel } from '../components/TrainingRequestDayPanel';
+import { monthLabel, ymd } from '../components/WorkshopCalendar';
+
+type View = 'table' | 'calendar';
+
+const VIEW_KEY = 'pe.trainingRequests.view';
+
+function readView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'calendar' ? 'calendar' : 'table';
+  } catch {
+    return 'table';
+  }
+}
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -57,6 +72,14 @@ export function TrainingRequestsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
 
+  const [view, setView] = useState<View>(readView);
+  const [cursor, setCursor] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const [cursorSeeded, setCursorSeeded] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
   const pageSize = 25;
 
   // Deep links: /training-requests?edit=<id>
@@ -88,12 +111,69 @@ export function TrainingRequestsPage() {
         status,
         sort,
       }),
+    enabled: view === 'table',
+  });
+
+  // The calendar opens on the newest request, not on today: nothing has been
+  // requested since 2019, so "today" would land on an empty month.
+  const latest = useQuery({
+    queryKey: ['training-requests', 'calendar-seed'],
+    queryFn: () => api.trainingRequests.list({ page: 1, pageSize: 1, sort: 'recent' }),
+    staleTime: 10 * 60_000,
+  });
+
+  useEffect(() => {
+    if (cursorSeeded) return;
+    const newest = latest.data?.data[0]?.RequestDate;
+    if (!newest) return;
+    const d = new Date(`${newest.slice(0, 10)}T00:00:00`);
+    setCursor({ year: d.getFullYear(), month: d.getMonth() });
+    setCursorSeeded(true);
+  }, [latest.data, cursorSeeded]);
+
+  // The month grid shows 6 weeks, so the range reaches into the neighbouring
+  // months — otherwise the leading/trailing cells would look empty.
+  const range = useMemo(() => {
+    const first = new Date(cursor.year, cursor.month, 1);
+    const from = new Date(first);
+    from.setDate(1 - first.getDay());
+    const to = new Date(from);
+    to.setDate(from.getDate() + 41);
+    return { from: ymd(from), to: ymd(to) };
+  }, [cursor]);
+
+  const calendar = useQuery({
+    queryKey: ['training-requests', 'calendar', range.from, range.to, debounced, status],
+    queryFn: () =>
+      api.trainingRequests.calendar({
+        from: range.from,
+        to: range.to,
+        q: debounced || undefined,
+        status,
+      }),
+    enabled: view === 'calendar',
   });
 
   const rows = data?.data ?? [];
   const total = data?.total ?? 0;
   const counts = data?.counts;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
+
+  function changeView(next: View) {
+    setView(next);
+    try {
+      localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      /* storage is a convenience; the toggle still works without it */
+    }
+  }
+
+  function shiftMonth(delta: number) {
+    setCursor((c) => {
+      const d = new Date(c.year, c.month + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+  }
 
   function openCreate() {
     setEditingId(null);
@@ -163,7 +243,30 @@ export function TrainingRequestsPage() {
           </select>
         </div>
 
-        <span className="toolbar-count">{total.toLocaleString()} requests</span>
+        <div className="segmented" role="group" aria-label="View">
+          <button
+            type="button"
+            className={view === 'table' ? 'is-active' : ''}
+            aria-pressed={view === 'table'}
+            onClick={() => changeView('table')}
+          >
+            Table
+          </button>
+          <button
+            type="button"
+            className={view === 'calendar' ? 'is-active' : ''}
+            aria-pressed={view === 'calendar'}
+            onClick={() => changeView('calendar')}
+          >
+            Calendar
+          </button>
+        </div>
+
+        <span className="toolbar-count">
+          {view === 'calendar'
+            ? `${(calendar.data?.data.length ?? 0).toLocaleString()} this month`
+            : `${total.toLocaleString()} requests`}
+        </span>
       </div>
 
       {counts && (
@@ -182,6 +285,80 @@ export function TrainingRequestsPage() {
         </div>
       )}
 
+      {view === 'calendar' ? (
+        <div className="panel">
+          <div className="cal-head">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => shiftMonth(-1)}
+              aria-label="Previous month"
+            >
+              ◀
+            </button>
+            <h3 className="cal-title">{monthLabel(cursor.year, cursor.month)}</h3>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => shiftMonth(1)}
+              aria-label="Next month"
+            >
+              ▶
+            </button>
+            <span className="cal-spacer" />
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                const now = new Date();
+                setCursor({ year: now.getFullYear(), month: now.getMonth() });
+              }}
+            >
+              Today
+            </button>
+          </div>
+
+          <div className="panel-body">
+            {calendar.isLoading ? (
+              <div style={{ padding: 18 }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="skeleton" style={{ height: 72, marginBottom: 8 }} />
+                ))}
+              </div>
+            ) : calendar.isError ? (
+              <div className="alert alert-error" role="alert">
+                <span>
+                  Could not load the calendar.
+                  {calendar.error instanceof Error ? ` ${calendar.error.message}` : ''}
+                </span>
+              </div>
+            ) : (
+              <TrainingRequestCalendar
+                year={cursor.year}
+                month={cursor.month}
+                entries={calendar.data?.data ?? []}
+                selectedDate={selectedDay}
+                onOpen={openEdit}
+                onPickDay={(date) => {
+                  setSelectedDay((cur) => (cur === date ? null : date));
+                  const d = new Date(`${date}T00:00:00`);
+                  if (d.getMonth() !== cursor.month || d.getFullYear() !== cursor.year) {
+                    setCursor({ year: d.getFullYear(), month: d.getMonth() });
+                  }
+                }}
+              />
+            )}
+
+            {!!calendar.data?.undated && (
+              <p className="cal-note">
+                {calendar.data.undated} matching request
+                {calendar.data.undated === 1 ? '' : 's'} have no requested date and cannot be
+                shown on the calendar.
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
       <div className="panel">
         <div className="panel-body">
           {isLoading ? (
@@ -286,6 +463,16 @@ export function TrainingRequestsPage() {
           </div>
         )}
       </div>
+      )}
+
+      {view === 'calendar' && selectedDay && (
+        <TrainingRequestDayPanel
+          date={selectedDay}
+          entries={(calendar.data?.data ?? []).filter((e) => e.date === selectedDay)}
+          onOpen={openEdit}
+          onClose={() => setSelectedDay(null)}
+        />
+      )}
 
       {drawerOpen && (
         <TrainingRequestDrawer

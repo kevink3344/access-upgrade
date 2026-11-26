@@ -21,6 +21,17 @@
 
 .cal { padding: 10px; }
 
+/* Training requests reuse the grid: a closed request is muted, not struck
+   through — nearly the whole legacy set is closed, and striking every chip
+   out makes the calendar read as empty. */
+.cal--requests .cal-chip.is-cancelled {
+  text-decoration: none;
+  background: var(--badge-slate-bg);
+  border-color: var(--badge-slate-border);
+  color: var(--text-muted);
+}
+.cal--requests .cal-chip.is-cancelled .cal-chip-code { color: var(--text-muted); }
+
 .cal-weekdays,
 .cal-grid {
   display: grid;

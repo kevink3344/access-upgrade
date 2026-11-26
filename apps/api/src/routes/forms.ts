@@ -43,6 +43,14 @@ const questionSchema = z.object({
   /** Question key whose answer gates this one. Null = always shown. */
   branchOnQuestionKey: z.string().max(50).nullable().optional(),
   branchOptionValue: z.string().max(100).nullable().optional(),
+  /** Temporary page key from the editor; resolved to a FormPageID on save. */
+  pageKey: z.string().max(50).nullable().optional(),
+});
+
+const pageSchema = z.object({
+  key: z.string().min(1).max(50),
+  title: z.string().min(1, 'A page title is required').max(100),
+  subtitle: z.string().max(300).nullable().optional(),
 });
 
 /**
@@ -251,7 +259,12 @@ formsRouter.post('/:id/versions', requireAuth, requireRole(...EDIT_ROLES), async
       return;
     }
 
-    const parsed = z.object({ questions: z.array(questionSchema).min(1) }).safeParse(req.body);
+    const parsed = z
+      .object({
+        questions: z.array(questionSchema).min(1),
+        pages: z.array(pageSchema).max(20).default([]),
+      })
+      .safeParse(req.body);
 
     if (!parsed.success) {
       res.status(422).json({
@@ -318,6 +331,28 @@ formsRouter.post('/:id/versions', requireAuth, requireRole(...EDIT_ROLES), async
       }
     }
 
+    // Pages: keys must be unique, and every question must name a page that
+    // exists. A version with no pages is the page-less form, so a stray
+    // pageKey there is a mistake rather than something to silently drop.
+    const pageKeys = new Set<string>();
+    for (const p of parsed.data.pages) {
+      if (pageKeys.has(p.key)) problems.push(`Duplicate page "${p.title}".`);
+      pageKeys.add(p.key);
+    }
+    for (const q of parsed.data.questions) {
+      if (q.pageKey && !pageKeys.has(q.pageKey)) {
+        problems.push(`"${q.label}" is on a page that is not in this form.`);
+      }
+    }
+    if (parsed.data.pages.length > 0) {
+      const empty = parsed.data.pages.filter(
+        (p) => !parsed.data.questions.some((q) => q.pageKey === p.key),
+      );
+      if (empty.length === parsed.data.pages.length) {
+        problems.push('Every page is empty. Remove the pages or add a question to one.');
+      }
+    }
+
     if (problems.length > 0) {
       res.status(422).json({ error: 'validation_failed', message: problems.join(' '), details: problems });
       return;
@@ -326,6 +361,7 @@ formsRouter.post('/:id/versions', requireAuth, requireRole(...EDIT_ROLES), async
     const versionId = await saveDraft({
       formTemplateId: id,
       questions: parsed.data.questions,
+      pages: parsed.data.pages,
       actor: req.user!.email,
     });
 

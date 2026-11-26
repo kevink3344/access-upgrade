@@ -590,6 +590,19 @@ export const api = {
     },
     get: (id: number) =>
       request<import('@pe/shared').TrainingRequestDetail>(`/api/training-requests/${id}`),
+    calendar: (params: {
+      from: string;
+      to: string;
+      q?: string;
+      status?: 'all' | 'active' | 'inactive' | 'invoiced' | 'uninvoiced';
+    }) => {
+      const qs = new URLSearchParams({ from: params.from, to: params.to });
+      if (params.q) qs.set('q', params.q);
+      if (params.status && params.status !== 'all') qs.set('status', params.status);
+      return request<import('@pe/shared').TrainingRequestCalendarResponse>(
+        `/api/training-requests/calendar?${qs}`,
+      );
+    },
     create: (body: import('@pe/shared').TrainingRequestWrite) =>
       request<{ trainingRequestId: number }>('/api/training-requests', {
         method: 'POST',
@@ -786,10 +799,14 @@ export const api = {
     version: (id: number, versionId: number) =>
       request<import('@pe/shared').FormVersion>(`/api/forms/${id}/versions/${versionId}`),
 
-    saveDraft: (id: number, questions: import('@pe/shared').FormQuestionDraft[]) =>
+    saveDraft: (
+      id: number,
+      questions: import('@pe/shared').FormQuestionDraft[],
+      pages: import('@pe/shared').FormPageDraft[] = [],
+    ) =>
       request<{ formTemplateVersionId: number }>(`/api/forms/${id}/versions`, {
         method: 'POST',
-        body: JSON.stringify({ questions }),
+        body: JSON.stringify({ questions, pages }),
       }),
 
     publish: (id: number, versionId: number) =>

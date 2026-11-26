@@ -118,6 +118,65 @@
 
 .form-q-actions .btn { padding: 0 6px; min-height: 20px; line-height: 1; font-size: 11px; }
 
+/* Pages group the question list. A page header is a row of its own, so the
+   ↓/↑ buttons act on the page while the question arrows act within it. */
+.form-editor-list li.form-page-group {
+  display: block;
+  border-bottom: 0;
+}
+
+.form-editor-list li.form-page-group + li.form-page-group {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.form-page-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 12px;
+  background: var(--surface-zebra);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.form-page-head .form-q-actions { flex-direction: row; padding-right: 0; }
+
+.form-page-head--none { background: transparent; }
+
+.form-page-index {
+  flex: 0 0 auto;
+  font-size: 10px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.form-page-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.form-page-title:hover:not(:disabled) { border-color: var(--border-subtle); }
+
+.form-page-title:focus { outline: none; border-color: var(--primary-color); background: var(--surface-card); }
+
+.form-page-empty {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
 .form-editor-detail {
   padding: 18px 20px 24px;
   border: 1px solid var(--border-color);

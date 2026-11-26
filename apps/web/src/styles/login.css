@@ -115,7 +115,7 @@
 
 .login-brand .stats {
   display: flex;
-  gap: 26px;
+  gap: 28.6px; /* 26px + 10% */
   margin-top: 36px;
   flex-wrap: wrap;
 }

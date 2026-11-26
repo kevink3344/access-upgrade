@@ -1,7 +1,7 @@
-﻿import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
-import type { PublicLinkState } from '@pe/shared';
+import type { FormPage, FormQuestion, PublicLinkState } from '@pe/shared';
 import { api, HttpError } from '../api';
 import { AgencyPicker } from '../components/AgencyPicker';
 
@@ -38,6 +38,196 @@ function Req() {
 type Role = (typeof ROLES)[number];
 
 type Errors = Record<string, string>;
+
+/**
+ * One custom question, rendered from the pinned form version.
+ *
+ * Shared by the registration and training-request forms so a field type only
+ * has to be implemented once. `includeSession` is the one difference: a
+ * session picker needs a workshop, and only a registration link has one.
+ */
+function QuestionField({
+  q,
+  value,
+  err,
+  agencyLabel,
+  sessions,
+  includeSession,
+  onChange,
+  onAgencyLabel,
+}: {
+  q: FormQuestion;
+  value: string | string[] | undefined;
+  err: string | undefined;
+  agencyLabel: string;
+  sessions: { workshopSessionId: number; label: string }[];
+  includeSession: boolean;
+  onChange: (v: string | string[]) => void;
+  onAgencyLabel: (label: string) => void;
+}) {
+  const describedBy = q.helpText ? `q-${q.questionKey}-help` : undefined;
+
+  return (
+    <div className="field">
+      <label htmlFor={`q-${q.questionKey}`}>
+        {q.label}
+        {q.isRequired ? (
+          <Req />
+        ) : (
+          <span style={{ fontWeight: 400, color: 'var(--text-faint)' }}> (optional)</span>
+        )}
+      </label>
+
+      {q.fieldType === 'agency' ? (
+        <AgencyPicker
+          id={`q-${q.questionKey}`}
+          value={typeof value === 'string' && value ? Number(value) : null}
+          label={agencyLabel}
+          onChange={(id, lbl) => {
+            onChange(id === null ? '' : String(id));
+            onAgencyLabel(lbl);
+          }}
+          describedBy={describedBy}
+        />
+      ) : q.fieldType === 'longtext' ? (
+        <textarea
+          id={`q-${q.questionKey}`}
+          rows={3}
+          maxLength={q.maxLength ?? 2000}
+          placeholder={q.placeholder ?? ''}
+          value={typeof value === 'string' ? value : ''}
+          onChange={(e) => onChange(e.target.value)}
+          aria-describedby={describedBy}
+          aria-invalid={!!err}
+          aria-required={q.isRequired}
+        />
+      ) : q.fieldType === 'select' ? (
+        <select
+          id={`q-${q.questionKey}`}
+          value={typeof value === 'string' ? value : ''}
+          onChange={(e) => onChange(e.target.value)}
+          aria-describedby={describedBy}
+          aria-invalid={!!err}
+          aria-required={q.isRequired}
+        >
+          <option value="">Select…</option>
+          {q.options.map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+      ) : q.fieldType === 'session' && includeSession ? (
+        <select
+          id={`q-${q.questionKey}`}
+          value={typeof value === 'string' ? value : ''}
+          onChange={(e) => onChange(e.target.value)}
+          aria-describedby={describedBy}
+          aria-invalid={!!err}
+          aria-required={q.isRequired}
+        >
+          <option value="">Select a session…</option>
+          {sessions.map((s) => (
+            <option key={s.workshopSessionId} value={s.label}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      ) : q.fieldType === 'radio' ? (
+        <div className="q-choices" role="radiogroup" aria-required={q.isRequired}>
+          {q.options.map((o) => (
+            <label key={o} className="q-choice">
+              <input
+                type="radio"
+                name={`q-${q.questionKey}`}
+                value={o}
+                checked={value === o}
+                onChange={() => onChange(o)}
+              />
+              <span>{o}</span>
+            </label>
+          ))}
+        </div>
+      ) : q.fieldType === 'checkbox' ? (
+        <div className="q-choices">
+          {q.options.map((o) => {
+            const list = Array.isArray(value) ? value : [];
+            return (
+              <label key={o} className="q-choice">
+                <input
+                  type="checkbox"
+                  value={o}
+                  checked={list.includes(o)}
+                  onChange={(e) =>
+                    onChange(e.target.checked ? [...list, o] : list.filter((x) => x !== o))
+                  }
+                />
+                <span>{o}</span>
+              </label>
+            );
+          })}
+        </div>
+      ) : (
+        <input
+          id={`q-${q.questionKey}`}
+          type={q.fieldType === 'number' ? 'number' : 'text'}
+          maxLength={q.maxLength ?? 255}
+          placeholder={q.placeholder ?? ''}
+          value={typeof value === 'string' ? value : ''}
+          onChange={(e) => onChange(e.target.value)}
+          aria-describedby={describedBy}
+          aria-invalid={!!err}
+          aria-required={q.isRequired}
+        />
+      )}
+
+      {q.helpText && (
+        <span className="field-hint" id={`q-${q.questionKey}-help`}>
+          {q.helpText}
+        </span>
+      )}
+      {err && <span className="error" role="alert">{err}</span>}
+    </div>
+  );
+}
+
+/**
+ * The step indicator above a paginated form.
+ *
+ * Rendered as a list of step names with the current one marked, so a visitor
+ * can see how much is left before they start. Steps already passed are
+ * buttons: going back is always safe, and a mistyped answer is usually
+ * noticed on the way to the next page.
+ */
+function FormSteps({
+  pages,
+  current,
+  onGoTo,
+}: {
+  pages: FormPage[];
+  current: number;
+  onGoTo: (index: number) => void;
+}) {
+  return (
+    <ol className="form-steps" aria-label="Form progress">
+      {pages.map((p, i) => {
+        const state = i === current ? 'is-current' : i < current ? 'is-done' : '';
+        return (
+          <li key={p.formPageId} className={state}>
+            {i < current ? (
+              <button type="button" onClick={() => onGoTo(i)}>
+                <span aria-hidden="true">✓</span> {p.title}
+              </button>
+            ) : (
+              <span aria-current={i === current ? 'step' : undefined}>
+                <span className="form-step-num" aria-hidden="true">{i + 1}</span>
+                <span className="form-step-title">{p.title}</span>
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 function fmtDate(iso: string | null): string {
   if (!iso) return 'â€”';
@@ -141,6 +331,8 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
   const [answerErrors, setAnswerErrors] = useState<Record<string, string>>({});
   /** Labels for custom `agency` questions, keyed by QuestionKey. */
   const [agencyLabels, setAgencyLabels] = useState<Record<string, string>>({});
+  /** Which page of a paginated form is showing. 0 = the first page. */
+  const [pageIndex, setPageIndex] = useState(0);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['public-link', slug],
@@ -153,20 +345,100 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
   }
 
   /**
+   * Pagination. A version is shown a page at a time only when it has more
+   * than one page: a single page (or none) is the ordinary continuous form,
+   * so an older link that never used pages behaves exactly as before.
+   */
+  const formPages = data?.form?.pages ?? [];
+  const paged = formPages.length > 1;
+  /** The page being shown, or null for the continuous form. */
+  const currentPage = paged ? (formPages[pageIndex] ?? formPages[0]!) : null;
+
+  /**
    * The questions to render.
    *
    * A registration form skips the ones with a `mapsToColumn` because the page
    * renders those itself. A standalone form has no such block, so it renders
    * every question on the version.
+   *
+   * On a paginated form only the current page's questions are returned. The
+   * built-in block is page 0, so the first page holds those plus any custom
+   * questions assigned to it.
    */
   function visibleQuestions(includeMapped = false) {
     return (data?.form?.questions ?? [])
       .filter((q) => includeMapped || !q.mapsToColumn)
       .filter((q) => {
+        if (!paged) return true;
+        const onPage =
+          q.pageId === null ? pageIndex === 0 : q.pageId === currentPage?.formPageId;
+        return onPage;
+      })
+      .filter((q) => {
         if (!q.branchOnQuestionKey) return true;
         const gate = answers[q.branchOnQuestionKey];
         return typeof gate === 'string' && gate === q.branchOptionValue;
       });
+  }
+
+  /** Page 0 of a registration form is the built-in name/agency block. */
+  const showsBuiltIn = !paged || pageIndex === 0;
+  const isLastPage = !paged || pageIndex >= formPages.length - 1;
+
+  /**
+   * Validate the current page before letting the visitor continue.
+   *
+   * Only this page's questions are checked — a required field two pages ahead
+   * must not block Next here. `checkBuiltIn` is set by the registration form,
+   * whose name/agency block is page 0; the training-request form has none.
+   * Errors are returned rather than set, so the caller can decide whether to
+   * stop or submit.
+   */
+  function validatePage(checkBuiltIn: boolean): { builtIn: Errors; answers: Record<string, string> } {
+    const builtIn: Errors = {};
+    const answerErrs: Record<string, string> = {};
+
+    if (checkBuiltIn && showsBuiltIn) {
+      const parsed = schema.safeParse(form);
+      if (!parsed.success) {
+        for (const issue of parsed.error.issues) {
+          const key = issue.path[0] as string;
+          if (!builtIn[key]) builtIn[key] = issue.message;
+        }
+      }
+    }
+
+    for (const q of visibleQuestions()) {
+      if (!q.isRequired) continue;
+      const v = answers[q.questionKey];
+      if (!v || (Array.isArray(v) && v.length === 0) || (typeof v === 'string' && !v.trim())) {
+        answerErrs[q.questionKey] = `${q.label} is required`;
+      }
+    }
+
+    return { builtIn, answers: answerErrs };
+  }
+
+  /** Next: check this page, then move on. The form is only sent at the end. */
+  function goNext(checkBuiltIn: boolean) {
+    const { builtIn, answers: answerErrs } = validatePage(checkBuiltIn);
+    setErrors(builtIn);
+    setAnswerErrors(answerErrs);
+    if (Object.keys(builtIn).length > 0 || Object.keys(answerErrs).length > 0) {
+      // Bring the first problem into view rather than leaving the visitor
+      // hunting for it above the fold.
+      requestAnimationFrame(() => {
+        document.querySelector('.public-form .error')?.scrollIntoView({ block: 'center' });
+      });
+      return;
+    }
+    setPageIndex((i) => Math.min(i + 1, formPages.length - 1));
+    window.scrollTo({ top: 0 });
+  }
+
+  function goBack() {
+    setPageIndex((i) => Math.max(i - 1, 0));
+    window.scrollTo({ top: 0 });
   }
 
   /**
@@ -177,8 +449,12 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     e.preventDefault();
     setFormError(null);
 
+    // Every page, not just the visible one: a visitor can reach the final
+    // page and submit without ever returning to an earlier page they left
+    // incomplete (Next validates, but a required question can be cleared
+    // again on the way back).
     const missing: Record<string, string> = {};
-    for (const q of visibleQuestions(true)) {
+    for (const q of (data?.form?.questions ?? [])) {
       if (!q.isRequired) continue;
       const v = answers[q.questionKey];
       if (!v || (Array.isArray(v) && v.length === 0) || (typeof v === 'string' && !v.trim())) {
@@ -187,6 +463,13 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     }
     if (Object.keys(missing).length > 0) {
       setAnswerErrors(missing);
+      // Send the visitor to the page holding the first problem.
+      if (paged) {
+        const firstKey = Object.keys(missing)[0]!;
+        const q = data?.form?.questions.find((x) => x.questionKey === firstKey);
+        const idx = q?.pageId ? formPages.findIndex((p) => p.formPageId === q.pageId) : 0;
+        if (idx >= 0) setPageIndex(idx);
+      }
       return;
     }
     setAnswerErrors({});
@@ -225,6 +508,8 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
         if (!next[key]) next[key] = issue.message;
       }
       setErrors(next);
+      // The built-in block is page 0; take the visitor there to fix it.
+      if (paged) setPageIndex(0);
       return;
     }
 
@@ -233,7 +518,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
 
     // Custom questions on the pinned version. Built-in ones are already
     // validated by `schema` above, so only the extras are checked here.
-    // A branched question that is not currently visible is not required.
+    // Every page is checked, not just the visible one.
     const customQuestions = (data?.form?.questions ?? []).filter((q) => {
       if (q.mapsToColumn) return false;
       if (!q.branchOnQuestionKey) return true;
@@ -250,6 +535,12 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     }
     if (Object.keys(customErrors).length > 0) {
       setAnswerErrors(customErrors);
+      if (paged) {
+        const firstKey = Object.keys(customErrors)[0]!;
+        const q = data?.form?.questions.find((x) => x.questionKey === firstKey);
+        const idx = q?.pageId ? formPages.findIndex((p) => p.formPageId === q.pageId) : 0;
+        if (idx >= 0) setPageIndex(idx);
+      }
       setSubmitting(false);
       return;
     }
@@ -417,7 +708,14 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
         </div>
 
         <div className="public-card">
-          <h2>Your request</h2>
+          <h2>{currentPage ? currentPage.title : 'Your request'}</h2>
+          {currentPage?.subtitle && (
+            <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: 13.5 }}>
+              {currentPage.subtitle}
+            </p>
+          )}
+
+          {paged && <FormSteps pages={formPages} current={pageIndex} onGoTo={setPageIndex} />}
 
           {formError && (
             <div className="alert alert-error" role="alert">
@@ -426,126 +724,28 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
           )}
 
           <form className="public-form" onSubmit={onSubmitStandalone} noValidate>
-            {visibleQuestions(true).map((q) => {
-              const value = answers[q.questionKey];
-              const err = answerErrors[q.questionKey];
-
-              function setAnswer(v: string | string[]) {
-                setAnswers((prev) => ({ ...prev, [q.questionKey]: v }));
-                setAnswerErrors((prev) => {
-                  const next = { ...prev };
-                  delete next[q.questionKey];
-                  return next;
-                });
-              }
-
-              return (
-                <div className="field" key={q.questionKey}>
-                  <label htmlFor={`q-${q.questionKey}`}>
-                    {q.label}
-                    {q.isRequired ? (
-                      <Req />
-                    ) : (
-                      <span style={{ fontWeight: 400, color: 'var(--text-faint)' }}> (optional)</span>
-                    )}
-                  </label>
-
-                  {q.fieldType === 'agency' ? (
-                    <AgencyPicker
-                      id={`q-${q.questionKey}`}
-                      value={typeof value === 'string' && value ? Number(value) : null}
-                      label={agencyLabels[q.questionKey] ?? ''}
-                      onChange={(id, lbl) => {
-                        setAnswer(id === null ? '' : String(id));
-                        setAgencyLabels((prev) => ({ ...prev, [q.questionKey]: lbl }));
-                      }}
-                      describedBy={q.helpText ? `q-${q.questionKey}-help` : undefined}
-                    />
-                  ) : q.fieldType === 'longtext' ? (
-                    <textarea
-                      id={`q-${q.questionKey}`}
-                      rows={3}
-                      maxLength={q.maxLength ?? 2000}
-                      placeholder={q.placeholder ?? ''}
-                      value={typeof value === 'string' ? value : ''}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
-                      aria-invalid={!!err}
-                      aria-required={q.isRequired}
-                    />
-                  ) : q.fieldType === 'select' ? (
-                    <select
-                      id={`q-${q.questionKey}`}
-                      value={typeof value === 'string' ? value : ''}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
-                      aria-invalid={!!err}
-                      aria-required={q.isRequired}
-                    >
-                      <option value="">Selectâ€¦</option>
-                      {q.options.map((o) => (
-                        <option key={o} value={o}>{o}</option>
-                      ))}
-                    </select>
-                  ) : q.fieldType === 'radio' ? (
-                    <div className="q-choices" role="radiogroup" aria-required={q.isRequired}>
-                      {q.options.map((o) => (
-                        <label key={o} className="q-choice">
-                          <input
-                            type="radio"
-                            name={`q-${q.questionKey}`}
-                            value={o}
-                            checked={value === o}
-                            onChange={() => setAnswer(o)}
-                          />
-                          <span>{o}</span>
-                        </label>
-                      ))}
-                    </div>
-                  ) : q.fieldType === 'checkbox' ? (
-                    <div className="q-choices">
-                      {q.options.map((o) => {
-                        const list = Array.isArray(value) ? value : [];
-                        return (
-                          <label key={o} className="q-choice">
-                            <input
-                              type="checkbox"
-                              value={o}
-                              checked={list.includes(o)}
-                              onChange={(e) =>
-                                setAnswer(
-                                  e.target.checked ? [...list, o] : list.filter((x) => x !== o),
-                                )
-                              }
-                            />
-                            <span>{o}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <input
-                      id={`q-${q.questionKey}`}
-                      type={q.fieldType === 'number' ? 'number' : 'text'}
-                      maxLength={q.maxLength ?? 255}
-                      placeholder={q.placeholder ?? ''}
-                      value={typeof value === 'string' ? value : ''}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
-                      aria-invalid={!!err}
-                      aria-required={q.isRequired}
-                    />
-                  )}
-
-                  {q.helpText && (
-                    <span className="field-hint" id={`q-${q.questionKey}-help`}>
-                      {q.helpText}
-                    </span>
-                  )}
-                  {err && <span className="error" role="alert">{err}</span>}
-                </div>
-              );
-            })}
+            {visibleQuestions(true).map((q) => (
+              <QuestionField
+                key={q.questionKey}
+                q={q}
+                value={answers[q.questionKey]}
+                err={answerErrors[q.questionKey]}
+                agencyLabel={agencyLabels[q.questionKey] ?? ''}
+                sessions={data?.sessions ?? []}
+                includeSession={false}
+                onChange={(v) => {
+                  setAnswers((prev) => ({ ...prev, [q.questionKey]: v }));
+                  setAnswerErrors((prev) => {
+                    const next = { ...prev };
+                    delete next[q.questionKey];
+                    return next;
+                  });
+                }}
+                onAgencyLabel={(lbl) =>
+                  setAgencyLabels((prev) => ({ ...prev, [q.questionKey]: lbl }))
+                }
+              />
+            ))}
 
             <div className="hp-field" aria-hidden="true">
               <label htmlFor="r-website">Website</label>
@@ -559,9 +759,22 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
               />
             </div>
 
-            <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? 'Submittingâ€¦' : 'Submit request'}
-            </button>
+            <div className="form-nav">
+              {paged && pageIndex > 0 && (
+                <button type="button" className="btn btn-ghost" onClick={goBack}>
+                  Back
+                </button>
+              )}
+              {!isLastPage ? (
+                <button type="button" className="btn btn-primary" onClick={() => goNext(false)}>
+                  Next
+                </button>
+              ) : (
+                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                  {submitting ? 'Submitting…' : 'Submit request'}
+                </button>
+              )}
+            </div>
           </form>
         </div>
       </PublicChrome>
@@ -628,7 +841,14 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
       </div>
 
       <div className="public-card">
-        <h2>Register</h2>
+        <h2>{paged ? currentPage?.title ?? 'Register' : 'Register'}</h2>
+        {paged && currentPage?.subtitle && (
+          <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: 13.5 }}>
+            {currentPage.subtitle}
+          </p>
+        )}
+
+        {paged && <FormSteps pages={formPages} current={pageIndex} onGoTo={setPageIndex} />}
 
         {formError && (
           <div className="alert alert-error" role="alert">
@@ -637,6 +857,10 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
         )}
 
         <form className="public-form" onSubmit={onSubmit} noValidate>
+          {/* Page 0 of a paginated form is the built-in block; later pages
+              hold only the custom questions assigned to them. */}
+          {showsBuiltIn && (
+          <>
           <fieldset className="role-choice">
             <legend>I am registering as <Req /></legend>
             <div className="role-options">
@@ -793,151 +1017,34 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
             />
           </div>
 
-          {/* Custom questions from the pinned form version. Built-in ones are
-              already rendered above, so only unmapped questions appear here.
-              A question with a branch condition is shown only when the
-              question it depends on has the matching answer. */}
-          {(data?.form?.questions ?? [])
-            .filter((q) => !q.mapsToColumn)
-            .filter((q) => {
-              if (!q.branchOnQuestionKey) return true;
-              const gate = answers[q.branchOnQuestionKey];
-              return typeof gate === 'string' && gate === q.branchOptionValue;
-            })
-            .map((q) => {
-              const value = answers[q.questionKey];
-              const err = answerErrors[q.questionKey];
-
-              function setAnswer(v: string | string[]) {
+          {/* Custom questions from the pinned form version, for the page
+              being shown. Built-in ones are rendered above, so only unmapped
+              questions appear here. Branch conditions are applied inside
+              visibleQuestions(). */}
+          {visibleQuestions().map((q) => (
+            <QuestionField
+              key={q.questionKey}
+              q={q}
+              value={answers[q.questionKey]}
+              err={answerErrors[q.questionKey]}
+              agencyLabel={agencyLabels[q.questionKey] ?? ''}
+              sessions={data?.sessions ?? []}
+              includeSession
+              onChange={(v) => {
                 setAnswers((prev) => ({ ...prev, [q.questionKey]: v }));
                 setAnswerErrors((prev) => {
                   const next = { ...prev };
                   delete next[q.questionKey];
                   return next;
                 });
+              }}
+              onAgencyLabel={(lbl) =>
+                setAgencyLabels((prev) => ({ ...prev, [q.questionKey]: lbl }))
               }
-
-              return (
-                <div className="field" key={q.questionKey}>
-                  <label htmlFor={`q-${q.questionKey}`}>
-                    {q.label}
-                    {!q.isRequired && (
-                      <span style={{ fontWeight: 400, color: 'var(--text-faint)' }}> (optional)</span>
-                    )}
-                  </label>
-
-                  {q.fieldType === 'agency' ? (
-                    <AgencyPicker
-                      id={`q-${q.questionKey}`}
-                      value={typeof value === 'string' && value ? Number(value) : null}
-                      label={agencyLabels[q.questionKey] ?? ''}
-                      onChange={(id, lbl) => {
-                        setAnswer(id === null ? '' : String(id));
-                        setAgencyLabels((prev) => ({ ...prev, [q.questionKey]: lbl }));
-                      }}
-                      describedBy={q.helpText ? `q-${q.questionKey}-help` : undefined}
-                    />
-                  ) : q.fieldType === 'longtext' ? (
-                    <textarea
-                      id={`q-${q.questionKey}`}
-                      rows={3}
-                      maxLength={q.maxLength ?? 2000}
-                      placeholder={q.placeholder ?? ''}
-                      value={typeof value === 'string' ? value : ''}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
-                      aria-invalid={!!err}
-                      aria-required={q.isRequired}
-                    />
-                  ) : q.fieldType === 'select' ? (
-                    <select
-                      id={`q-${q.questionKey}`}
-                      value={typeof value === 'string' ? value : ''}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
-                      aria-invalid={!!err}
-                      aria-required={q.isRequired}
-                    >
-                      <option value="">Selectâ€¦</option>
-                      {q.options.map((o) => (
-                        <option key={o} value={o}>{o}</option>
-                      ))}
-                    </select>
-                  ) : q.fieldType === 'session' ? (
-                    <select
-                      id={`q-${q.questionKey}`}
-                      value={typeof value === 'string' ? value : ''}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
-                      aria-invalid={!!err}
-                      aria-required={q.isRequired}
-                    >
-                      <option value="">Select a sessionâ€¦</option>
-                      {(data?.sessions ?? []).map((s) => (
-                        <option key={s.workshopSessionId} value={s.label}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : q.fieldType === 'radio' ? (
-                    <div className="q-choices" role="radiogroup" aria-required={q.isRequired}>
-                      {q.options.map((o) => (
-                        <label key={o} className="q-choice">
-                          <input
-                            type="radio"
-                            name={`q-${q.questionKey}`}
-                            value={o}
-                            checked={value === o}
-                            onChange={() => setAnswer(o)}
-                          />
-                          <span>{o}</span>
-                        </label>
-                      ))}
-                    </div>
-                  ) : q.fieldType === 'checkbox' ? (
-                    <div className="q-choices">
-                      {q.options.map((o) => {
-                        const list = Array.isArray(value) ? value : [];
-                        return (
-                          <label key={o} className="q-choice">
-                            <input
-                              type="checkbox"
-                              value={o}
-                              checked={list.includes(o)}
-                              onChange={(e) =>
-                                setAnswer(
-                                  e.target.checked ? [...list, o] : list.filter((x) => x !== o),
-                                )
-                              }
-                            />
-                            <span>{o}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <input
-                      id={`q-${q.questionKey}`}
-                      type={q.fieldType === 'number' ? 'number' : 'text'}
-                      maxLength={q.maxLength ?? 255}
-                      placeholder={q.placeholder ?? ''}
-                      value={typeof value === 'string' ? value : ''}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      aria-describedby={q.helpText ? `q-${q.questionKey}-help` : undefined}
-                      aria-invalid={!!err}
-                      aria-required={q.isRequired}
-                    />
-                  )}
-
-                  {q.helpText && (
-                    <span className="field-hint" id={`q-${q.questionKey}-help`}>
-                      {q.helpText}
-                    </span>
-                  )}
-                  {err && <span className="error" role="alert">{err}</span>}
-                </div>
-              );
-            })}
+            />
+          ))}
+          </>
+          )}
 
           {/* Honeypot: hidden from people, tempting to bots. */}
           <div className="hp-field" aria-hidden="true">
@@ -977,13 +1084,26 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
             </p>
           )}
 
-          <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? 'Registeringâ€¦' : 'Register'}
-          </button>
+          <div className="form-nav">
+            {paged && pageIndex > 0 && (
+              <button type="button" className="btn btn-ghost" onClick={goBack}>
+                Back
+              </button>
+            )}
+            {!isLastPage ? (
+              <button type="button" className="btn btn-primary" onClick={() => goNext(true)}>
+                Next
+              </button>
+            ) : (
+              <button type="submit" className="btn btn-primary" disabled={submitting}>
+                {submitting ? 'Registering…' : 'Register'}
+              </button>
+            )}
+          </div>
 
-          {!(link.redirectToPayment && link.paymentUrl) && (
+          {isLastPage && !(link.redirectToPayment && link.paymentUrl) && (
             <p className="field-hint" style={{ marginTop: 12, textAlign: 'center' }}>
-              Payment is arranged separately â€” registering does not charge you.
+              Payment is arranged separately — registering does not charge you.
             </p>
           )}
         </form>

@@ -59,6 +59,16 @@ export interface FormQuestion {
   /** Shown only when this question's answer matches branchOptionValue. */
   branchOnQuestionKey: string | null;
   branchOptionValue: string | null;
+  /** The page this question is asked on. Null = the page-less form. */
+  pageId: number | null;
+}
+
+/** One page of a paginated form. A version with no pages is a single form. */
+export interface FormPage {
+  formPageId: number;
+  sortOrder: number;
+  title: string;
+  subtitle: string | null;
 }
 
 export interface FormVersion {
@@ -68,6 +78,8 @@ export interface FormVersion {
   publishedAt: string | null;
   publishedBy: string | null;
   questions: FormQuestion[];
+  /** Ordered pages. Empty for a version that shows one continuous form. */
+  pages: FormPage[];
 }
 
 export interface FormTemplateSummary {
@@ -485,15 +497,30 @@ export async function getVersion(versionId: number): Promise<FormVersion | null>
     BranchOnQuestionID: number | null;
     BranchOptionValue: string | null;
     BranchOnKey: string | null;
+    FormPageID: number | null;
   }>(
     `SELECT q.FormQuestionID, q.SortOrder, q.QuestionKey, q.Label, q.HelpText, q.Placeholder,
             q.FieldType, q.IsRequired, q.OptionsJson, q.MaxLength, q.MapsToColumn, q.IsBuiltIn,
             q.BranchOnQuestionID, q.BranchOptionValue,
-            b.QuestionKey AS BranchOnKey
+            b.QuestionKey AS BranchOnKey,
+            q.FormPageID
        FROM core.FormQuestion q
        LEFT JOIN core.FormQuestion b ON b.FormQuestionID = q.BranchOnQuestionID
       WHERE q.FormTemplateVersionID = @id AND q.IsActive = 1
       ORDER BY q.SortOrder, q.FormQuestionID`,
+    { id: { type: sql.Int, value: versionId } },
+  );
+
+  const pages = await query<{
+    FormPageID: number;
+    SortOrder: number;
+    Title: string;
+    Subtitle: string | null;
+  }>(
+    `SELECT FormPageID, SortOrder, Title, Subtitle
+       FROM core.FormPage
+      WHERE FormTemplateVersionID = @id
+      ORDER BY SortOrder, FormPageID`,
     { id: { type: sql.Int, value: versionId } },
   );
 
@@ -518,6 +545,13 @@ export async function getVersion(versionId: number): Promise<FormVersion | null>
       isBuiltIn: x.IsBuiltIn,
       branchOnQuestionKey: x.BranchOnKey,
       branchOptionValue: x.BranchOptionValue,
+      pageId: x.FormPageID,
+    })),
+    pages: pages.recordset.map((p) => ({
+      formPageId: p.FormPageID,
+      sortOrder: p.SortOrder,
+      title: p.Title,
+      subtitle: p.Subtitle,
     })),
   };
 }
@@ -632,6 +666,7 @@ export async function createTemplate(input: {
     1,
     input.actor,
     seed.map((q, i) => ({ ...q, sortOrder: i + 1 })),
+    [],
   );
 
   return { formTemplateId: templateId, versionId };
@@ -642,6 +677,7 @@ async function insertVersion(
   versionNumber: number,
   actor: string,
   questions: DraftQuestion[],
+  pages: DraftPage[],
 ): Promise<number> {
   const versionId = await nextId('core.FormTemplateVersion', 'FormTemplateVersionID', {
     FormTemplateID: { type: sql.Int, value: formTemplateId },
@@ -669,16 +705,35 @@ async function insertVersion(
   const startId = await nextQuestionId();
   questions.forEach((q, i) => keyToId.set(q.questionKey, startId + i));
 
+  // Pages first: a question's FormPageID must point at a row that exists.
+  const pageKeyToId = new Map<string, number>();
+  for (const [i, p] of pages.entries()) {
+    const pageId = await nextId('core.FormPage', 'FormPageID', {
+      FormTemplateVersionID: { type: sql.Int, value: versionId },
+      SortOrder: { type: sql.Int, value: i + 1 },
+      Title: { type: sql.NVarChar(100), value: p.title },
+    });
+    await query(
+      `UPDATE core.FormPage SET Subtitle = @sub WHERE FormPageID = @id`,
+      {
+        id: { type: sql.Int, value: pageId },
+        sub: { type: sql.NVarChar(300), value: p.subtitle ?? null },
+      },
+    );
+    pageKeyToId.set(p.key, pageId);
+  }
+
   for (const [i, q] of questions.entries()) {
     const branchOnId = q.branchOnQuestionKey ? (keyToId.get(q.branchOnQuestionKey) ?? null) : null;
+    const pageId = q.pageKey ? (pageKeyToId.get(q.pageKey) ?? null) : null;
 
     await query(
       `INSERT INTO core.FormQuestion
               (FormQuestionID, FormTemplateVersionID, SortOrder, QuestionKey, Label, HelpText,
                Placeholder, FieldType, IsRequired, OptionsJson, MaxLength, MapsToColumn,
-               IsBuiltIn, BranchOnQuestionID, BranchOptionValue)
+               IsBuiltIn, BranchOnQuestionID, BranchOptionValue, FormPageID)
        VALUES (@id, @ver, @sort, @key, @label, @help, @ph, @type, @req, @opts, @maxLen,
-               @maps, @builtIn, @branchOn, @branchVal)`,
+               @maps, @builtIn, @branchOn, @branchVal, @page)`,
       {
         id: { type: sql.Int, value: startId + i },
         ver: { type: sql.Int, value: versionId },
@@ -695,6 +750,7 @@ async function insertVersion(
         builtIn: { type: sql.Bit, value: q.isBuiltIn ? 1 : 0 },
         branchOn: { type: sql.Int, value: branchOnId },
         branchVal: { type: sql.NVarChar(100), value: branchOnId ? (q.branchOptionValue ?? null) : null },
+        page: { type: sql.Int, value: pageId },
       },
     );
   }
@@ -732,6 +788,15 @@ export interface DraftQuestion {
   /** Question key whose answer gates this one. Null = always shown. */
   branchOnQuestionKey?: string | null;
   branchOptionValue?: string | null;
+  /** Temporary page key from the editor. Resolved to a FormPageID on insert. */
+  pageKey?: string | null;
+}
+
+/** A page as supplied by the editor. `key` is a client handle, not an id. */
+export interface DraftPage {
+  key: string;
+  title: string;
+  subtitle?: string | null;
 }
 
 /**
@@ -743,6 +808,7 @@ export interface DraftQuestion {
 export async function saveDraft(input: {
   formTemplateId: number;
   questions: DraftQuestion[];
+  pages?: DraftPage[];
   actor: string;
 }): Promise<number> {
   const next = await query<{ n: number }>(
@@ -751,7 +817,13 @@ export async function saveDraft(input: {
     { id: { type: sql.Int, value: input.formTemplateId } },
   );
 
-  return insertVersion(input.formTemplateId, next.recordset[0]!.n, input.actor, input.questions);
+  return insertVersion(
+    input.formTemplateId,
+    next.recordset[0]!.n,
+    input.actor,
+    input.questions,
+    input.pages ?? [],
+  );
 }
 
 export async function publishVersion(versionId: number, actor: string): Promise<void> {

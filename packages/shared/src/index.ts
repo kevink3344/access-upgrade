@@ -55,9 +55,14 @@ export interface DashboardSummary {
     revenue: number[];
   };
   upcomingWorkshops: UpcomingWorkshop[];
-  unpaidRegistrations: {
-    count: number;
+  trainingRequests: {
+    /** Every request on file, active or not. */
     total: number;
+    active: number;
+    /** The most recent calendar year that has any requests — legacy data. */
+    latestYear: number | null;
+    /** Requests per month across `latestYear`, January first. */
+    monthly: number[];
   };
   recentActivity: ActivityItem[];
 }
@@ -615,6 +620,26 @@ export interface TrainingRequestListResponse {
     invoiced: number;
     uninvoiced: number;
   };
+}
+
+/** One request placed on the calendar, keyed on its RequestDate. */
+export interface TrainingRequestCalendarEntry {
+  trainingRequestId: number;
+  agencyName: string | null;
+  requestedBy: string | null;
+  /** YYYY-MM-DD — the request's RequestDate. */
+  date: string;
+  participantCount: string | null;
+  invoiceNum: string | null;
+  isActive: boolean;
+  quoteCount: number;
+  scheduledCount: number;
+}
+
+export interface TrainingRequestCalendarResponse {
+  data: TrainingRequestCalendarEntry[];
+  /** Matching requests with no RequestDate — they cannot be placed on a calendar. */
+  undated: number;
 }
 
 export interface TrainingRequestQuote {
@@ -1413,6 +1438,16 @@ export interface FormQuestion {
   /** Shown only when this question's answer matches branchOptionValue. */
   branchOnQuestionKey: string | null;
   branchOptionValue: string | null;
+  /** The page this question is asked on. Null = the page-less form. */
+  pageId: number | null;
+}
+
+/** One page of a paginated form. A version with no pages is a single form. */
+export interface FormPage {
+  formPageId: number;
+  sortOrder: number;
+  title: string;
+  subtitle: string | null;
 }
 
 /** A question as sent by the editor â€” ids are assigned server-side. */
@@ -1431,6 +1466,18 @@ export interface FormQuestionDraft {
   /** Question key whose answer gates this one. Null = always shown. */
   branchOnQuestionKey?: string | null;
   branchOptionValue?: string | null;
+  /**
+   * Page this question belongs to. On save it is the page's TEMPORARY key
+   * (`FormPageDraft.key`), because real ids are assigned server-side.
+   */
+  pageKey?: string | null;
+}
+
+/** A page as sent by the editor. `key` is a client-side handle, not an id. */
+export interface FormPageDraft {
+  key: string;
+  title: string;
+  subtitle?: string | null;
 }
 
 export interface FormVersion {
@@ -1440,6 +1487,8 @@ export interface FormVersion {
   publishedAt: string | null;
   publishedBy: string | null;
   questions: FormQuestion[];
+  /** Ordered pages. Empty for a version that shows one continuous form. */
+  pages: FormPage[];
 }
 
 export interface FormVersionSummary {

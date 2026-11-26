@@ -175,16 +175,31 @@ dashboardRouter.get('/', requireAuth, async (_req, res, next) => {
       isCancelled: r.IsCancelled,
     }));
 
-    // Unpaid: registrations with a positive amount still owed.
-    const unpaid = await query<{ Count: number; Total: number }>(`
-      SELECT COUNT(*) AS [Count], ISNULL(SUM(PaidAmount), 0) AS Total
-        FROM core.Registration
-       WHERE IsCancelled = 0
-         AND Attended = 0
-         AND PaidAmount <= 0
-         AND RegistrationDate > DATEADD(MONTH, -6, SYSUTCDATETIME())
+    // Training requests are imported history (nothing new since 2019), so the
+    // card reports the whole set and the sparkline shows the most recent year
+    // that actually has requests rather than the current calendar year.
+    const training = await query<{ Total: number; Active: number; LatestYear: number | null }>(`
+      SELECT COUNT(*) AS Total,
+             ISNULL(SUM(CASE WHEN IsActive = 1 THEN 1 ELSE 0 END), 0) AS Active,
+             MAX(YEAR(RequestDate)) AS LatestYear
+        FROM core.TrainingRequest
     `);
-    const u = unpaid.recordset[0]!;
+    const tr = training.recordset[0]!;
+
+    const trainingMonthly = tr.LatestYear
+      ? await query<{ MonthNo: number; Total: number }>(
+          `SELECT MONTH(RequestDate) AS MonthNo, COUNT(*) AS Total
+             FROM core.TrainingRequest
+            WHERE YEAR(RequestDate) = @year
+            GROUP BY MONTH(RequestDate)`,
+          { year: { type: sql.Int, value: tr.LatestYear } },
+        )
+      : null;
+
+    const trainingSeries = Array.from({ length: 12 }, (_, i) => {
+      const month = trainingMonthly?.recordset.find((r) => r.MonthNo === i + 1);
+      return month ? Number(month.Total) : 0;
+    });
 
     // Recent activity: latest registrations, joined for a readable label.
     const recent = await query<{
@@ -239,7 +254,12 @@ dashboardRouter.get('/', requireAuth, async (_req, res, next) => {
         revenue: series('revenue'),
       },
       upcomingWorkshops,
-      unpaidRegistrations: { count: u.Count, total: Number(u.Total) },
+      trainingRequests: {
+        total: tr.Total,
+        active: tr.Active,
+        latestYear: tr.LatestYear,
+        monthly: trainingSeries,
+      },
       recentActivity,
     };
 

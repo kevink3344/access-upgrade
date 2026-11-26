@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { FormFieldType, FormQuestion, FormQuestionDraft, FormTemplateKind } from '@pe/shared';
+import type {
+  FormFieldType,
+  FormPageDraft,
+  FormQuestion,
+  FormQuestionDraft,
+  FormTemplateKind,
+} from '@pe/shared';
 import { api } from '../api';
 import { FormLinkPanel } from './FormLinkPanel';
 
@@ -53,6 +59,7 @@ function toDraft(q: FormQuestion): FormQuestionDraft {
     isBuiltIn: q.isBuiltIn,
     branchOnQuestionKey: q.branchOnQuestionKey,
     branchOptionValue: q.branchOptionValue,
+    pageKey: q.pageId !== null ? String(q.pageId) : null,
   };
 }
 
@@ -82,6 +89,7 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
   const qc = useQueryClient();
 
   const [questions, setQuestions] = useState<FormQuestionDraft[]>([]);
+  const [pages, setPages] = useState<FormPageDraft[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -118,6 +126,13 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
   useEffect(() => {
     if (!version.data) return;
     setQuestions(version.data.questions.map(toDraft));
+    setPages(
+      version.data.pages.map((p) => ({
+        key: String(p.formPageId),
+        title: p.title,
+        subtitle: p.subtitle,
+      })),
+    );
     // `selected` is an ARRAY INDEX, not a question id — open on the first
     // question so staff land straight in the editor.
     setSelected(version.data.questions.length > 0 ? 0 : null);
@@ -125,7 +140,7 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
   }, [version.data]);
 
   const save = useMutation({
-    mutationFn: () => api.forms.saveDraft(formTemplateId, questions),
+    mutationFn: () => api.forms.saveDraft(formTemplateId, questions, pages),
     onSuccess: (r) => {
       setNotice(`Saved as v${(currentVersion?.versionNumber ?? 0) + 1} (draft).`);
       setError(null);
@@ -156,19 +171,6 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
     setDirty(true);
   }
 
-  function move(index: number, delta: number) {
-    const to = index + delta;
-    if (to < 0 || to >= questions.length) return;
-    setQuestions((prev) => {
-      const next = [...prev];
-      const [item] = next.splice(index, 1);
-      next.splice(to, 0, item!);
-      return next.map((q, i) => ({ ...q, sortOrder: i + 1 }));
-    });
-    setSelected(to);
-    setDirty(true);
-  }
-
   function addQuestion() {
     const key = slugKey('new question', takenKeys);
     setQuestions((prev) => [
@@ -194,6 +196,87 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
   function removeQuestion(index: number) {
     setQuestions((prev) => prev.filter((_, i) => i !== index).map((q, i) => ({ ...q, sortOrder: i + 1 })));
     setSelected(null);
+    setDirty(true);
+  }
+
+  /* ---------------- pages ---------------- */
+
+  function addPage() {
+    const key = `page_${Date.now().toString(36)}`;
+    setPages((prev) => [
+      ...prev,
+      { key, title: `Page ${prev.length + 1}`, subtitle: null },
+    ]);
+    setDirty(true);
+  }
+
+  function patchPage(key: string, changes: Partial<FormPageDraft>) {
+    setPages((prev) => prev.map((p) => (p.key === key ? { ...p, ...changes } : p)));
+    setDirty(true);
+  }
+
+  function movePage(index: number, delta: number) {
+    const to = index + delta;
+    if (to < 0 || to >= pages.length) return;
+    setPages((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(index, 1);
+      next.splice(to, 0, item!);
+      return next;
+    });
+    setDirty(true);
+  }
+
+  /**
+   * Removing a page keeps its questions: they move to the next page, or back
+   * to the page-less form when that was the only page. Deleting questions
+   * would be a surprising side effect of tidying up a page.
+   */
+  function removePage(index: number) {
+    const removed = pages[index]!;
+    const fallback = pages[index + 1]?.key ?? pages[index - 1]?.key ?? null;
+    setPages((prev) => prev.filter((_, i) => i !== index));
+    setQuestions((prev) =>
+      prev.map((q) => (q.pageKey === removed.key ? { ...q, pageKey: fallback } : q)),
+    );
+    setDirty(true);
+  }
+
+  /** Move a question onto a page, keeping the overall question order. */
+  function moveToPage(index: number, pageKey: string | null) {
+    setQuestions((prev) => prev.map((q, i) => (i === index ? { ...q, pageKey } : q)));
+    setDirty(true);
+  }
+
+  /** Questions grouped for the list: each page in order, then the unassigned. */
+  const groups: { page: FormPageDraft | null; items: { q: FormQuestionDraft; index: number }[] }[] = [
+    ...pages.map((page) => ({
+      page,
+      items: questions
+        .map((q, index) => ({ q, index }))
+        .filter((x) => x.q.pageKey === page.key),
+    })),
+    {
+      page: null,
+      items: questions
+        .map((q, index) => ({ q, index }))
+        .filter((x) => !x.q.pageKey || !pages.some((p) => p.key === x.q.pageKey)),
+    },
+  ].filter((g) => g.page !== null || g.items.length > 0);
+
+  /** The list is flat for ↑/↓, so a row's neighbours are its group's. */
+  function moveWithinGroup(groupIndex: number, itemIndex: number, delta: number) {
+    const items = groups[groupIndex]!.items;
+    const a = items[itemIndex]?.index;
+    const b = items[itemIndex + delta]?.index;
+    if (a === undefined || b === undefined) return;
+    setQuestions((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(a, 1);
+      next.splice(b, 0, item!);
+      return next.map((q, i) => ({ ...q, sortOrder: i + 1 }));
+    });
+    setSelected(b);
     setDirty(true);
   }
 
@@ -253,11 +336,16 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
       <div className="form-editor-page-body">
         <div className="form-editor-list">
             <div className="form-editor-list-head">
-              <span>Questions</span>
+              <span>{pages.length > 0 ? 'Pages & questions' : 'Questions'}</span>
               {canEdit && (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={addQuestion}>
-                  + Add
-                </button>
+                <span className="row-actions">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={addPage}>
+                    + Page
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={addQuestion}>
+                    + Add
+                  </button>
+                </span>
               )}
             </div>
 
@@ -265,50 +353,115 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
               <div className="skeleton" style={{ height: 120, margin: 12 }} />
             ) : (
               <ul>
-                {questions.map((q, i) => (
-                  <li key={`${q.questionKey}-${i}`} className={selected === i ? 'is-active' : ''}>
-                    <button type="button" className="form-q-row" onClick={() => setSelected(i)}>
-                      <span className="form-q-label">
-                        {q.isBuiltIn && !isRemovable(q, templateKind) && (
-                          <span className="form-q-lock" title="Required by the public form">🔒</span>
-                        )}
-                        {q.label}
-                      </span>
-                      <span className="form-q-meta">
-                        {q.fieldType}
-                        {q.isRequired ? ' · required' : ''}
-                        {q.branchOnQuestionKey && (
-                          <span className="form-q-branch">
-                            {' · only if '}
-                            {questions.find((x) => x.questionKey === q.branchOnQuestionKey)?.label ??
-                              q.branchOnQuestionKey}
-                            {' = '}
-                            {q.branchOptionValue}
+                {groups.map((group, gi) => (
+                  <li key={group.page?.key ?? '__none'} className="form-page-group">
+                    {group.page ? (
+                      <div className="form-page-head">
+                        <span className="form-page-index">
+                          Page {pages.findIndex((p) => p.key === group.page!.key) + 1}
+                        </span>
+                        <input
+                          className="form-page-title"
+                          value={group.page.title}
+                          maxLength={100}
+                          disabled={!canEdit}
+                          aria-label="Page title"
+                          onChange={(e) => patchPage(group.page!.key, { title: e.target.value })}
+                        />
+                        {canEdit && (
+                          <span className="form-q-actions">
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => movePage(gi, -1)}
+                              disabled={gi === 0}
+                              aria-label={`Move page ${group.page.title} up`}
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => movePage(gi, 1)}
+                              disabled={gi >= pages.length - 1}
+                              aria-label={`Move page ${group.page.title} down`}
+                            >
+                              ↓
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => removePage(gi)}
+                              aria-label={`Remove page ${group.page.title}`}
+                              title="Remove page (its questions move to the next page)"
+                            >
+                              ✕
+                            </button>
                           </span>
                         )}
-                      </span>
-                    </button>
-                    {canEdit && (
-                      <span className="form-q-actions">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => move(i, -1)}
-                          disabled={i === 0}
-                          aria-label={`Move ${q.label} up`}
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => move(i, 1)}
-                          disabled={i === questions.length - 1}
-                          aria-label={`Move ${q.label} down`}
-                        >
-                          ↓
-                        </button>
-                      </span>
+                      </div>
+                    ) : (
+                      pages.length > 0 && (
+                        <div className="form-page-head form-page-head--none">
+                          <span className="form-page-index">Not on a page</span>
+                        </div>
+                      )
+                    )}
+
+                    {group.items.length === 0 ? (
+                      <p className="form-page-empty">
+                        No questions on this page yet. Select a question and set its page below.
+                      </p>
+                    ) : (
+                      <ul>
+                        {group.items.map(({ q, index }, ii) => (
+                          <li key={`${q.questionKey}-${index}`} className={selected === index ? 'is-active' : ''}>
+                            <button type="button" className="form-q-row" onClick={() => setSelected(index)}>
+                              <span className="form-q-label">
+                                {q.isBuiltIn && !isRemovable(q, templateKind) && (
+                                  <span className="form-q-lock" title="Required by the public form">🔒</span>
+                                )}
+                                {q.label}
+                              </span>
+                              <span className="form-q-meta">
+                                {q.fieldType}
+                                {q.isRequired ? ' · required' : ''}
+                                {q.branchOnQuestionKey && (
+                                  <span className="form-q-branch">
+                                    {' · only if '}
+                                    {questions.find((x) => x.questionKey === q.branchOnQuestionKey)?.label ??
+                                      q.branchOnQuestionKey}
+                                    {' = '}
+                                    {q.branchOptionValue}
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                            {canEdit && (
+                              <span className="form-q-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => moveWithinGroup(gi, ii, -1)}
+                                  disabled={ii === 0}
+                                  aria-label={`Move ${q.label} up`}
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => moveWithinGroup(gi, ii, 1)}
+                                  disabled={ii === group.items.length - 1}
+                                  aria-label={`Move ${q.label} down`}
+                                >
+                                  ↓
+                                </button>
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </li>
                 ))}
@@ -370,6 +523,29 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
                       The options come from the workshop's Sessions tab when the form is shown.
                     </span>
                   )}
+                </div>
+
+                <div className="field">
+                  <label htmlFor="q-page">Page</label>
+                  <select
+                    id="q-page"
+                    className="input"
+                    value={active.pageKey ?? ''}
+                    disabled={!canEdit || pages.length === 0}
+                    onChange={(e) => moveToPage(selected!, e.target.value || null)}
+                  >
+                    <option value="">{pages.length === 0 ? 'No pages on this form' : 'Not on a page'}</option>
+                    {pages.map((p, i) => (
+                      <option key={p.key} value={p.key}>
+                        {i + 1}. {p.title || '(untitled page)'}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="field-hint">
+                    {pages.length === 0
+                      ? 'Add a page to split a long form into steps.'
+                      : 'Visitors reach this question by pressing Next through the earlier pages.'}
+                  </span>
                 </div>
 
                 <div className="field">

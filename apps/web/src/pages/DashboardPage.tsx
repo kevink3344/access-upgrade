@@ -95,8 +95,11 @@ function StatCard({
 }
 
 function DashboardBody({ data }: { data: DashboardSummary }) {
-  const { schoolYear, counts, currentYear, monthly, upcomingWorkshops, unpaidRegistrations, recentActivity } = data;
+  const { schoolYear, counts, currentYear, monthly, upcomingWorkshops, trainingRequests, recentActivity } = data;
   const historyLabel = `by month, ${monthly.year}`;
+  const trainingLabel = trainingRequests.latestYear
+    ? `by month, ${trainingRequests.latestYear}`
+    : 'by month';
 
   return (
     <>
@@ -148,11 +151,17 @@ function DashboardBody({ data }: { data: DashboardSummary }) {
           }
         />
         <StatCard
-          label="Unpaid registrations"
-          value={unpaidRegistrations.count.toLocaleString()}
-          sub={`${fmtMoney(unpaidRegistrations.total)} outstanding · last 6 months`}
+          label="Training requests"
+          value={trainingRequests.total.toLocaleString()}
+          sub={`${trainingRequests.active.toLocaleString()} active`}
           accent={4}
-          to="/registrations?status=active"
+          to="/training-requests"
+          sparkline={
+            <Sparkline
+              values={trainingRequests.monthly}
+              label={`Training requests, ${trainingLabel}`}
+            />
+          }
         />
       </div>
 
@@ -257,7 +266,7 @@ function DashboardSkeleton() {
               <div className="skeleton" style={{ width: 90, height: 11, marginBottom: 12 }} />
               <div className="skeleton" style={{ width: 120, height: 30 }} />
             </div>
-            {i < 3 && <div className="stat-card-spark"><div className="skeleton" style={{ width: '100%', height: 44 }} /></div>}
+            {i < 4 && <div className="stat-card-spark"><div className="skeleton" style={{ width: '100%', height: 44 }} /></div>}
           </div>
         ))}
       </div>
