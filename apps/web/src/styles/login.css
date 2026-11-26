@@ -1,4 +1,4 @@
-﻿/* =====================================================================
+/* =====================================================================
    Login screen
    ===================================================================== */
 
@@ -92,6 +92,18 @@
   line-height: 1.18;
   color: #fff;
   margin: 0 0 14px;
+}
+
+/* The product name and what it holds, on two lines: the second reads as a
+   subtitle rather than part of the name, so it is lighter and smaller but
+   still inside the h1 for screen readers and search. */
+.login-brand-subtitle {
+  display: block;
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: .01em;
+  color: rgba(255, 255, 255, .78);
+  margin-top: 4px;
 }
 
 .login-brand p {
@@ -296,6 +308,7 @@
     justify-content: flex-start;
   }
   .login-brand h1 { font-size: 26px; }
+  .login-brand-subtitle { font-size: 16px; }
   .login-brand .stats { margin-top: 22px; gap: 20px; }
   .login-panel { padding: 32px 20px 48px; }
   .login-card { max-width: 100%; }
