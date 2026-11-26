@@ -511,6 +511,21 @@
 
 .mini-list li:last-child { border-bottom: 0; }
 
+/* A scheduled workshop's code on the left, its year and date on the right. */
+.mini-list li:has(.mini-list-sub) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mini-list-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .mini-list a {
   color: var(--primary-color);
   text-decoration: none;

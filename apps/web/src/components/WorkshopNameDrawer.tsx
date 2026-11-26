@@ -41,10 +41,13 @@ export function WorkshopNameDrawer({
   workshopNameId,
   canDelete,
   onClose,
+  onOpenWorkshop,
 }: {
   workshopNameId: number | null;
   canDelete: boolean;
   onClose: () => void;
+  /** Hands off to the Workshops screen with that offering open. */
+  onOpenWorkshop?: (workshopId: number) => void;
 }) {
   const isEdit = workshopNameId !== null;
   const qc = useQueryClient();
@@ -54,6 +57,7 @@ export function WorkshopNameDrawer({
 
   const [form, setForm] = useState<Record<string, string>>({});
   const [isLiteracy, setIsLiteracy] = useState(false);
+  const [tab, setTab] = useState<'details' | 'workshops'>('details');
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -174,15 +178,89 @@ export function WorkshopNameDrawer({
           <button type="button" className="drawer-close" onClick={onClose} aria-label="Close">×</button>
         </header>
 
+        {isEdit && (
+          <div className="drawer-tabs" role="tablist" aria-label="Catalog entry sections">
+            <button
+              type="button"
+              role="tab"
+              id="wn-tab-details"
+              className="drawer-tab"
+              aria-selected={tab === 'details'}
+              aria-controls="wn-panel-details"
+              onClick={() => setTab('details')}
+            >
+              Details
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="wn-tab-workshops"
+              className="drawer-tab"
+              aria-selected={tab === 'workshops'}
+              aria-controls="wn-panel-workshops"
+              onClick={() => setTab('workshops')}
+            >
+              Scheduled workshops
+              {workshops && workshops.data.length > 0 && (
+                <span className="drawer-tab-count">{workshops.data.length}</span>
+              )}
+            </button>
+          </div>
+        )}
+
         {isEdit && isLoading ? (
           <div className="drawer-body">
             {[0, 1, 2].map((i) => (
               <div key={i} className="skeleton" style={{ height: 44, marginBottom: 12 }} />
             ))}
           </div>
+        ) : isEdit && tab === 'workshops' ? (
+          <div
+            className="drawer-body"
+            role="tabpanel"
+            id="wn-panel-workshops"
+            aria-labelledby="wn-tab-workshops"
+          >
+            <div className="tab-section">
+              <fieldset className="fieldset">
+                <legend>Scheduled workshops ({workshops?.data.length ?? 0})</legend>
+                {!workshops ? (
+                  <p className="tab-empty">Loading…</p>
+                ) : workshops.data.length === 0 ? (
+                  <p className="tab-empty">This catalog entry has not been scheduled yet.</p>
+                ) : (
+                  <ul className="mini-list">
+                    {workshops.data.map((w) => (
+                      <li key={w.WorkshopID}>
+                        <a
+                          href={`/workshops?edit=${w.WorkshopID}`}
+                          onClick={(e) => {
+                            if (!onOpenWorkshop) return;
+                            // Keep the drawer's state intact: hand off in-app
+                            // rather than letting the browser reload the page.
+                            e.preventDefault();
+                            onOpenWorkshop(w.WorkshopID);
+                          }}
+                        >
+                          {w.WorkshopCode ?? 'No code'}
+                        </a>
+                        <span className="mini-list-sub">
+                          {w.SchoolYear ?? '—'}
+                          {w.StartDate ? ` · ${w.StartDate.slice(0, 10)}` : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </fieldset>
+            </div>
+          </div>
         ) : (
           <form
             className="drawer-body"
+            role={isEdit ? 'tabpanel' : undefined}
+            id={isEdit ? 'wn-panel-details' : undefined}
+            aria-labelledby={isEdit ? 'wn-tab-details' : undefined}
             onSubmit={(e: FormEvent) => {
               e.preventDefault();
               setFormError(null);
@@ -311,28 +389,6 @@ export function WorkshopNameDrawer({
                 </label>
               </div>
             </fieldset>
-
-            {isEdit && workshops && workshops.data.length > 0 && (
-              <fieldset className="fieldset">
-                <legend>Scheduled workshops ({workshops.data.length})</legend>
-                <ul className="mini-list">
-                  {workshops.data.slice(0, 8).map((w) => (
-                    <li key={w.WorkshopID}>
-                      <span className="mini-list-main">{w.WorkshopCode ?? 'No code'}</span>
-                      <span className="mini-list-sub">
-                        {w.SchoolYear ?? '—'}
-                        {w.StartDate ? ` · ${w.StartDate.slice(0, 10)}` : ''}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                {workshops.data.length > 8 && (
-                  <p className="field-hint" style={{ marginTop: 8 }}>
-                    Showing the 8 most recent of {workshops.data.length}.
-                  </p>
-                )}
-              </fieldset>
-            )}
 
             {confirmDelete && (
               <div className="alert alert-error" role="alert">

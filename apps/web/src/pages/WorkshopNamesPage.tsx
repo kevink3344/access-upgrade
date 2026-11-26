@@ -220,6 +220,10 @@ export function WorkshopNamesPage() {
           workshopNameId={editingId}
           canDelete={canDelete}
           onClose={() => setDrawerOpen(false)}
+          onOpenWorkshop={(workshopId) => {
+            window.history.pushState({}, '', `/workshops?edit=${workshopId}`);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }}
         />
       )}
     </AppShell>
