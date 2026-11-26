@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { DashboardSummary, UpcomingWorkshop } from '@pe/shared';
 import { api } from '../api';
+import { useAuth } from '../auth';
 import { AppShell } from '../components/AppShell';
 import { Sparkline } from '../components/Sparkline';
 
@@ -94,7 +95,7 @@ function StatCard({
   );
 }
 
-function DashboardBody({ data }: { data: DashboardSummary }) {
+function DashboardBody({ data, firstName }: { data: DashboardSummary; firstName?: string }) {
   const { schoolYear, counts, currentYear, monthly, upcomingWorkshops, trainingRequests, recentActivity } = data;
   const historyLabel = `by month, ${monthly.year}`;
   const trainingLabel = trainingRequests.latestYear
@@ -105,7 +106,7 @@ function DashboardBody({ data }: { data: DashboardSummary }) {
     <>
       <div className="page-head">
         <div>
-          <h2>Welcome back</h2>
+          <h2>{firstName ? `Welcome back, ${firstName}` : 'Welcome back'}</h2>
           <p>
             {schoolYear ? `School year ${schoolYear.name}` : 'No current school year'} ·{' '}
             {counts.workshops.toLocaleString()} workshops · {counts.registrations.toLocaleString()} registrations
@@ -279,6 +280,8 @@ function DashboardSkeleton() {
 }
 
 export function DashboardPage() {
+  const { user } = useAuth();
+  const firstName = user?.displayName.trim().split(/\s+/)[0];
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['dashboard'],
     queryFn: api.dashboard,
@@ -298,7 +301,7 @@ export function DashboardPage() {
         </div>
       )}
 
-      {data && <DashboardBody data={data} />}
+      {data && <DashboardBody data={data} firstName={firstName} />}
     </AppShell>
   );
 }

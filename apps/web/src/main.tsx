@@ -44,6 +44,7 @@ import { FormEditorPage } from './pages/FormEditorPage';
 import { UtilitiesPage } from './pages/UtilitiesPage';
 import { ApiDocsPage } from './pages/ApiDocsPage';
 import { SettingsPage, SettingsUnavailable } from './pages/SettingsPage';
+import { DropdownListsPage } from './pages/DropdownListsPage';
 import { PublicRegisterPage } from './pages/PublicRegisterPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -117,6 +118,7 @@ const ROUTES: Record<string, string> = {
   '/admin': 'Notifications',
   '/admin/users': 'Users',
   '/admin/utilities': 'Utilities',
+  '/settings/dropdown-lists': 'Dropdown lists',
   '/api-docs': 'API documentation',
   '/admin/webhooks': 'Webhooks',
   '/admin/forms': 'Form Designer',
@@ -228,6 +230,13 @@ function Router() {
       return <PlaceholderPage path={path} title="Not available" />;
     }
     return <UtilitiesPage />;
+  }
+
+  if (path === '/settings/dropdown-lists') {
+    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
+      return <PlaceholderPage path={path} title="Not available" />;
+    }
+    return <DropdownListsPage />;
   }
 
   if (path === '/admin/forms') {

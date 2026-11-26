@@ -11,6 +11,7 @@ import {
   IconBell,
   IconAgencies,
   IconApi,
+  IconCatalog,
   IconCertificate,
   IconParticipants,
   IconRequests,
@@ -74,6 +75,13 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description: 'Schools, childcare centres and community organisations.',
         icon: IconAgencies,
         roles: DESIGNERS,
+      },
+      {
+        to: '/settings/dropdown-lists',
+        label: 'Dropdown lists',
+        description: 'Age groups, payment methods, school years and other picklists.',
+        icon: IconCatalog,
+        roles: ADMINS,
       },
       {
         to: '/admin/utilities',

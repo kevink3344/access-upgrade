@@ -123,6 +123,34 @@ export function refreshSession(): Promise<boolean> {
   return refreshInFlight;
 }
 
+/** One row of a reference table, as GET /api/lookups/{name} returns it. */
+export interface LookupRow {
+  id: number;
+  label: string | null;
+  /** How many records point at this entry; 0 for lists nothing references. */
+  usageCount?: number;
+  [extra: string]: unknown;
+}
+
+/** A column Settings > Dropdown lists may edit, described by the API. */
+export interface LookupFieldDef {
+  key: string;
+  label: string;
+  max: number;
+  required: boolean;
+  type: 'text' | 'boolean';
+}
+
+export interface LookupSettings {
+  key: string;
+  title: string;
+  note: string | null;
+  fields: LookupFieldDef[];
+}
+
+/** Field key -> value, as sent to POST/PATCH /api/lookups/{name}. */
+export type LookupValues = Record<string, string | boolean | null>;
+
 export const api = {
   login: (email: string, password: string, rememberMe = false) =>
     request<LoginResponse>('/api/auth/login', {
@@ -770,8 +798,25 @@ export const api = {
   },
 
   lookups: {
-    list: () => request<{ data: string[] }>('/api/lookups'),    get: (name: string) =>
-      request<{ data: { id: number; label: string }[] }>(`/api/lookups/${name}`),
+    list: () =>
+      request<{ data: { key: string; editable: boolean }[] }>('/api/lookups'),
+    get: (name: string) =>
+      request<{ data: LookupRow[] }>(`/api/lookups/${name}`),
+    /** Field definitions for Settings > Dropdown lists. */
+    settings: (name: string) =>
+      request<{ data: LookupSettings }>(`/api/lookups/${name}/settings`),
+    create: (name: string, body: LookupValues) =>
+      request<{ id: number }>(`/api/lookups/${name}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    update: (name: string, id: number, body: LookupValues) =>
+      request<void>(`/api/lookups/${name}/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    remove: (name: string, id: number) =>
+      request<void>(`/api/lookups/${name}/${id}`, { method: 'DELETE' }),
     schoolYears: () =>
       request<{ data: import('@pe/shared').SchoolYearOption[] }>('/api/lookups/school-years'),
   },
