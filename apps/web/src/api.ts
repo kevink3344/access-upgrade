@@ -936,9 +936,30 @@ export const api = {
       request<{ updated: number }>('/api/notifications/archive-all', { method: 'POST' }),
   },
 
+  calendarFeed: {
+    /** Whether the feed is on, and whether a link has ever been issued. */
+    settings: () =>
+      request<import('@pe/shared').CalendarFeedState>('/api/calendar/settings'),
+
+    /**
+     * Switches the feed on or off. Switching on issues a link if there is
+     * none, and the response then carries the only copy of the URL.
+     */
+    setEnabled: (enabled: boolean) =>
+      request<import('@pe/shared').CalendarFeedState>('/api/calendar/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled }),
+      }),
+
+    /** Issues a new URL and invalidates the old one. */
+    regenerate: () =>
+      request<import('@pe/shared').CalendarFeedState>('/api/calendar/link', {
+        method: 'POST',
+      }),
+  },
+
   reports: {    catalogue: () =>
       request<import('@pe/shared').ReportCatalogueResponse>('/api/reports'),
-
     /** One Visual Reports chart. `schoolYearId` is ignored by cross-year charts. */
     chart: (key: import('@pe/shared').ChartKey, schoolYearId?: number | null) => {
       const qs = schoolYearId ? `?schoolYearId=${schoolYearId}` : '';

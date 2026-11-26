@@ -39,6 +39,7 @@ const VisualReportsPage = lazy(() =>
 import { WebhooksPage } from './pages/WebhooksPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { NotificationsSettingsPage } from './pages/NotificationsSettingsPage';
+import { CalendarFeedSettingsPage } from './pages/CalendarFeedSettingsPage';
 import { FormsPage } from './pages/FormsPage';
 import { FormEditorPage } from './pages/FormEditorPage';
 import { UtilitiesPage } from './pages/UtilitiesPage';
@@ -202,6 +203,13 @@ function Router() {
       return <PlaceholderPage path={path} title="Not available" />;
     }
     return <NotificationsSettingsPage />;
+  }
+
+  if (path === '/admin/calendar') {
+    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
+      return <PlaceholderPage path={path} title="Not available" />;
+    }
+    return <CalendarFeedSettingsPage />;
   }
 
   if (path === '/admin/users') {

@@ -19,6 +19,7 @@ import {
   IconUsers,
   IconUtilities,
   IconWebhook,
+  IconWorkshops,
 } from './components/icons';
 
 export interface SettingsItem {
@@ -102,6 +103,13 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         label: 'Notifications',
         description: 'What the system tells staff about, and how it is delivered.',
         icon: IconBell,
+        roles: ADMINS,
+      },
+      {
+        to: '/admin/calendar',
+        label: 'Calendar feed',
+        description: 'Publish the workshops calendar for Google Calendar and Outlook.',
+        icon: IconWorkshops,
         roles: ADMINS,
       },
     ],

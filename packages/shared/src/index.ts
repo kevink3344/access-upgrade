@@ -139,6 +139,22 @@ export interface WorkshopCalendarResponse {
   undated: number;
 }
 
+/**
+ * The workshop calendar as a subscribable iCalendar feed.
+ *
+ * `url` is present only in the response that creates a link, because the
+ * plaintext token is never stored (only its hash), so it cannot be shown
+ * again later.
+ */
+export interface CalendarFeedState {
+  enabled: boolean;
+  /** True once a link has been issued, even if the feed is currently off. */
+  hasLink: boolean;
+  updatedAt: string | null;
+  updatedBy: string | null;
+  url?: string | null;
+}
+
 /** A presenter assigned to a workshop (Presenters tab). */
 export interface WorkshopPresenterRow {
   workshopPresenterId: number;

@@ -1,0 +1,45 @@
+/* =====================================================================
+   Workshop calendar feed (Settings).
+
+   One switch plus, when the feed is on, the subscription link. The link is
+   shown once, so it gets a full-width field and a copy button rather than
+   being hidden behind a reveal.
+   ===================================================================== */
+
+/* .panel-body carries no horizontal padding of its own (its children supply
+   it), so this block does the same job for the link section. */
+.feed-link-body {
+  padding: 14px 18px 18px;
+}
+
+.feed-link-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.feed-link-input {
+  flex: 1 1 320px;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  background: var(--surface-subtle);
+  color: var(--text-body);
+}
+
+.feed-link-input:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 1px;
+}
+
+.feed-link-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}

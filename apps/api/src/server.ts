@@ -36,6 +36,7 @@ import { creditSlipsRouter } from './routes/credit-slips.js';
 import { schoolCashRouter } from './routes/schoolcash.js';
 import { foldersRouter } from './routes/folders.js';
 import { utilitiesRouter } from './routes/utilities.js';
+import { calendarFeedRouter } from './routes/calendar-feed.js';
 
 const app = express();
 
@@ -198,6 +199,7 @@ const openapiSpec = swaggerJsdoc({
       { name: 'Lookups', description: 'Reference data' },
       { name: 'Training requests', description: 'On-site training requests, quotes and invoicing' },
       { name: 'Credit slips', description: 'Vouchers issued for cancellations and overpayments' },
+      { name: 'Calendar feed', description: 'The workshop calendar as a subscribable iCalendar feed' },
     ],
   },
   apis: ['./src/routes/*.ts', './dist/routes/*.js'],
@@ -232,6 +234,7 @@ app.use('/api/training-requests', trainingRequestsRouter);
 app.use('/api/credit-slips', creditSlipsRouter);
 app.use('/api/folders', foldersRouter);
 app.use('/api/admin/utilities', utilitiesRouter);
+app.use('/api/calendar', calendarFeedRouter);
 // The School Cash upload is the raw CSV as text/plain, not multipart, so it
 // needs its own body parser. Mounted before the router so only this path is
 // affected.
