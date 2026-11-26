@@ -138,6 +138,27 @@ or check the startup log for the `[startup]` lines.
   like `/workshops/3023` works.
 - **Swagger** is available at `/swagger` and the spec at `/openapi.json`.
 
+## Migrations before deploy
+
+A deploy ships code only. Any migration the code depends on must be applied to
+the target database **first**, or the new endpoints fail at runtime — usually as
+a 500 on one screen while the rest of the app looks healthy.
+
+```powershell
+# Test first, then production.
+powershell -File db/etl/apply-migration.ps1 -File db/migrations/031-workshop-calendar-feed.sql -Env test
+powershell -File db/etl/apply-migration.ps1 -File db/migrations/031-workshop-calendar-feed.sql -Env prod
+```
+
+The migrations are guarded and re-runnable, so applying one twice is safe. They
+are also additive where possible (nullable columns, new tables), which keeps the
+previous code working against the new schema during the gap between migration
+and deploy.
+
+The 031 migration adds `core.NotificationSetting.SecretHash`, which the calendar
+feed reads on every settings request. Without it, Settings → Calendar feed
+returns a 500.
+
 ## Verifying a deploy
 
 ```bash
@@ -149,6 +170,15 @@ curl -I https://projelmt-dev.azurewebsites.net/
 
 curl -I https://projelmt-dev.azurewebsites.net/workshops
 # 200, text/html  (SPA fallback, not a 404)
+```
+
+To confirm a specific route reached the slot, ask for it unauthenticated. A
+**401** means the route exists and wants a token; a **404** means the code is not
+there — which points at the deploy, not at the request:
+
+```bash
+curl -o /dev/null -w "%{http_code}\n" https://projelmt-dev.azurewebsites.net/api/calendar/settings
+# 401 = deployed, 404 = not deployed
 ```
 
 If `/health` returns 500, check **Log stream** — the most common cause is a missing or wrong
