@@ -75,6 +75,64 @@ dashboardRouter.get('/', requireAuth, async (_req, res, next) => {
 
     const ys = yearStats?.recordset[0] ?? { Workshops: 0, Registrations: 0, Participants: 0, Revenue: 0 };
 
+    // Calendar-year history for the stat cards' sparklines. One query per
+    // card's own rule, so each line agrees with the number above it:
+    // workshops by start date, registrations by registration date, revenue
+    // by registration date (excluding cancellations, like the year figure).
+    // SYSUTCDATETIME() matches the rest of this route, which treats dates as UTC.
+    const history = await query<{
+      Kind: string;
+      MonthNo: number;
+      Total: number;
+    }>(`
+      WITH Months AS (
+        SELECT 1 AS MonthNo UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
+        UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8
+        UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL SELECT 12
+      ),
+      YearStart AS (
+        SELECT DATEFROMPARTS(YEAR(SYSUTCDATETIME()), 1, 1) AS D
+      ),
+      WorkshopCounts AS (
+        SELECT MONTH(w.StartDate) AS MonthNo, COUNT(*) AS Total
+          FROM core.Workshop w, YearStart
+         WHERE w.StartDate >= YearStart.D
+           AND w.StartDate < DATEADD(YEAR, 1, YearStart.D)
+         GROUP BY MONTH(w.StartDate)
+      ),
+      RegistrationCounts AS (
+        SELECT MONTH(r.RegistrationDate) AS MonthNo, COUNT(*) AS Total
+          FROM core.Registration r, YearStart
+         WHERE r.RegistrationDate >= YearStart.D
+           AND r.RegistrationDate < DATEADD(YEAR, 1, YearStart.D)
+           AND r.IsCancelled = 0
+         GROUP BY MONTH(r.RegistrationDate)
+      ),
+      Revenue AS (
+        SELECT MONTH(r.RegistrationDate) AS MonthNo, ISNULL(SUM(r.PaidAmount), 0) AS Total
+          FROM core.Registration r, YearStart
+         WHERE r.RegistrationDate >= YearStart.D
+           AND r.RegistrationDate < DATEADD(YEAR, 1, YearStart.D)
+           AND r.IsCancelled = 0
+         GROUP BY MONTH(r.RegistrationDate)
+      )
+      SELECT 'workshops' AS Kind, m.MonthNo, ISNULL(c.Total, 0) AS Total
+        FROM Months m LEFT JOIN WorkshopCounts c ON c.MonthNo = m.MonthNo
+      UNION ALL
+      SELECT 'registrations', m.MonthNo, ISNULL(c.Total, 0)
+        FROM Months m LEFT JOIN RegistrationCounts c ON c.MonthNo = m.MonthNo
+      UNION ALL
+      SELECT 'revenue', m.MonthNo, ISNULL(c.Total, 0)
+        FROM Months m LEFT JOIN Revenue c ON c.MonthNo = m.MonthNo
+      ORDER BY Kind, MonthNo
+    `);
+
+    const series = (kind: 'workshops' | 'registrations' | 'revenue') =>
+      history.recordset
+        .filter((r) => r.Kind === kind)
+        .sort((a, b) => a.MonthNo - b.MonthNo)
+        .map((r) => (kind === 'revenue' ? Number(r.Total) : Number(r.Total) || 0));
+
     // Upcoming workshops: not cancelled, starting from today, soonest first.
     const upcoming = await query<{
       WorkshopID: number;
@@ -173,6 +231,12 @@ dashboardRouter.get('/', requireAuth, async (_req, res, next) => {
         registrations: ys.Registrations,
         participants: ys.Participants,
         revenue: Number(ys.Revenue),
+      },
+      monthly: {
+        year: new Date().getUTCFullYear(),
+        workshops: series('workshops'),
+        registrations: series('registrations'),
+        revenue: series('revenue'),
       },
       upcomingWorkshops,
       unpaidRegistrations: { count: u.Count, total: Number(u.Total) },

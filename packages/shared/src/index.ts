@@ -47,6 +47,13 @@ export interface DashboardSummary {
     participants: number;
     revenue: number;
   };
+  /** Calendar-year history behind the stat cards — always 12 points, Jan to Dec. */
+  monthly: {
+    year: number;
+    workshops: number[];
+    registrations: number[];
+    revenue: number[];
+  };
   upcomingWorkshops: UpcomingWorkshop[];
   unpaidRegistrations: {
     count: number;

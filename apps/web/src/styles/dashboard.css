@@ -77,6 +77,39 @@
   margin-top: 6px;
 }
 
+/* Cards with a monthly history put the figures on the left and the trend on
+   the right, so the number stays the loudest thing in the card. */
+.stat-card:has(.stat-card-spark) {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.stat-card-main { min-width: 0; }
+
+.stat-card-spark {
+  flex: 0 1 44%;
+  min-width: 64px;
+  max-width: 190px;
+  display: flex;
+  align-items: flex-end;
+  color: var(--primary-color);
+  opacity: .9;
+}
+
+.stat-card.accent-2 .stat-card-spark { color: var(--secondary-color); }
+.stat-card.accent-3 .stat-card-spark { color: var(--tertiary-color); }
+
+.stat-card-link:hover .stat-card-spark { opacity: 1; }
+
+.sparkline {
+  display: block;
+  width: 100%;
+  height: 44px;
+  overflow: visible;
+}
+
 /* Clickable stat card */
 .stat-card-link {
   text-decoration: none;
@@ -663,6 +696,7 @@
   .stat-grid { grid-template-columns: 1fr; gap: 12px; }
   .page-head h2 { font-size: 22px; }
   .stat-card .value { font-size: 26px; }
+  .stat-card-spark { flex-basis: 40%; }
 
   /* Tables become stacked cards on phones */
   .data-table thead { display: none; }

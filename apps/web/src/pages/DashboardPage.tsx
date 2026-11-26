@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import type { DashboardSummary, UpcomingWorkshop } from '@pe/shared';
 import { api } from '../api';
 import { AppShell } from '../components/AppShell';
+import { Sparkline } from '../components/Sparkline';
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -61,18 +63,23 @@ function StatCard({
   sub,
   accent,
   to,
+  sparkline,
 }: {
   label: string;
   value: string;
   sub?: string;
   accent?: 2 | 3 | 4;
   to?: string;
+  sparkline?: ReactNode;
 }) {
   const content = (
     <>
-      <div className="label">{label}</div>
-      <div className="value">{value}</div>
-      {sub && <div className="sub">{sub}</div>}
+      <div className="stat-card-main">
+        <div className="label">{label}</div>
+        <div className="value">{value}</div>
+        {sub && <div className="sub">{sub}</div>}
+      </div>
+      {sparkline && <div className="stat-card-spark">{sparkline}</div>}
     </>
   );
 
@@ -88,7 +95,8 @@ function StatCard({
 }
 
 function DashboardBody({ data }: { data: DashboardSummary }) {
-  const { schoolYear, counts, currentYear, upcomingWorkshops, unpaidRegistrations, recentActivity } = data;
+  const { schoolYear, counts, currentYear, monthly, upcomingWorkshops, unpaidRegistrations, recentActivity } = data;
+  const historyLabel = `by month, ${monthly.year}`;
 
   return (
     <>
@@ -108,6 +116,9 @@ function DashboardBody({ data }: { data: DashboardSummary }) {
           value={currentYear.workshops.toLocaleString()}
           sub={`${counts.workshops.toLocaleString()} total`}
           to="/workshops"
+          sparkline={
+            <Sparkline values={monthly.workshops} label={`Workshops started, ${historyLabel}`} />
+          }
         />
         <StatCard
           label="Registrations this year"
@@ -115,6 +126,12 @@ function DashboardBody({ data }: { data: DashboardSummary }) {
           sub={`${counts.registrations.toLocaleString()} total`}
           accent={2}
           to="/registrations"
+          sparkline={
+            <Sparkline
+              values={monthly.registrations}
+              label={`Registrations taken, ${historyLabel}`}
+            />
+          }
         />
         <StatCard
           label="Revenue this year"
@@ -122,6 +139,13 @@ function DashboardBody({ data }: { data: DashboardSummary }) {
           sub="Collected, excluding cancellations"
           accent={3}
           to="/payments"
+          sparkline={
+            <Sparkline
+              values={monthly.revenue}
+              label={`Revenue, ${historyLabel}`}
+              format={fmtMoney}
+            />
+          }
         />
         <StatCard
           label="Unpaid registrations"
@@ -229,8 +253,11 @@ function DashboardSkeleton() {
       <div className="stat-grid">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="stat-card">
-            <div className="skeleton" style={{ width: 90, height: 11, marginBottom: 12 }} />
-            <div className="skeleton" style={{ width: 120, height: 30 }} />
+            <div className="stat-card-main">
+              <div className="skeleton" style={{ width: 90, height: 11, marginBottom: 12 }} />
+              <div className="skeleton" style={{ width: 120, height: 30 }} />
+            </div>
+            {i < 3 && <div className="stat-card-spark"><div className="skeleton" style={{ width: '100%', height: 44 }} /></div>}
           </div>
         ))}
       </div>
