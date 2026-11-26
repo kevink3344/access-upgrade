@@ -302,10 +302,10 @@ is logged and swallowed: it must never turn a refused merge into a `500`.
 - **Merge tokens are in memory.** Correct for one App Service instance; a
   restart simply means previewing again. If the app ever scales out, the token
   store needs to move to the database.
-- **`audit.UtilityRun` must exist before the screen works.** Migration `028` is
-  applied to test and production by hand, like every other migration. On
-  production the deploy login cannot create objects in `audit` (it is not
-  `db_ddladmin` there), so the table has to be created once by an `db_owner`
-  login — see [the completion record](../completions/2026-11-25-utilities-screen.md) §6.
-  Until then the screen works but records no runs: the audit write and the
-  history read are both guarded.
+- **`audit.UtilityRun` must exist before runs are recorded.** Migration `028`
+  creates it, but on production the deploy login cannot create objects in
+  `audit` — it is not `db_ddladmin` there, unlike test. The table was created
+  once by a `db_owner` login and the writer was granted `SELECT, INSERT` on it,
+  which is narrower than the `db_ddladmin` the test database has. Both
+  databases are now in step (`compare-schema.ps1` reports `NO DRIFT`). See
+  [the completion record](../completions/2026-11-25-utilities-screen.md) §6.

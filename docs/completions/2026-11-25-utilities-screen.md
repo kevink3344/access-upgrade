@@ -1,7 +1,7 @@
 # Completion — Utilities screen
 
 **Date:** 2026-11-25
-**Status:** ✅ Built and verified (one deploy step outstanding — see §6)
+**Status:** ✅ Complete and verified — both databases in step
 **Spec:** [docs/features/utilities.md](../features/utilities.md)
 
 ---
@@ -92,6 +92,9 @@ A second bug surfaced at the same time: `SELECT 1 FROM … GROUP BY …` inside
 | `/api/admin/utilities/school-years` unauthenticated | ✅ 401 |
 | OpenAPI spec | ✅ all 9 utility paths present, `schoolYearId` documented |
 | Migration 028 on test database | ✅ `audit.UtilityRun created` |
+| `audit.UtilityRun` on production | ✅ created, `SELECT`/`INSERT` granted to the writer |
+| Production audit insert (rolled back) | ✅ succeeded, 0 rows left behind |
+| `compare-schema.ps1` | ✅ `NO DRIFT — 959 schema objects identical` |
 
 The merge itself is **not** executed by the suite: the shared test database is
 used for staff training and every test is read-only. The tests pin what decides
@@ -112,9 +115,9 @@ whether a merge is allowed (preview, blockers, token, audit of a refusal).
 
 ---
 
-## 6. Outstanding: migration 028 on production
+## 6. Resolved: migration 028 on production
 
-Applied to the **test** database. On **production** it failed:
+Applied to the **test** database without trouble. On **production** it failed:
 
 ```
 Msg 2760: The specified schema name "audit" either does not exist or you do not
@@ -122,24 +125,40 @@ have permission to use it.
 ```
 
 The production deploy login (`wcpss-sql-writer`) is not `db_ddladmin` there —
-unlike test — so it can create tables in `core` but not in `audit`. This is a
+unlike test — so it can create tables in `core` but not in `audit`. That is a
 permissions gap, not a problem with the migration: the same file succeeded on
 test unchanged.
 
-Until 028 is applied to production, the Utilities screen still works — the
-audit write and the history read are both guarded, so a missing table logs a
-warning and returns an empty history rather than failing the page. **No merge
-run will be recorded** until the table exists.
+A first attempt to close it with `GRANT ALTER ON SCHEMA::audit` landed on
+`dbo` instead — the catalog showed the grant on schema id 1 (`dbo`) while
+`audit` is id 7 — so the migration still failed. The cause was the statement
+running outside the `project-enlightenment` context.
 
-To unblock it, either:
+**Resolved** by creating the table once as `db_owner` and granting only what
+the app uses, which is narrower than giving the writer DDL anywhere:
 
-1. grant `wcpss-sql-writer` `db_ddladmin` on production (matching test), or
-2. create the table once with an `db_owner` login, then re-run
-   `apply-migration.ps1 -Env prod` — it is guarded and will report
-   `already exists`.
-
-`compare-schema.ps1` reports the difference until then:
-
+```sql
+USE [project-enlightenment];
+GO
+CREATE TABLE audit.UtilityRun ( … );          -- same DDL as migration 028
+CREATE INDEX IX_UtilityRun_Key_RunAt ON audit.UtilityRun(UtilityKey, RunAt DESC);
+GO
+GRANT SELECT, INSERT ON audit.UtilityRun TO [wcpss-sql-writer];
+GO
 ```
-Only in source (12): COLUMN~audit.UtilityRun.* …
-```
+
+Verified afterwards, from the app's own login:
+
+| Check | Result |
+| --- | --- |
+| `OBJECT_ID('audit.UtilityRun')` | ✅ exists |
+| `SELECT` / `INSERT` on the table | ✅ granted |
+| Insert with default `RunAt`, inside a rolled-back transaction | ✅ succeeded, 0 rows left behind |
+| `compare-schema.ps1` | ✅ `NO DRIFT — 959 schema objects identical` |
+
+The migration file is guarded, so running it on production now reports
+`already exists` and changes nothing — the two databases stay in step.
+
+The audit write and the history read remain guarded in code, so a database
+without the table logs a warning and records nothing rather than failing the
+page. That is a safety net, not the operating state.
