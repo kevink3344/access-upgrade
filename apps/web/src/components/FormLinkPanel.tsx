@@ -49,6 +49,20 @@ export function FormLinkPanel({
     onError: (e) => setError(e instanceof HttpError ? e.message : 'Could not update the link.'),
   });
 
+  // Move the link onto the newest published version. A shared link keeps
+  // asking the questions it was created with, so this is the staff member's
+  // explicit "yes, switch the live form over" step.
+  const repin = useMutation({
+    mutationFn: (versionId: number) =>
+      api.registrationLink.updateForForm(formTemplateId, { formTemplateVersionId: versionId }),
+    onSuccess: () => {
+      setError(null);
+      refresh();
+      qc.invalidateQueries({ queryKey: ['public-link'] });
+    },
+    onError: (e) => setError(e instanceof HttpError ? e.message : 'Could not update the link.'),
+  });
+
   async function copyLink(url: string) {
     try {
       await navigator.clipboard.writeText(`${window.location.origin}${url}`);
@@ -61,7 +75,7 @@ export function FormLinkPanel({
 
   if (isLoading || !data) return null;
 
-  const { link, hasPublishedVersion, isArchived } = data;
+  const { link, hasPublishedVersion, isArchived, latestPublishedVersionId } = data;
 
   return (
     <div className="form-link-bar">
@@ -93,28 +107,48 @@ export function FormLinkPanel({
           )}
         </div>
       ) : (
-        <div className="form-link-row">
-          <span className="form-link-label">Public link</span>
-          <code className="link-url">{`${window.location.origin}${link.url}`}</code>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => void copyLink(link.url)}
-          >
-            {copied ? 'Copied' : 'Copy'}
-          </button>
-          <label className="switch switch-inline">
-            <input
-              type="checkbox"
-              checked={link.isActive}
-              onChange={(e) => update.mutate(e.target.checked)}
-              disabled={!canEdit || update.isPending}
-            />
-            <span className="switch-track" aria-hidden="true" />
-            <span className="switch-label">
-              {link.isActive ? 'Open' : 'Closed'}
-            </span>
-          </label>
+        <div className="form-link-row form-link-row--stacked">
+          <div className="form-link-row">
+            <span className="form-link-label">Public link</span>
+            <code className="link-url">{`${window.location.origin}${link.url}`}</code>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => void copyLink(link.url)}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+            <label className="switch switch-inline">
+              <input
+                type="checkbox"
+                checked={link.isActive}
+                onChange={(e) => update.mutate(e.target.checked)}
+                disabled={!canEdit || update.isPending}
+              />
+              <span className="switch-track" aria-hidden="true" />
+              <span className="switch-label">
+                {link.isActive ? 'Open' : 'Closed'}
+              </span>
+            </label>
+          </div>
+
+          {link.isBehindLatest && (
+            <div className="form-link-behind">
+              <span>
+                A newer version is published, but this link still shows the older one.
+              </span>
+              {canEdit && latestPublishedVersionId !== null && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => repin.mutate(latestPublishedVersionId)}
+                  disabled={repin.isPending}
+                >
+                  {repin.isPending ? 'Updating…' : 'Update link to newest version'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

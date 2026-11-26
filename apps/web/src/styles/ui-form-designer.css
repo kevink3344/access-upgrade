@@ -249,3 +249,28 @@
 }
 
 .switch-inline { display: inline-flex; align-items: center; gap: 8px; }
+
+/* The link row plus, when the link is behind, a notice under it. */
+.form-link-row--stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* A shared link keeps asking the version it was created with, so publishing a
+   new version does not change it. This is how staff are told, and how they
+   move the live form onto the new version. */
+.form-link-behind {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border: 1px solid var(--badge-amber-border);
+  border-radius: var(--radius);
+  background: var(--badge-amber-bg);
+  color: var(--badge-amber-text);
+  font-size: 12.5px;
+  font-weight: 600;
+}

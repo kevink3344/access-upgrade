@@ -420,7 +420,10 @@ export const api = {
         { method: 'POST', body: JSON.stringify(body) },
       ),
 
-    updateForForm: (formTemplateId: number, body: { isActive?: boolean }) =>
+    updateForForm: (
+      formTemplateId: number,
+      body: { isActive?: boolean; formTemplateVersionId?: number },
+    ) =>
       request<{ ok: true }>(`/api/forms/${formTemplateId}/link`, {
         method: 'PATCH',
         body: JSON.stringify(body),

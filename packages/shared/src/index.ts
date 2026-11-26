@@ -1019,11 +1019,15 @@ export interface FormLinkState {
   isArchived: boolean;
   /** False until the form is published; a draft cannot be shared. */
   hasPublishedVersion: boolean;
+  /** The newest published version, offered as the one to pin. */
+  latestPublishedVersionId: number | null;
   link: {
     slug: string;
     url: string;
     isActive: boolean;
     formTemplateVersionId: number | null;
+    /** A newer version has been published since this link was created. */
+    isBehindLatest: boolean;
     createdBy: string;
     createdAt: string;
   } | null;

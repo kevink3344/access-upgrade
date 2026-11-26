@@ -23,6 +23,12 @@ function newSlug(): string {
 
 const updateSchema = z.object({
   isActive: z.boolean().optional(),
+  /**
+   * Move the link onto a published version. Omit to leave the pinned version
+   * alone — publishing a new version must never silently change a link that
+   * has already been shared.
+   */
+  formTemplateVersionId: z.number().int().positive().optional(),
 });
 
 /** The template, or null when it does not exist. */
@@ -107,12 +113,21 @@ formLinkRouter.get('/', requireAuth, async (req, res, next) => {
       kind: template.Kind,
       isArchived: template.ArchivedAt !== null,
       hasPublishedVersion: published !== null,
+      /** The newest published version, offered as the one to pin. */
+      latestPublishedVersionId: published,
       link: link
         ? {
             slug: link.Slug,
             url: `/register/${link.Slug}`,
             isActive: link.IsActive,
             formTemplateVersionId: link.FormTemplateVersionID,
+            /**
+             * True when a newer version has been published since the link was
+             * created. The link keeps asking its pinned version until staff
+             * update it — publishing alone never changes a shared link.
+             */
+            isBehindLatest:
+              published !== null && link.FormTemplateVersionID !== published,
             createdBy: link.CreatedBy,
             createdAt: link.CreatedAt.toISOString(),
           }
@@ -261,6 +276,31 @@ formLinkRouter.patch('/', requireAuth, requireRole('SUPER_ADMIN', 'ADMIN', 'MANA
     if (parsed.data.isActive !== undefined) {
       sets.push('IsActive = @active');
       params.active = { type: sql.Bit, value: parsed.data.isActive ? 1 : 0 };
+    }
+
+    if (parsed.data.formTemplateVersionId !== undefined) {
+      // Only a version of THIS template, and only a published one: a draft has
+      // never been shown to anyone, so pinning it would publish by accident.
+      const v = await query<{ PublishedAt: Date | null }>(
+        `SELECT PublishedAt
+           FROM core.FormTemplateVersion
+          WHERE FormTemplateVersionID = @v AND FormTemplateID = @tpl`,
+        {
+          v: { type: sql.Int, value: parsed.data.formTemplateVersionId },
+          tpl: { type: sql.Int, value: id },
+        },
+      );
+      const row = v.recordset[0];
+      if (!row || !row.PublishedAt) {
+        res.status(422).json({
+          error: 'validation_failed',
+          message: 'Pick a published version of this form.',
+          details: [{ path: 'formTemplateVersionId', message: 'Not a published version of this form' }],
+        });
+        return;
+      }
+      sets.push('FormTemplateVersionID = @ftv');
+      params.ftv = { type: sql.Int, value: parsed.data.formTemplateVersionId };
     }
 
     if (sets.length === 0) {
