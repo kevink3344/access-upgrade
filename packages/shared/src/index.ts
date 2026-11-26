@@ -1861,3 +1861,221 @@ export interface PacketWorkshopOption {
   isBrochure: boolean;
   isLabel: boolean;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Utilities (Settings > Utilities)                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * What kind of screen a utility opens.
+ *
+ * `review` utilities are read-only lists of rows that need a human decision;
+ * `action` utilities change data and need a preview and a confirmation.
+ */
+export type UtilityMode = 'review' | 'action';
+
+export type UtilityRisk = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export type UtilityKey =
+  | 'duplicate-participants'
+  | 'merge-participants'
+  | 'negative-payments'
+  | 'registrations-no-workshop';
+
+export interface UtilityDefinition {
+  key: UtilityKey;
+  title: string;
+  description: string;
+  mode: UtilityMode;
+  risk: UtilityRisk;
+  /** Replaces, in the Access database. */
+  replaces: string;
+}
+
+export interface UtilityCatalogueResponse {
+  data: UtilityDefinition[];
+}
+
+/** One participant as shown in the merge picker and the duplicate list. */
+export interface UtilityParticipant {
+  participantId: number;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  agencyName: string | null;
+  registrationCount: number;
+  attendanceCount: number;
+  creditSlipCount: number;
+  certificateCount: number;
+  hasCeuCertificate: boolean;
+  hasChcCertificate: boolean;
+  dateOfEntry: string | null;
+  updatedAt: string | null;
+}
+
+export interface UtilityParticipantListResponse {
+  data: UtilityParticipant[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+/** A group of participants that share an email address. */
+export interface DuplicateGroup {
+  email: string;
+  participants: UtilityParticipant[];
+  /** Registrations across the whole group - the work a merge would consolidate. */
+  registrationCount: number;
+}
+
+export interface DuplicateGroupsResponse {
+  data: DuplicateGroup[];
+  page: number;
+  pageSize: number;
+  /** Number of distinct duplicated email addresses matching the year filter. */
+  totalGroups: number;
+  /** Participants across every matching group, not just this page. */
+  totalParticipants: number;
+  /**
+   * The year the list is scoped to, and its label. `null` means every year —
+   * which is the useful view for a backlog that spans the whole database.
+   */
+  schoolYear: { id: number; label: string } | null;
+}
+
+/** A year option with the counts the Participants-by-year dropdown shows. */
+export interface UtilityYearOption {
+  id: number;
+  label: string;
+  isPastYear: boolean;
+  /** Duplicate groups with at least one participant registered in this year. */
+  duplicateGroups: number;
+}
+
+/** A workshop both participants are registered for - the merge blocker. */
+export interface WorkshopConflict {
+  workshopId: number | null;
+  workshopCode: string | null;
+  workshopName: string | null;
+  startDate: string | null;
+}
+
+export interface MergeBlockers {
+  /** Non-empty means the merge is refused. */
+  sharedWorkshops: WorkshopConflict[];
+  /** Rows that would be dropped rather than moved, with the reason. */
+  notes: string[];
+}
+
+export interface MergePreview {
+  source: UtilityParticipant;
+  target: UtilityParticipant;
+  /** Rows that will be reassigned to the target. */
+  moves: {
+    registrations: number;
+    attendance: number;
+    creditSlips: number;
+    usedCreditSlips: number;
+    certificateOverrides: number;
+    certificateIssues: number;
+  };
+  /** True when the source participant row itself is deleted. */
+  deletesSource: boolean;
+  blockers: MergeBlockers;
+  /** Short-lived token the run must echo back (see docs/features/utilities.md §4). */
+  token: string;
+  expiresAt: string;
+}
+
+export interface MergeResult {
+  sourceParticipantId: number;
+  targetParticipantId: number;
+  affectedRows: number;
+  moves: MergePreview['moves'];
+  deletedSource: boolean;
+  warnings: string[];
+}
+
+/** A registration whose PaidAmount is below zero. */
+export interface NegativePaymentRow {
+  registrationId: number;
+  participantId: number | null;
+  participantName: string | null;
+  participantEmail: string | null;
+  workshopId: number | null;
+  workshopCode: string | null;
+  workshopName: string | null;
+  startDate: string | null;
+  paidAmount: number;
+  paidDate: string | null;
+  registrationDate: string | null;
+  receiptNumber: number | null;
+  paymentMethod: string | null;
+  isCancelled: boolean;
+  source: string;
+  notes: string | null;
+}
+
+export interface NegativePaymentsResponse {
+  data: NegativePaymentRow[];
+  summary: {
+    count: number;
+    total: number;
+    /** Split by whether the registration was cancelled - a cancelled refund is expected. */
+    onCancelled: number;
+    onActive: number;
+  };
+}
+
+/** A registration with no workshop attached. */
+export interface OrphanRegistrationRow {
+  registrationId: number;
+  participantId: number | null;
+  participantName: string | null;
+  participantEmail: string | null;
+  registrationDate: string | null;
+  paidAmount: number | null;
+  isCancelled: boolean;
+  attended: boolean;
+  source: string;
+  notes: string | null;
+}
+
+export interface OrphanRegistrationsResponse {
+  data: OrphanRegistrationRow[];
+  summary: {
+    count: number;
+    withPayment: number;
+    totalPaid: number;
+  };
+}
+
+export interface UtilityRunRow {
+  utilityRunId: number;
+  utilityKey: string;
+  parameters: string | null;
+  affectedRows: number;
+  runBy: string | null;
+  runAt: string;
+  succeeded: boolean;
+  error: string | null;
+}
+
+export interface UtilityRunsResponse {
+  data: UtilityRunRow[];
+}
+
+export interface UtilityOverview {
+  duplicateGroups: number;
+  duplicateParticipants: number;
+  negativePayments: number;
+  orphanRegistrations: number;
+}
+
+export interface UtilityOverviewResponse {
+  data: UtilityOverview;
+}
+
+export interface UtilitySchoolYearsResponse {
+  data: UtilityYearOption[];
+}

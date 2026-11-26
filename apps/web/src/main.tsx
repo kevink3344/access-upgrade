@@ -41,6 +41,7 @@ import { NotificationsPage } from './pages/NotificationsPage';
 import { NotificationsSettingsPage } from './pages/NotificationsSettingsPage';
 import { FormsPage } from './pages/FormsPage';
 import { FormEditorPage } from './pages/FormEditorPage';
+import { UtilitiesPage } from './pages/UtilitiesPage';
 import { ApiDocsPage } from './pages/ApiDocsPage';
 import { SettingsPage, SettingsUnavailable } from './pages/SettingsPage';
 import { PublicRegisterPage } from './pages/PublicRegisterPage';
@@ -220,6 +221,13 @@ function Router() {
       return <PlaceholderPage path={path} title="Not available" />;
     }
     return <WebhooksPage />;
+  }
+
+  if (path === '/admin/utilities') {
+    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
+      return <PlaceholderPage path={path} title="Not available" />;
+    }
+    return <UtilitiesPage />;
   }
 
   if (path === '/admin/forms') {

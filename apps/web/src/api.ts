@@ -1053,4 +1053,76 @@ export const api = {
         `/api/registrations/lookup-workshops?q=${encodeURIComponent(q)}`,
       ),
   },
+
+  utilities: {
+    catalogue: () =>
+      request<{
+        data: import('@pe/shared').UtilityDefinition[];
+        overview: import('@pe/shared').UtilityOverview;
+      }>('/api/admin/utilities'),
+
+    participants: (params: { q?: string; page?: number; pageSize?: number } = {}) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<import('@pe/shared').UtilityParticipantListResponse>(
+        `/api/admin/utilities/participants${suffix}`,
+      );
+    },
+
+    duplicateGroups: (params: { schoolYearId?: number; page?: number; pageSize?: number } = {}) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined) qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<import('@pe/shared').DuplicateGroupsResponse>(
+        `/api/admin/utilities/duplicate-participants${suffix}`,
+      );
+    },
+
+    schoolYears: () =>
+      request<import('@pe/shared').UtilitySchoolYearsResponse>(
+        '/api/admin/utilities/school-years',
+      ),
+
+    negativePayments: () =>
+      request<import('@pe/shared').NegativePaymentsResponse>(
+        '/api/admin/utilities/negative-payments',
+      ),
+
+    orphanRegistrations: () =>
+      request<import('@pe/shared').OrphanRegistrationsResponse>(
+        '/api/admin/utilities/registrations-no-workshop',
+      ),
+
+    previewMerge: (sourceParticipantId: number, targetParticipantId: number) =>
+      request<import('@pe/shared').MergePreview>('/api/admin/utilities/merge-participants/preview', {
+        method: 'POST',
+        body: JSON.stringify({ sourceParticipantId, targetParticipantId }),
+      }),
+
+    runMerge: (body: {
+      sourceParticipantId: number;
+      targetParticipantId: number;
+      token: string;
+    }) =>
+      request<import('@pe/shared').MergeResult>('/api/admin/utilities/merge-participants/run', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    runs: (params: { key?: string; limit?: number } = {}) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      const suffix = qs.toString() ? `?${qs}` : '';
+      return request<import('@pe/shared').UtilityRunsResponse>(
+        `/api/admin/utilities/runs${suffix}`,
+      );
+    },
+  },
 };

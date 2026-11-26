@@ -1172,6 +1172,23 @@ CREATE TABLE audit.PublicSubmission (
 END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PublicSubmission_SubmittedAt' AND object_id = OBJECT_ID('audit.PublicSubmission'))
     CREATE INDEX IX_PublicSubmission_SubmittedAt ON audit.PublicSubmission(SubmittedAt);
+
+-- Every Utilities run, including refused ones. See migration 028.
+IF OBJECT_ID('audit.UtilityRun', 'U') IS NULL
+BEGIN
+CREATE TABLE audit.UtilityRun (
+    UtilityRunID BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_UtilityRun PRIMARY KEY,
+    UtilityKey   NVARCHAR(60)  NOT NULL,
+    Parameters   NVARCHAR(MAX) NULL,
+    AffectedRows INT           NOT NULL CONSTRAINT DF_UtilityRun_Affected DEFAULT 0,
+    RunBy        NVARCHAR(200) NULL,
+    RunAt        DATETIME2(0)  NOT NULL CONSTRAINT DF_UtilityRun_RunAt DEFAULT SYSUTCDATETIME(),
+    Succeeded    BIT           NOT NULL CONSTRAINT DF_UtilityRun_Succeeded DEFAULT 0,
+    Error        NVARCHAR(1000) NULL
+);
+END
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_UtilityRun_Key_RunAt' AND object_id = OBJECT_ID('audit.UtilityRun'))
+    CREATE INDEX IX_UtilityRun_Key_RunAt ON audit.UtilityRun(UtilityKey, RunAt DESC);
 GO
 
 -- =====================================================================

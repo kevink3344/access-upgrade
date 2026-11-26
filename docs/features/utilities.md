@@ -7,7 +7,7 @@ whole tables; here each one is an explicit, counted, audited action.
 - **Plan reference:** [`docs/plans/access-migration.md`](../plans/access-migration.md) §7.2 item 19
 - **Route:** `/admin/utilities`
 - **Access:** `SUPER_ADMIN` / `ADMIN` only
-- **Status:** not built
+- **Status:** built (2026-11-25) — see §6 for what shipped and what did not
 
 ---
 
@@ -186,13 +186,24 @@ changes nothing the second time.
 
 ```
 GET  /api/admin/utilities                     # list + affected counts
-POST /api/admin/utilities/:key/preview        # dry run, returns count + sample
-POST /api/admin/utilities/:key/run            # execute, requires confirmation token
+GET  /api/admin/utilities/participants        # participant picker for the merge
+GET  /api/admin/utilities/school-years        # years + duplicate counts for the dropdown
+GET  /api/admin/utilities/duplicate-participants   # groups sharing an email (?schoolYearId=)
+GET  /api/admin/utilities/negative-payments        # review list
+GET  /api/admin/utilities/registrations-no-workshop # review list
+POST /api/admin/utilities/merge-participants/preview  # dry run, returns count + token
+POST /api/admin/utilities/merge-participants/run      # execute, requires the token
 GET  /api/admin/utilities/runs                # audit history
 ```
 
 `preview` returns a short-lived token that `run` must echo back. This prevents a
-stale count from being used to authorise a different-sized change.
+stale count from being used to authorise a different-sized change. The token
+also carries a fingerprint of the row counts, so a merge that was previewed
+before someone else fixed a row is refused with `409 stale_preview` rather than
+running against numbers nobody saw.
+
+All endpoints require `SUPER_ADMIN` or `ADMIN`. Reports and lists are read-only;
+only `merge-participants/run` writes.
 
 ---
 
@@ -204,3 +215,97 @@ stale count from being used to authorise a different-sized change.
 - Merge duplicates refuses to proceed when both participants share a workshop.
 - Reset certificate flags cannot run unscoped.
 - Re-running backfill end dates twice changes nothing the second time.
+
+---
+
+## 6. What shipped (2026-11-25)
+
+The screen is one page with a tab per tool, because staff work through a
+backlog and move between them. The merge opens in a drawer so the list it came
+from stays put.
+
+| Tool | Mode | What it does |
+| --- | --- | --- |
+| **Duplicate participants** | review → merge | Groups participants by normalised email, scoped to a school year (see §6.1), picks the busiest record to keep by default, and offers a merge per duplicate. |
+| **Merge two participants** | action | Source/target picker, preview, then type-the-count confirmation. |
+| **Negative payments** | review | Every registration with `PaidAmount < 0`, split by whether the registration is cancelled. |
+| **Registrations with no workshop** | review | Every registration with `WorkshopID IS NULL`, with the payment it carries. |
+
+### 6.1 Participants by year
+
+The whole backlog is **937 duplicate groups** and almost all of it is history
+nobody will merge. The Duplicate participants tab therefore opens on the
+**newest school year** and offers the rest through a dropdown:
+
+| Year | Groups to review |
+| --- | --- |
+| 2026-27 | 1 |
+| 2025-26 | 6 |
+| 2024-25 | 9 |
+| 2023-24 | 11 |
+| … | … |
+| **All years** | 937 |
+
+(Counts as of 2026-11-25; the dropdown computes them live.)
+
+A participant is "in" a year when they hold a registration for a workshop in
+it — cancelled registrations included, because the duplicate exists because the
+address was reused, not because the enrolment stuck. The filter is applied to
+the **participants in a group, not to the groups**: a group is still shown with
+every participant on that address, so a merge can never be offered against a
+record that is not on screen.
+
+Past years carry a note — "Most duplicates here are history — merge only what
+still matters" — and **All years** is labelled as the full historic backlog.
+
+### 6.2 The merge
+
+The order is fixed and runs in one transaction:
+
+1. `Registration.ParticipantID` → target
+2. `SessionParticipant` — rows that would collide with the target's own
+   attendance are deleted first (the primary key is
+   `(ParticipantID, WorkshopSessionID)`), then the rest move
+3. `CreditSlip.ParticipantID` and `CreditSlip.UsedParticipantID`
+4. `CertificateOverride` — the target's row wins where both exist for the same
+   school year and type (the unique key would reject the second)
+5. `CertificateIssue.ParticipantID`
+6. The target's `HasCeuCertificate` / `HasChcCertificate` flags become the OR of
+   both, so a certificate issued to the duplicate is not lost
+7. The source participant is deleted **only when nothing points at it any more**
+
+**Refusals.** The merge refuses with `409 shared_workshop` when both
+participants have an active registration for the same workshop — that would
+create a duplicate enrolment, which Access never guarded against. It refuses
+with `409 stale_preview` when the counts changed since the preview, or when the
+token was not issued by this process (a restart invalidates every token, which
+is the safe direction).
+
+**Drops are reported, not silent.** Attendance and override rows that would
+collide are counted in the preview's `blockers.notes` and shown before the run.
+
+### 6.3 Audit
+
+`audit.UtilityRun` (migration `028`) records every attempt, including refusals —
+"we tried and it was blocked" is the question asked later. A failed audit write
+is logged and swallowed: it must never turn a refused merge into a `500`.
+
+### 6.4 Not built
+
+- **Reset certificate flags**, **reset email confirmations**, **backfill end
+  dates**, **verify registration counts** and **purge stale emails** from §2 are
+  not built. They are the same preview-then-run shape as the merge and belong in
+  the same page when they are needed.
+- **Resolving a negative payment** is a link to the registration, not an edit
+  here. Money changes go through the Payments screen so they are audited there.
+- **Resolving an orphan registration** is a link to the Registrations screen.
+- **Merge tokens are in memory.** Correct for one App Service instance; a
+  restart simply means previewing again. If the app ever scales out, the token
+  store needs to move to the database.
+- **`audit.UtilityRun` must exist before the screen works.** Migration `028` is
+  applied to test and production by hand, like every other migration. On
+  production the deploy login cannot create objects in `audit` (it is not
+  `db_ddladmin` there), so the table has to be created once by an `db_owner`
+  login — see [the completion record](../completions/2026-11-25-utilities-screen.md) §6.
+  Until then the screen works but records no runs: the audit write and the
+  history read are both guarded.
