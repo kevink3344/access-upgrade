@@ -140,7 +140,18 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
   }, [version.data]);
 
   const save = useMutation({
-    mutationFn: () => api.forms.saveDraft(formTemplateId, questions, pages),
+    mutationFn: () =>
+      api.forms.saveDraft(
+        formTemplateId,
+        // The options box keeps what was typed, including blank lines, so the
+        // caret can move between options. Tidy them here, once, rather than on
+        // every keystroke.
+        questions.map((q) => ({
+          ...q,
+          options: q.options.map((s) => s.trim()).filter(Boolean),
+        })),
+        pages,
+      ),
     onSuccess: (r) => {
       setNotice(`Saved as v${(currentVersion?.versionNumber ?? 0) + 1} (draft).`);
       setError(null);
@@ -168,6 +179,12 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
 
   function patch(index: number, changes: Partial<FormQuestionDraft>) {
     setQuestions((prev) => prev.map((q, i) => (i === index ? { ...q, ...changes } : q)));
+    setDirty(true);
+  }
+
+  /** Patch from the current value, for changes derived from what is there. */
+  function patchWith(index: number, fn: (q: FormQuestionDraft) => Partial<FormQuestionDraft>) {
+    setQuestions((prev) => prev.map((q, i) => (i === index ? { ...q, ...fn(q) } : q)));
     setDirty(true);
   }
 
@@ -576,13 +593,23 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
                       className="input"
                       rows={4}
                       disabled={!canEdit}
+                      // The raw text is what the visitor is typing, blank lines
+                      // and all. Filtering empty lines here would delete the
+                      // newline the moment it is typed, so Enter could never
+                      // start a second option. The list is tidied on save.
                       value={active.options.join('\n')}
                       onChange={(e) =>
-                        patch(selected!, {
-                          options: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
-                        })
+                        patch(selected!, { options: e.target.value.split('\n') })
+                      }
+                      onBlur={() =>
+                        patchWith(selected!, (q) => ({
+                          options: q.options.map((s) => s.trim()).filter(Boolean),
+                        }))
                       }
                     />
+                    <span className="field-hint">
+                      Press Enter after each option. Blank lines are ignored when you save.
+                    </span>
                   </div>
                 )}
 
