@@ -63,6 +63,7 @@ type Status = (typeof STATUS_OPTIONS)[number][0];
 export function TrainingRequestsPage() {
   const { user } = useAuth();
   const canEdit = user && ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EDITOR'].includes(user.role);
+  const canDelete = user && ['SUPER_ADMIN', 'ADMIN'].includes(user.role);
 
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -478,6 +479,7 @@ export function TrainingRequestsPage() {
         <TrainingRequestDrawer
           trainingRequestId={editingId}
           canEdit={!!canEdit}
+          canDelete={!!canDelete}
           onClose={() => setDrawerOpen(false)}
         />
       )}

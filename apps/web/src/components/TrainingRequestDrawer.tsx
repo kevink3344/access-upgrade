@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TrainingRequestWrite } from '@pe/shared';
-import { api } from '../api';
+import { api, HttpError } from '../api';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { useResizableDrawer } from '../hooks/useResizableDrawer';
 import { AgencyPicker } from './AgencyPicker';
@@ -39,10 +39,13 @@ type Errors = Record<string, string>;
 export function TrainingRequestDrawer({
   trainingRequestId,
   canEdit,
+  canDelete,
   onClose,
 }: {
   trainingRequestId: number | null;
   canEdit: boolean;
+  /** Deleting is super-admin/admin only, and only for requests with no history. */
+  canDelete: boolean;
   onClose: () => void;
 }) {
   const isEdit = trainingRequestId !== null;
@@ -62,9 +65,10 @@ export function TrainingRequestDrawer({
 
   const [contactDate, setContactDate] = useState('');
   const [contactNote, setContactNote] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
   /** Which tab is showing. Only meaningful when editing an existing request. */
   const [tab, setTab] = useState<
-    'request' | 'quotes' | 'scheduled' | 'payments' | 'contacts' | 'form'
+    'request' | 'financials' | 'scheduled' | 'contacts' | 'form'
   >('request');
 
   const { data: existing, isLoading } = useQuery({
@@ -141,8 +145,21 @@ export function TrainingRequestDrawer({
     onError: (e: Error) => setFormError(e.message),
   });
 
-  const addContact = useMutation({
-    mutationFn: () =>
+  const remove = useMutation({
+    mutationFn: () => api.trainingRequests.remove(trainingRequestId!),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['training-requests'] });
+      onClose();
+    },
+    onError: (e) => {
+      // A 409 means the request has quotes, payments or a contact log; the
+      // message explains which, so it is shown rather than a generic failure.
+      setFormError(e instanceof HttpError ? e.message : 'Could not delete.');
+      setConfirmDelete(false);
+    },
+  });
+
+  const addContact = useMutation({    mutationFn: () =>
       api.trainingRequests.addContact(trainingRequestId!, {
         contactDate,
         note: str(contactNote),
@@ -221,15 +238,17 @@ export function TrainingRequestDrawer({
             <button
               type="button"
               role="tab"
-              id="tab-quotes"
+              id="tab-financials"
               className="drawer-tab"
-              aria-selected={tab === 'quotes'}
-              aria-controls="panel-quotes"
-              onClick={() => setTab('quotes')}
+              aria-selected={tab === 'financials'}
+              aria-controls="panel-financials"
+              onClick={() => setTab('financials')}
             >
-              Quotes
-              {existing.quotes.length > 0 && (
-                <span className="drawer-tab-count">{existing.quotes.length}</span>
+              Quotes &amp; payments
+              {existing.quotes.length + existing.payments.length > 0 && (
+                <span className="drawer-tab-count">
+                  {existing.quotes.length + existing.payments.length}
+                </span>
               )}
             </button>
             <button
@@ -244,20 +263,6 @@ export function TrainingRequestDrawer({
               Scheduled workshops
               {existing.scheduled.length > 0 && (
                 <span className="drawer-tab-count">{existing.scheduled.length}</span>
-              )}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              id="tab-payments"
-              className="drawer-tab"
-              aria-selected={tab === 'payments'}
-              aria-controls="panel-payments"
-              onClick={() => setTab('payments')}
-            >
-              Payments
-              {existing.payments.length > 0 && (
-                <span className="drawer-tab-count">{existing.payments.length}</span>
               )}
             </button>
             <button
@@ -490,6 +495,16 @@ export function TrainingRequestDrawer({
 
             {canEdit && (
               <div className="drawer-actions">
+                {isEdit && canDelete && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-danger-text"
+                    onClick={() => setConfirmDelete(true)}
+                    style={{ marginRight: 'auto' }}
+                  >
+                    Delete
+                  </button>
+                )}
                 <button type="button" className="btn btn-ghost" onClick={onClose}>
                   Cancel
                 </button>
@@ -501,12 +516,12 @@ export function TrainingRequestDrawer({
           </form>
         ) : null}
 
-        {isEdit && existing && tab === 'quotes' && (
+        {isEdit && existing && tab === 'financials' && (
           <div
             className="drawer-body"
             role="tabpanel"
-            id="panel-quotes"
-            aria-labelledby="tab-quotes"
+            id="panel-financials"
+            aria-labelledby="tab-financials"
           >
             <div className="tab-section">
               <fieldset className="fieldset"><legend>Quotes ({existing.quotes.length})</legend>
@@ -547,6 +562,31 @@ export function TrainingRequestDrawer({
                 </table>
               )}
               </fieldset>
+
+              <fieldset className="fieldset"><legend>Payments ({existing.payments.length})</legend>
+              {existing.payments.length === 0 ? (
+                <p className="tab-empty">No payments recorded.</p>
+              ) : (
+                <table className="data-table tab-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Date</th>
+                      <th scope="col">Method</th>
+                      <th scope="col" className="num">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {existing.payments.map((p) => (
+                      <tr key={p.PaymentID}>
+                        <td data-label="Date">{fmtDate(p.PaymentDate)}</td>
+                        <td data-label="Method" className="muted">{p.PaymentMethod ?? '—'}</td>
+                        <td data-label="Amount" className="num">{fmtMoney(p.Amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              </fieldset>
             </div>
           </div>
         )}
@@ -580,42 +620,6 @@ export function TrainingRequestDrawer({
                     </li>
                   ))}
                 </ul>
-              )}
-              </fieldset>
-            </div>
-          </div>
-        )}
-
-        {isEdit && existing && tab === 'payments' && (
-          <div
-            className="drawer-body"
-            role="tabpanel"
-            id="panel-payments"
-            aria-labelledby="tab-payments"
-          >
-            <div className="tab-section">
-              <fieldset className="fieldset"><legend>Payments ({existing.payments.length})</legend>
-              {existing.payments.length === 0 ? (
-                <p className="tab-empty">No payments recorded.</p>
-              ) : (
-                <table className="data-table tab-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Date</th>
-                      <th scope="col">Method</th>
-                      <th scope="col" className="num">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {existing.payments.map((p) => (
-                      <tr key={p.PaymentID}>
-                        <td data-label="Date">{fmtDate(p.PaymentDate)}</td>
-                        <td data-label="Method" className="muted">{p.PaymentMethod ?? '—'}</td>
-                        <td data-label="Amount" className="num">{fmtMoney(p.Amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               )}
               </fieldset>
             </div>
@@ -720,6 +724,39 @@ export function TrainingRequestDrawer({
           </div>
         )}
       </aside>
+
+      {confirmDelete && (
+        <div
+          className="drawer-scrim"
+          onMouseDown={(e) => e.target === e.currentTarget && setConfirmDelete(false)}
+        >
+          <div className="dialog" role="alertdialog" aria-modal="true">
+            <h2>Delete this training request?</h2>
+            <p>
+              This cannot be undone. Use it for duplicates and mistakes — a request
+              with quotes, scheduled workshops, payments or a contact log cannot be
+              deleted, because that history would be lost. Close it instead.
+            </p>
+            <div className="drawer-actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setConfirmDelete(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => remove.mutate()}
+                disabled={remove.isPending}
+              >
+                {remove.isPending ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -539,6 +539,96 @@ trainingRequestsRouter.patch(
 
 /**
  * @openapi
+ * /api/training-requests/{id}:
+ *   delete:
+ *     tags: [Training requests]
+ *     summary: Delete a training request
+ *     description: >
+ *       For removing duplicates and mistakes. Refused when the request has
+ *       quotes, scheduled workshops, payments or a contact log, because
+ *       deleting it would take that history with it. Only a request still
+ *       carrying nothing but its own details can be removed.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *     responses:
+ *       204: { description: Deleted }
+ *       404: { description: Not found }
+ *       409: { description: Has history that would be lost }
+ */
+trainingRequestsRouter.delete(
+  '/:id',
+  requireAuth,
+  requireRole('SUPER_ADMIN', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+        return;
+      }
+
+      const exists = await query<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM core.TrainingRequest WHERE TrainingRequestID = @id',
+        { id: { type: sql.Int, value: id } },
+      );
+      if ((exists.recordset[0]?.n ?? 0) === 0) {
+        res.status(404).json({ error: 'not_found', message: 'Training request not found' });
+        return;
+      }
+
+      // The child tables are imported history. A request that has any is part
+      // of the record, not a duplicate, so it is not deletable here.
+      const deps = await query<{
+        Quotes: number;
+        Scheduled: number;
+        Payments: number;
+        Contacts: number;
+      }>(
+        `SELECT
+           (SELECT COUNT(*) FROM core.TrainingRequestQuote     WHERE TrainingRequestID = @id) AS Quotes,
+           (SELECT COUNT(*) FROM core.TrainingRequestScheduled WHERE TrainingRequestID = @id) AS Scheduled,
+           (SELECT COUNT(*) FROM core.TrainingRequestPayment   WHERE TrainingRequestID = @id) AS Payments,
+           (SELECT COUNT(*) FROM core.TrainingRequestContact   WHERE TrainingRequestID = @id) AS Contacts`,
+        { id: { type: sql.Int, value: id } },
+      );
+
+      const d = deps.recordset[0]!;
+      if (d.Quotes > 0 || d.Scheduled > 0 || d.Payments > 0 || d.Contacts > 0) {
+        res.status(409).json({
+          error: 'conflict',
+          message:
+            `This request has ${d.Quotes} quote(s), ${d.Scheduled} scheduled workshop(s), ` +
+            `${d.Payments} payment(s) and ${d.Contacts} contact log entr(ies). ` +
+            'Close it instead of deleting it, so that history is kept.',
+          details: [
+            { path: 'quotes', message: String(d.Quotes) },
+            { path: 'scheduled', message: String(d.Scheduled) },
+            { path: 'payments', message: String(d.Payments) },
+            { path: 'contacts', message: String(d.Contacts) },
+          ],
+        });
+        return;
+      }
+
+      // Form answers belong to the request itself, so they go with it. Done
+      // first because the foreign key would otherwise block the delete.
+      await query('DELETE FROM core.FormAnswer WHERE TrainingRequestID = @id', {
+        id: { type: sql.Int, value: id },
+      });
+      await query('DELETE FROM core.TrainingRequest WHERE TrainingRequestID = @id', {
+        id: { type: sql.Int, value: id },
+      });
+
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
  * /api/training-requests/{id}/contacts:
  *   post:
  *     tags: [Training requests]

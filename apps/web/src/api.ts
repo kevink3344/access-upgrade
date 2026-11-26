@@ -616,6 +616,8 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify(body),
       }),
+    remove: (id: number) =>
+      request<void>(`/api/training-requests/${id}`, { method: 'DELETE' }),
     addContact: (id: number, body: { contactDate: string; note?: string | null }) =>
       request<{ contactId: number }>(`/api/training-requests/${id}/contacts`, {
         method: 'POST',
