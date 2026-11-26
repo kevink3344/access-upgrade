@@ -170,6 +170,10 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
       setError(null);
       qc.invalidateQueries({ queryKey: ['form', formTemplateId] });
       qc.invalidateQueries({ queryKey: ['forms'] });
+      // The link panel decides whether to offer "update to newest version" from
+      // this query. Without the refresh it keeps the pre-publish answer, so the
+      // notice never appears until the page is reloaded.
+      qc.invalidateQueries({ queryKey: ['form-link', formTemplateId] });
     },
     onError: (e: Error) => setError(e.message),
   });
