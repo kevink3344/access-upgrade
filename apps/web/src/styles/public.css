@@ -1,4 +1,4 @@
-﻿/* =====================================================================
+/* =====================================================================
    Public registration — standalone surface.
    No staff chrome: no sidebar, no header, no navigation.
    ===================================================================== */
@@ -212,7 +212,7 @@
   padding: 14px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--surface-card);
   cursor: pointer;
   min-height: 48px;
   transition: border-color .12s ease, background .12s ease;
@@ -277,7 +277,7 @@
   font-size: 16px; /* 16px prevents iOS zoom-on-focus */
   font-family: inherit;
   color: var(--text-heading);
-  background: #fff;
+  background: var(--surface-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   min-height: 48px;

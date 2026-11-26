@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#165788" />
     <title>Project Enlightenment, workshop database</title>
+    <!-- Applies the saved light/dark choice before first paint, so a dark-mode
+         user never sees a flash of the light theme. Mirrors src/theme.ts. -->
+    <script>
+      try {
+        if (localStorage.getItem('pe.theme') === 'dark') {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      } catch (e) {
+        /* Storage blocked — fall back to the light theme. */
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

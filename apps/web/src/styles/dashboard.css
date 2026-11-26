@@ -1,4 +1,4 @@
-﻿/* =====================================================================
+/* =====================================================================
    Dashboard
    ===================================================================== */
 
@@ -91,7 +91,7 @@
   transform: translateY(-1px);
 }
 
-.stat-card-link:hover .value { color: var(--primary-color); }
+.stat-card-link:hover .value { color: var(--primary-text); }
 
 .stat-card-link:focus-visible {
   outline: 3px solid var(--secondary-color);
@@ -341,7 +341,7 @@
    inside the app shell without fighting it.
    ===================================================================== */
 .swagger-host {
-  background: #fff;
+  background: var(--surface-card);
   border: 1px solid var(--surface-neutral);
   border-radius: var(--radius-lg);
   padding: 4px 8px 8px;
@@ -394,8 +394,8 @@
 
 /* ---------- duplicate warning ---------- */
 .duplicate-warning {
-  background: #fff8e6;
-  border: 1px solid #f0dca8;
+  background: var(--badge-amber-bg);
+  border: 1px solid var(--badge-amber-border);
   border-radius: var(--radius);
   padding: 14px 16px;
   margin-bottom: 20px;
@@ -405,7 +405,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #7a4a00;
+  color: var(--badge-amber-text);
   font-size: 13.5px;
   margin-bottom: 6px;
 }
@@ -417,18 +417,18 @@
   border: 0;
   font-size: 20px;
   line-height: 1;
-  color: #a07a30;
+  color: var(--badge-amber-text);
   cursor: pointer;
   padding: 0 4px;
   border-radius: var(--radius);
 }
 
-.duplicate-dismiss:hover { background: rgba(160, 122, 48, .12); }
+.duplicate-dismiss:hover { background: var(--surface-subtle); }
 
 .duplicate-warning p {
   margin: 0 0 10px;
   font-size: 12.5px;
-  color: #7a5a20;
+  color: var(--badge-amber-text);
   line-height: 1.5;
 }
 
@@ -444,7 +444,7 @@
 .duplicate-warning .dup-meta {
   display: block;
   font-size: 11.5px;
-  color: #8a6a30;
+  color: var(--badge-amber-text);
   margin-top: 1px;
 }
 
@@ -607,8 +607,8 @@
 }
 
 .rotate-confirm {
-  background: #fdf2f4;
-  border: 1px solid #f3d3da;
+  background: var(--badge-rose-bg);
+  border: 1px solid var(--badge-rose-border);
   border-radius: var(--radius);
   padding: 12px 14px;
 }

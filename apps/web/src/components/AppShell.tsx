@@ -18,6 +18,7 @@ import {
   IconLayoutSidebar,
 } from './icons';
 import { NotificationBell } from './NotificationBell';
+import { ThemeToggle } from './ThemeToggle';
 import { canSeeSettings, isSettingsDestination } from '../settings';
 
 interface NavItem {
@@ -214,6 +215,7 @@ export function AppShell({
             />
           </a>
           <div className="topbar-actions">
+            <ThemeToggle />
             {user && <NotificationBell />}
             {user && canSeeSettings(user.role) && (
               <a

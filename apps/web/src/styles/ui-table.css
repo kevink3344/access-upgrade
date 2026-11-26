@@ -80,7 +80,7 @@
   flex-shrink: 0;
 }
 
-.typeahead-clear:hover { color: var(--cc-fifth-color); background: #fdf2f4; }
+.typeahead-clear:hover { color: var(--cc-fifth-color); background: var(--surface-danger-hover); }
 
 .typeahead-list {
   position: absolute;
@@ -91,7 +91,7 @@
   margin: 0;
   padding: 4px 0;
   list-style: none;
-  background: #fff;
+  background: var(--surface-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   box-shadow: 0 6px 20px rgba(20, 30, 40, .14);

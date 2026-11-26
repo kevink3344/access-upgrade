@@ -8,14 +8,14 @@
   font-size: 15px;
   font-family: inherit;
   color: var(--text-heading);
-  background: #fff;
+  background: var(--surface-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   transition: border-color .15s ease, box-shadow .15s ease;
   min-height: 44px;
 }
 
-.input:hover { border-color: #a9b6c0; }
+.input:hover { border-color: var(--border-input-hover); }
 
 .input:focus {
   outline: none;
@@ -35,7 +35,7 @@
   font-size: 15px;
   font-family: inherit;
   color: var(--text-heading);
-  background: #fff;
+  background: var(--surface-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   min-height: 44px;

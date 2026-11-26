@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Bar,
@@ -19,6 +19,7 @@ import type { ChartKey, ChartSeries } from '@pe/shared';
 import { api } from '../api';
 import { AppShell } from '../components/AppShell';
 import { ChartCard } from '../components/ChartCard';
+import { currentTheme } from '../theme';
 
 /**
  * Visual Reports — the same numbers the hub returns as rows, drawn so a shape
@@ -36,6 +37,31 @@ const OUTCOME_COLOURS: Record<string, string> = {
   'No-show': '#c9a227',
   Cancelled: '#a33a4a',
 };
+
+/* Recharts paints its own SVG, so it cannot inherit the page's colours the
+   way HTML does. These are read from the live tokens instead, which keeps the
+   grid, axis labels and legend readable in both themes without a second
+   palette to maintain. */
+const token = (name: string) =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function subscribeToTheme(onChange: () => void): () => void {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  return () => observer.disconnect();
+}
+
+function useChartTheme() {
+  const theme = useSyncExternalStore(subscribeToTheme, currentTheme);
+
+  return useMemo(
+    () => ({
+      grid: token('--border-subtle'),
+      tick: { fontSize: 12, fill: token('--text-muted') },
+    }),
+    [theme],
+  );
+}
 
 const CHART_ORDER: ChartKey[] = [
   'registrations-by-month',
@@ -68,6 +94,7 @@ function money(v: number): string {
 
 export function VisualReportsPage() {
   const [schoolYearId, setSchoolYearId] = useState<number | null>(null);
+  const chart = useChartTheme();
 
   const { data: years } = useQuery({
     queryKey: ['lookup', 'school-years'],
@@ -129,9 +156,9 @@ export function VisualReportsPage() {
             {(data) => (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e6ebf0" />
-                  <XAxis dataKey="label" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 12 }} width={44} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                  <XAxis dataKey="label" tick={chart.tick} interval="preserveStartEnd" />
+                  <YAxis tick={chart.tick} width={44} />
                   <Tooltip formatter={(v) => [Number(v), 'registrations']} />
                   <Line
                     type="monotone"
@@ -169,7 +196,7 @@ export function VisualReportsPage() {
                   ))}
                 </Pie>
                 <Tooltip formatter={(v) => [Number(v), 'registrations']} />
-                <Legend verticalAlign="bottom" height={28} />
+                <Legend verticalAlign="bottom" height={28} wrapperStyle={{ color: chart.tick.fill }} />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -185,12 +212,12 @@ export function VisualReportsPage() {
           {(data) => (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e6ebf0" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 12 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} horizontal={false} />
+                <XAxis type="number" tick={chart.tick} />
                 <YAxis
                   type="category"
                   dataKey="label"
-                  tick={{ fontSize: 11 }}
+                  tick={{ ...chart.tick, fontSize: 11 }}
                   width={130}
                 />
                 <Tooltip formatter={(v) => [Number(v), 'workshops']} />
@@ -210,16 +237,16 @@ export function VisualReportsPage() {
           {(data) => (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e6ebf0" />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
                 <XAxis
                   dataKey="label"
-                  tick={{ fontSize: 10 }}
+                  tick={{ ...chart.tick, fontSize: 10 }}
                   interval="preserveStartEnd"
                   angle={-45}
                   textAnchor="end"
                   height={56}
                 />
-                <YAxis tick={{ fontSize: 11 }} width={64} tickFormatter={money} />
+                <YAxis tick={{ ...chart.tick, fontSize: 11 }} width={64} tickFormatter={money} />
                 <Tooltip formatter={(v) => [money(Number(v)), 'revenue']} />
                 <Bar dataKey="value" fill={SERIES_COLOURS[0]} radius={[3, 3, 0, 0]} />
               </BarChart>
@@ -237,12 +264,12 @@ export function VisualReportsPage() {
           {(data) => (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e6ebf0" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 12 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} horizontal={false} />
+                <XAxis type="number" tick={chart.tick} />
                 <YAxis
                   type="category"
                   dataKey="label"
-                  tick={{ fontSize: 10 }}
+                  tick={{ ...chart.tick, fontSize: 10 }}
                   width={150}
                 />
                 <Tooltip formatter={(v) => [Number(v), 'registrations']} />

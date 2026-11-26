@@ -35,7 +35,7 @@
 .cert-preview-frame {
   display: block;
   border: 1px solid var(--border-color);
-  background: #fff;
+  background: var(--surface-card);
   box-shadow: var(--shadow-card);
   transform-origin: top left;
 }

@@ -13,6 +13,11 @@
   --primary-color-hsl: var(--primary-color-h), var(--primary-color-s), var(--primary-color-l);
   --primary-dark: #12466e;
   --primary-darker: #0e3a5c;
+  /* Text and links drawn on the primary colour. White in both themes. */
+  --on-primary: #fff;
+  /* The brand blue as text on a page/card surface. Dark mode lifts it to a
+     lighter tint so links and active nav items keep their contrast. */
+  --primary-text: var(--primary-color);
 
   --secondary-color: #df6d1c;
   --tertiary-color: #00add0;
@@ -36,6 +41,16 @@
   --surface-zebra: #fafbfc;
   --border-color: #cfd6dc;
   --border-subtle: #eef0f2;
+  /* Form-control fills. Cards and the page stay on their own tokens so an
+     input always reads as an input, even where it sits on a card. */
+  --surface-input: #fff;
+  --border-input-hover: #a9b6c0;
+  /* Hover fill for a destructive text button. */
+  --surface-danger-hover: #fdf2f4;
+  /* Unread count on the bell. Deliberately fixed across themes: a dark
+     maroon with white text is legible on both the light and dark topbar. */
+  --notif-badge-bg: #6e273d;
+  --notif-badge-text: #fff;
 
   /* ---- status ---- */
   --status-open: #BED600;
@@ -110,9 +125,95 @@
 }
 
 /* =====================================================================
+   Dark theme
+
+   Set by `data-theme="dark"` on <html> (see apps/web/src/theme.ts). Only the
+   values change — every rule in the app keeps reading the same tokens, so a
+   screen that looks right in light mode needs no dark-mode rules of its own.
+
+   Surfaces step *up* in lightness as they come forward (page -> card ->
+   raised control), which is how depth reads on a dark background; borders
+   do the work shadows do in light mode. Pastel badges are re-picked rather
+   than inverted: each keeps its hue with a dark fill and a light text, and
+   still clears 4.5:1 against its own fill.
+   ===================================================================== */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* ---- brand ---- */
+  /* Lifted a step so the sidebar's active item and primary buttons still
+     separate from the page; --primary-text is lifted further, for text. */
+  --primary-color: #2b7cb8;
+  --primary-dark: #3d93d1;
+  --primary-darker: #56a6df;
+  --primary-text: #6cb6e8;
+
+  /* ---- text ---- */
+  --text-body: #c9d4de;
+  --text-heading: #eef3f7;
+  --text-muted: #9aa9b6;
+  --text-faint: #7f8f9d;
+
+  /* ---- surfaces ---- */
+  --surface-page: #0f151b;
+  --surface-card: #18212a;
+  --surface-neutral: #2b3641;
+  --surface-subtle: #212c36;
+  --surface-zebra: #1c2630;
+  --border-color: #3a4753;
+  --border-subtle: #26313b;
+  --surface-input: #131b23;
+  --border-input-hover: #5b6b79;
+  --surface-danger-hover: #3a1f27;
+
+  /* ---- status ---- */
+  --status-open-text: #d3e88a;
+  --status-unpaid-text: #f0d98a;
+
+  /* ---- pastel badges ---- */
+  --badge-green-bg: #26330f;
+  --badge-green-border: #4d6420;
+  --badge-green-text: #d3e88a;
+
+  --badge-yellow-bg: #33300f;
+  --badge-yellow-border: #6b6222;
+  --badge-yellow-text: #f2e39a;
+
+  --badge-blue-bg: #16283f;
+  --badge-blue-border: #2f527c;
+  --badge-blue-text: #a9cdf5;
+
+  --badge-amber-bg: #33260f;
+  --badge-amber-border: #6e5222;
+  --badge-amber-text: #f3cf95;
+
+  --badge-rose-bg: #351d24;
+  --badge-rose-border: #6b3b47;
+  --badge-rose-text: #f0bcc9;
+
+  --badge-slate-bg: #222c34;
+  --badge-slate-border: #414f5b;
+  --badge-slate-text: #c3ccd4;
+
+  --badge-violet-bg: #272040;
+  --badge-violet-border: #4f4277;
+  --badge-violet-text: #cfc2f0;
+
+  /* ---- shape ---- */
+  /* Shadows barely register on a dark page; deeper and softer so cards and
+     popovers still lift off the surface behind them. */
+  --shadow-card: 0 6px 22px rgba(0, 0, 0, .45);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, .35);
+}
+
+/* =====================================================================
    Base
    ===================================================================== */
 *, *::before, *::after { box-sizing: border-box; }
+
+/* Native controls — checkboxes, select popups, scrollbars, the caret — are
+   painted by the browser. This is what tells them which theme to use. */
+:root { color-scheme: light; }
 
 html, body, #root { height: 100%; }
 
@@ -144,7 +245,7 @@ h5 { font-size: 14px; font-family: var(--font-primary); }
 p { margin: 0 0 15px; }
 
 a {
-  color: var(--primary-color);
+  color: var(--primary-text);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
@@ -155,7 +256,7 @@ code {
   background: var(--surface-subtle);
   padding: .12em .38em;
   border-radius: 3px;
-  color: #2c3e50;
+  color: var(--text-heading);
 }
 
 /* =====================================================================

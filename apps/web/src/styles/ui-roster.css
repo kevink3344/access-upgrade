@@ -314,7 +314,7 @@
   font-family: inherit;
   line-height: 1.5;
   color: var(--text-heading);
-  background: #fff;
+  background: var(--surface-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   resize: vertical;
@@ -367,8 +367,8 @@
 }
 
 .btn-danger-text:hover {
-  background: #fdf2f4;
+  background: var(--surface-danger-hover);
   color: var(--cc-fifth-color);
-  border-color: #f3d3da;
+  border-color: var(--badge-rose-border);
 }
 

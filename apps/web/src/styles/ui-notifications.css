@@ -1,3 +1,30 @@
+/* ---------- theme toggle ---------- */
+/* Same footprint as the bell beside it, so the two read as one row of icon
+   buttons. Kept here rather than in layout.css because it is the bell's
+   neighbour and must track it if that size changes. */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  line-height: 1;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+
+.theme-toggle:hover { background: var(--surface-subtle); color: var(--primary-text); }
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 1px;
+}
+
 /* ---------- notification bell ---------- */
 /* Flex, not block: an inline-flex button on a text baseline inside a block
    wrapper picks up a sub-pixel offset that breaks alignment with the
@@ -25,26 +52,35 @@
   transition: background .12s ease, color .12s ease;
 }
 
-.notif-bell:hover { background: var(--surface-subtle); color: var(--primary-dark); }
+.notif-bell:hover { background: var(--surface-subtle); color: var(--primary-text); }
 
 .notif-bell:focus-visible {
   outline: 2px solid var(--primary-color);
   outline-offset: 1px;
 }
 
+/* The badge sits on the bell's top-right corner. Centred on the corner
+   (rather than tucked inside it) keeps it clear of the bell's outline, and
+   the 2px ring in the topbar's own colour punches it out of the icon so the
+   two never read as one blob.
+
+   Fixed colours on purpose: a dark maroon with white text reads the same in
+   both themes, so the unread count never changes weight with the theme. */
 .notif-badge {
   position: absolute;
-  top: 1px;
-  right: 1px;
-  min-width: 16px;
-  height: 16px;
+  top: -3px;
+  right: -3px;
+  box-sizing: border-box;
+  min-width: 17px;
+  height: 17px;
   padding: 0 4px;
   border-radius: 999px;
-  background: var(--badge-rose-text);
-  color: #fff;
+  background: var(--notif-badge-bg);
+  color: var(--notif-badge-text);
+  box-shadow: 0 0 0 2px var(--surface-card);
   font-size: 10px;
   font-weight: 700;
-  line-height: 16px;
+  line-height: 17px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }

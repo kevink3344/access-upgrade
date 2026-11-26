@@ -27,7 +27,7 @@
   color: var(--text-muted);
 }
 
-.recent-clear:hover { color: var(--primary-color); }
+.recent-clear:hover { color: var(--primary-text); }
 
 .recent-chips {
   display: flex;
@@ -41,7 +41,7 @@
   gap: 7px;
   max-width: 100%;
   padding: 7px 13px;
-  background: #fff;
+  background: var(--surface-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   font-family: inherit;
