@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import type { FormPage, FormPreviewState, FormQuestion, PublicLinkState } from '@pe/shared';
+import { sanitizeHelpHtml } from '@pe/shared';
 import { api, HttpError } from '../api';
 import { AgencyPicker } from '../components/AgencyPicker';
 import { AuthedImage } from '../components/AuthedImage';
@@ -181,9 +182,13 @@ function QuestionField({
       )}
 
       {q.helpText && (
-        <span className="field-hint" id={`q-${q.questionKey}-help`}>
-          {q.helpText}
-        </span>
+        <div
+          className="field-hint rich-help"
+          id={`q-${q.questionKey}-help`}
+          // Sanitised here as well as on save: the stored value is
+          // staff-supplied markup and must never be trusted as-is.
+          dangerouslySetInnerHTML={{ __html: sanitizeHelpHtml(q.helpText) }}
+        />
       )}
       {err && <span className="error" role="alert">{err}</span>}
     </div>

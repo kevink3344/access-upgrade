@@ -789,7 +789,7 @@ async function insertVersion(
         sort: { type: sql.Int, value: q.sortOrder },
         key: { type: sql.NVarChar(50), value: q.questionKey },
         label: { type: sql.NVarChar(200), value: q.label },
-        help: { type: sql.NVarChar(300), value: q.helpText ?? null },
+        help: { type: sql.NVarChar(sql.MAX), value: q.helpText ?? null },
         ph: { type: sql.NVarChar(100), value: q.placeholder ?? null },
         type: { type: sql.NVarChar(20), value: q.fieldType },
         req: { type: sql.Bit, value: q.isRequired ? 1 : 0 },

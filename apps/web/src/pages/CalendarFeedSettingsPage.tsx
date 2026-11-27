@@ -54,13 +54,6 @@ export function CalendarFeedSettingsPage() {
       setError(err instanceof Error ? err.message : 'A new link could not be created.'),
   });
 
-  // A plain click on the button works; this is for the case where the sidebar
-  // overlaps it on a narrow window, where the click never reaches the button.
-  function issueNewLink() {
-    if (busy) return;
-    regenerate.mutate();
-  }
-
   const busy = toggle.isPending || regenerate.isPending;
 
   async function copy() {

@@ -1,7 +1,13 @@
 /**
  * Shared types between the API and the web app.
- * Kept deliberately small for now â€” grows as endpoints are added.
+ * Kept deliberately small for now — grows as endpoints are added.
  */
+
+export {
+  sanitizeHelpHtml,
+  isHelpHtmlEmpty,
+  helpHtmlToText,
+} from './help-text';
 
 export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'EDITOR' | 'VIEWER';
 

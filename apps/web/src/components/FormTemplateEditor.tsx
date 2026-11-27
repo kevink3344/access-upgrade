@@ -7,9 +7,11 @@ import type {
   FormQuestionDraft,
   FormTemplateKind,
 } from '@pe/shared';
+import { helpHtmlToText, sanitizeHelpHtml } from '@pe/shared';
 import { api } from '../api';
 import { FormLinkPanel } from './FormLinkPanel';
 import { FormHeaderPanel } from './FormHeaderPanel';
+import { RichTextEditor } from './RichTextEditor';
 
 interface Props {
   formTemplateId: number;
@@ -521,15 +523,18 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
 
                 <div className="field">
                   <label htmlFor="q-help">Help text</label>
-                  <input
+                  <RichTextEditor
                     id="q-help"
-                    className="input"
                     value={active.helpText ?? ''}
-                    maxLength={300}
                     disabled={!canEdit}
-                    placeholder="Shown under the input, stays visible while typing"
-                    onChange={(e) => patch(selected!, { helpText: e.target.value || null })}
+                    placeholder="Shown under the input, stays visible while typing. Use the toolbar for bold, italics, bullets and links."
+                    onChange={(html) => patch(selected!, { helpText: html || null })}
                   />
+                  {active.helpText && (
+                    <span className="field-hint">
+                      {helpHtmlToText(active.helpText).length} characters of text
+                    </span>
+                  )}
                 </div>
 
                 <div className="field">
@@ -726,7 +731,12 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
                       value=""
                       readOnly
                     />
-                    {active.helpText && <span className="field-hint">{active.helpText}</span>}
+                    {active.helpText && (
+                      <div
+                        className="field-hint rich-help"
+                        dangerouslySetInnerHTML={{ __html: sanitizeHelpHtml(active.helpText) }}
+                      />
+                    )}
                   </div>
                 </div>
               </>

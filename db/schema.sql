@@ -1449,7 +1449,7 @@ CREATE TABLE core.FormQuestion (
     SortOrder             INT           NOT NULL,
     QuestionKey           NVARCHAR(50)  NOT NULL,
     Label                 NVARCHAR(200) NOT NULL,
-    HelpText              NVARCHAR(300) NULL,
+    HelpText              NVARCHAR(MAX) NULL,   -- rich text; see migration 034
     Placeholder           NVARCHAR(100) NULL,
     FieldType             NVARCHAR(20)  NOT NULL,
     IsRequired            BIT           NOT NULL CONSTRAINT DF_FormQuestion_IsRequired DEFAULT 0,

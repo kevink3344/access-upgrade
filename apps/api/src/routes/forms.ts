@@ -40,7 +40,12 @@ const questionSchema = z.object({
     // Both are allowed, but no spaces or punctuation.
     .regex(/^[A-Za-z][A-Za-z0-9_]*$/, 'Use letters, digits and underscores'),
   label: z.string().min(1, 'A label is required').max(200),
-  helpText: z.string().max(300).nullable().optional(),
+  /**
+   * Rich text: a small subset of HTML from the Form Designer's editor.
+   * 4000 characters of markup is roughly 800 visible characters — a long
+   * bulleted list — and is sanitised again when the public page renders it.
+   */
+  helpText: z.string().max(4000).nullable().optional(),
   placeholder: z.string().max(100).nullable().optional(),
   fieldType: z.enum(['text', 'longtext', 'number', 'select', 'radio', 'checkbox', 'agency', 'session']),
   isRequired: z.boolean(),
