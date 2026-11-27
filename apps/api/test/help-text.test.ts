@@ -43,6 +43,17 @@ describe('sanitizeHelpHtml', () => {
     expect(sanitizeHelpHtml('a < b')).toBe('a &lt; b');
   });
 
+  it('turns a newline the browser left in the markup into a line break', () => {
+    expect(sanitizeHelpHtml('one\ntwo')).toBe('one<br>two');
+    expect(sanitizeHelpHtml('<div>one</div><div>two</div>')).toBe('<div>one</div><div>two</div>');
+  });
+
+  it('does not double-escape an ampersand on a second pass', () => {
+    const once = sanitizeHelpHtml('A &amp; B');
+    expect(once).toBe('A &amp; B');
+    expect(sanitizeHelpHtml(once)).toBe('A &amp; B');
+  });
+
   it('returns an empty string for null and empty input', () => {
     expect(sanitizeHelpHtml(null)).toBe('');
     expect(sanitizeHelpHtml('')).toBe('');

@@ -26,14 +26,25 @@ const ALLOWED_TAGS = new Set([
   'ol',
   'li',
   'p',
+  'div',
   'br',
   'a',
 ]);
+
+/**
+ * Characters a browser's contentEditable emits as markup but which mean a
+ * line break to the person typing. Kept as `<br>` so the break survives a
+ * save and reload, and so `pre-wrap` does not double it.
+ */
+const LINE_BREAK_CHARS = /[\r\n]/g;
 
 /** Attributes kept, per tag. Everything else is dropped. */
 const ALLOWED_ATTRS: Record<string, string[]> = {
   a: ['href', 'title'],
 };
+
+/** Block elements end a line even when the tag itself is dropped. */
+const BLOCK_TAGS = new Set(['div', 'p', 'li', 'ul', 'ol']);
 
 function escapeText(value: string): string {
   return value
@@ -41,6 +52,21 @@ function escapeText(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/**
+ * Decodes the basic entities a browser may already have escaped in text
+ * nodes, so re-sanitising markup does not turn `&amp;` into `&amp;amp;`.
+ * Deliberately last-in/first-out: `&amp;` is decoded last.
+ */
+function unescapeText(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&');
 }
 
 /** Only http(s) and mailto links survive; `javascript:` and friends do not. */
@@ -65,15 +91,15 @@ export function sanitizeHelpHtml(input: string | null | undefined): string {
   while (i < input.length) {
     const lt = input.indexOf('<', i);
     if (lt === -1) {
-      out += escapeText(input.slice(i));
+      out += escapeText(unescapeText(input.slice(i)));
       break;
     }
-    out += escapeText(input.slice(i, lt));
+    out += escapeText(unescapeText(input.slice(i, lt)));
 
     const gt = input.indexOf('>', lt);
     if (gt === -1) {
       // An unterminated tag is not markup; show it as text.
-      out += escapeText(input.slice(lt));
+      out += escapeText(unescapeText(input.slice(lt)));
       break;
     }
 
@@ -84,13 +110,15 @@ export function sanitizeHelpHtml(input: string | null | undefined): string {
     // `a < b` is text, not a tag: a real tag name is a letter followed by
     // letters, digits or hyphens. Anything else is shown as written.
     if (!/^[a-z][a-z0-9-]*$/.test(name)) {
-      out += escapeText(input.slice(lt, gt + 1));
+      out += escapeText(unescapeText(input.slice(lt, gt + 1)));
       i = gt + 1;
       continue;
     }
 
     if (!ALLOWED_TAGS.has(name)) {
-      // Drop the tag but keep any text it wrapped.
+      // Drop the tag but keep any text it wrapped. A block element still
+      // ends a line, so a dropped <div> does not run two lines together.
+      if (BLOCK_TAGS.has(name)) out += closing ? '\n' : '';
       i = gt + 1;
       continue;
     }
@@ -111,10 +139,10 @@ export function sanitizeHelpHtml(input: string | null | undefined): string {
       if (value === null) continue;
 
       if (allowed === 'href') {
-        const href = safeHref(value);
+        const href = safeHref(unescapeText(value));
         if (href) attrs.push(`href="${escapeText(href)}"`);
       } else {
-        attrs.push(`${allowed}="${escapeText(value)}"`);
+        attrs.push(`${allowed}="${escapeText(unescapeText(value))}"`);
       }
     }
 
@@ -122,7 +150,9 @@ export function sanitizeHelpHtml(input: string | null | undefined): string {
     i = gt + 1;
   }
 
-  return out.trim();
+  // A newline the browser left in the markup is a line break to the person
+  // typing, and would otherwise be collapsed away on save.
+  return out.replace(LINE_BREAK_CHARS, '<br>').trim();
 }
 
 /** True when the markup has nothing a visitor would read. */

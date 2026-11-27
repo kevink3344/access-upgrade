@@ -2,6 +2,21 @@ import { useCallback, useEffect, useRef } from 'react';
 import { isHelpHtmlEmpty, sanitizeHelpHtml } from '@pe/shared';
 
 /**
+ * Puts the caret at the end of an element after its content was rewritten.
+ *
+ * `innerHTML = …` collapses the selection, so a keystroke that triggers a
+ * rewrite would otherwise drop the caret out of the editor.
+ */
+function placeCaretAtEnd(el: HTMLElement) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+}
+
+/**
  * A small rich-text editor for a question's help text.
  *
  * A `contentEditable` element with an explicit toolbar, rather than a
@@ -43,7 +58,16 @@ export function RichTextEditor({
   const emit = useCallback(() => {
     const el = ref.current;
     if (!el) return;
+    // The editor shows the sanitised markup, so what is stored and what the
+    // person sees cannot drift — and a line break the browser left as a
+    // newline becomes a <br> before it is ever saved.
     const clean = sanitizeHelpHtml(el.innerHTML);
+    if (el.innerHTML !== clean) {
+      // Rewriting innerHTML moves the caret to the end; only do it when the
+      // sanitised value actually differs.
+      el.innerHTML = clean;
+      placeCaretAtEnd(el);
+    }
     lastEmitted.current = clean;
     onChange(clean);
   }, [onChange]);
