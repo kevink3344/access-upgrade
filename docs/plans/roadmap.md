@@ -89,13 +89,24 @@ mark it elsewhere.
 
 ---
 
-## 5. Item 4 — Scheduled report subscriptions *(in progress)*
+## 5. Item 4 — Scheduled report subscriptions *(built)*
 
 Full design: [report-subscriptions.md](./report-subscriptions.md).
 
-**Summary.** A staff member subscribes to a report with parameters once; the app emails it on a
-chosen weekday. This document is the implementation plan — see §13 for what changed when the
-work started.
+**Built.** Migration 035 adds `core.ReportSubscription` and `core.ReportSubscriptionSend` (applied
+to both databases). The API has CRUD scoped to the owner plus `send-now`, a daily poll guarded by
+`LastSentOn` and `sp_getapplock`, and the Reports hub has a **Scheduled email** panel with
+Subscribe, Send now, Pause and Remove.
+
+**Deviation from the original plan (§5.1):** the email goes to the admin list, not to the
+subscriber alone. `sendAdminEmail` is the app's only mail path and it posts to the Power Automate
+flow with `email_to` fixed to the admin list. Sending to one person needs a `notify_type: report`
+flow, which is the same dependency as item 1. Until then a subscription is a *team* digest, and
+the UI should be read that way.
+
+**Also changed:** the plan's `UNIQUE (UserID, ReportKey, ParamsJson)` is not valid T-SQL —
+`NVARCHAR(MAX)` cannot be an index key — so the parameters are hashed into a persisted
+`ParamsHash` column and the unique index is over that.
 
 ---
 

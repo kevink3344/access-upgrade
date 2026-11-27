@@ -310,7 +310,20 @@ last-sent date, and an unsubscribe toggle.
 
 ---
 
-## 12. Open questions for review
+## 13. What changed when this was built
+
+Recorded so the plan and the code do not disagree.
+
+| Planned | Built | Why |
+| --- | --- | --- |
+| `UNIQUE (UserID, ReportKey, ParamsJson)` | Unique index over a persisted `ParamsHash` | `NVARCHAR(MAX)` cannot be an index key in SQL Server |
+| `RowCount` column | `RowsInReport` | `RowCount` is a reserved word in T-SQL |
+| Email to the subscriber | Email to the admin list | `sendAdminEmail` fixes `email_to` to the admin list; a per-recipient send needs a `notify_type: report` flow (see roadmap item 1) |
+| `{"range":"last-7-days"}` | `from`/`to` both set to the token | The report runner takes two dates; one token resolves to both |
+| `sp_getapplock` "recommended" | Implemented | It costs one query and removes the single-instance constraint |
+
+Still open from §12: the default hour (7:00 AM is built) and whether every role may subscribe
+(currently yes — subscriptions are personal and read-only).
 
 1. **Link or PDF attachment?** §5.1 recommends a link, because the webhook has no attachment
    field. If the flow can be extended, an attachment becomes viable — but it is a second
