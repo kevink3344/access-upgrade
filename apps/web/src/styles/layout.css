@@ -443,7 +443,12 @@
 .mobile-tabs .icon { width: 20px; height: 20px; }
 
 @media (max-width: 1023px) {
-  .app-shell { grid-template-columns: 1fr; }
+  /* The rail width wins over the single-column rule below: `.app-shell`
+     and `.app-shell.sidebar-collapsed` are equal in specificity, so without
+     this the 64px rail column survives on a phone and squeezes the content
+     into a sliver. */
+  .app-shell,
+  .app-shell.sidebar-collapsed { grid-template-columns: 1fr; }
   .mobile-tabs { display: flex; }
   .content { padding: 18px 16px 84px; }
   .topbar { padding: 0 16px; }
