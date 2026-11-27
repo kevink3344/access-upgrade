@@ -19,7 +19,10 @@ on:
 env:
   NODE_VERSION: '22.x'
   AZURE_WEBAPP_NAME: projelmt
-  AZURE_WEBAPP_SLOT: dev
+  # The slot the Portal calls "staging" is the `staging` slot; the workflow
+  # used to target `dev`, so a manual run deployed to the wrong one and the
+  # staging URL kept serving an older build.
+  AZURE_WEBAPP_SLOT: staging
 
 jobs:
   build:
