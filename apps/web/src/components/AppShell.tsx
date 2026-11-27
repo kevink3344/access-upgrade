@@ -16,9 +16,12 @@ import {
   IconSettings,
   IconLogout,
   IconLayoutSidebar,
+  IconMenu,
+  IconClose,
 } from './icons';
 import { NotificationBell } from './NotificationBell';
 import { ThemeToggle } from './ThemeToggle';
+import { useScrollLock } from '../hooks/useScrollLock';
 import { canSeeSettings, isSettingsDestination } from '../settings';
 
 interface NavItem {
@@ -120,6 +123,20 @@ export function AppShell({
 }) {
   const { user, signOut } = useAuth();
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [navOpen, setNavOpen] = useState(false);
+
+  // Below 1024px the sidebar is replaced by a drawer, opened from the
+  // topbar. Lock the page behind it and close it on Escape.
+  useScrollLock(navOpen);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [navOpen]);
 
   useEffect(() => {
     try {
@@ -141,10 +158,17 @@ export function AppShell({
     items.filter((i) => !i.roles || (user && i.roles.includes(user.role)));
 
   return (
-    <div className={`app-shell${collapsed ? ' sidebar-collapsed' : ''}`}>
-      <aside className="sidebar">
+    <div
+      className={`app-shell${collapsed ? ' sidebar-collapsed' : ''}${navOpen ? ' nav-open' : ''}`}
+    >
+      <aside className="sidebar" id="app-nav">
         <div className="sidebar-brand">
-          <a className="mark" href="/" aria-label="Project Enlightenment home">
+          <a
+            className="mark"
+            href="/"
+            aria-label="Project Enlightenment home"
+            onClick={() => setNavOpen(false)}
+          >
             <img
               className="mark-icon"
               src="/images/sunburst-logo.png"
@@ -158,6 +182,14 @@ export function AppShell({
               <small>Workshop database</small>
             </span>
           </a>
+          <button
+            type="button"
+            className="sidebar-close"
+            onClick={() => setNavOpen(false)}
+            aria-label="Close menu"
+          >
+            <IconClose width={18} height={18} />
+          </button>
         </div>
 
         {NAV_GROUPS.map((group) => {
@@ -179,6 +211,7 @@ export function AppShell({
                     className={`sidebar-link${isActive(item.to) ? ' active' : ''}`}
                     aria-current={isActive(item.to) ? 'page' : undefined}
                     title={collapsed ? item.label : undefined}
+                    onClick={() => setNavOpen(false)}
                   >
                     <item.icon />
                     <span className="sidebar-link-label">{item.label}</span>
@@ -201,6 +234,19 @@ export function AppShell({
             aria-expanded={!collapsed}
           >
             <IconLayoutSidebar width={18} height={18} />
+          </button>
+          {/* Below 1024px the sidebar is a drawer, so the toggle above is
+              hidden and this button opens it instead. */}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm topbar-menu"
+            onClick={() => setNavOpen(true)}
+            title="Open menu"
+            aria-label="Open menu"
+            aria-controls="app-nav"
+            aria-expanded={navOpen}
+          >
+            <IconMenu width={20} height={20} />
           </button>
           {/* The sidebar â€” and its sunburst â€” is hidden below 1024px, so the
               mark is repeated here and shown only at that width. */}
@@ -255,6 +301,12 @@ export function AppShell({
           {children}
         </main>
       </div>
+
+      <div
+        className="nav-scrim"
+        onClick={() => setNavOpen(false)}
+        aria-hidden="true"
+      />
 
       <nav className="mobile-tabs" aria-label="Main">
         {visibleIn(MOBILE_NAV).map((item) => (

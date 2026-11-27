@@ -43,6 +43,27 @@
   border-bottom: 1px solid var(--surface-neutral);
 }
 
+/* Only shown inside the mobile drawer. */
+.sidebar-close {
+  display: none;
+  margin-left: auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.sidebar-close:hover {
+  background: var(--surface-neutral);
+  color: var(--text-heading);
+}
+
 .sidebar-brand .mark {
   display: flex;
   align-items: center;
@@ -196,6 +217,25 @@
   border-color: transparent;
 }
 
+/* Opens the navigation drawer below 1024px; hidden on desktop. Two classes
+   so it beats `.btn`'s own `display: inline-flex`. */
+.btn.topbar-menu {
+  display: none;
+  flex-shrink: 0;
+  color: var(--text-body);
+  border-color: transparent;
+}
+
+.btn.topbar-menu:hover {
+  color: var(--primary-text);
+  border-color: transparent;
+}
+
+/* Scrim behind the mobile navigation drawer; inert on desktop. */
+.nav-scrim {
+  display: none;
+}
+
 .sidebar-foot {
   margin-top: auto;
   padding: 14px;
@@ -216,6 +256,10 @@
   font-size: 11.5px;
 }
 
+.topbar-user .meta {
+  line-height: 1.15;
+}
+
 .topbar-user .meta b {
   font-size: 12.5px;
   max-width: 150px;
@@ -223,6 +267,7 @@
 
 .topbar-user .meta small {
   font-size: 10px;
+  line-height: 1.1;
 }
 
 .topbar-user .btn {
@@ -376,12 +421,81 @@
 
 @media (max-width: 1023px) {
   .app-shell { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
   .mobile-tabs { display: flex; }
   .content { padding: 18px 16px 84px; }
   .topbar { padding: 0 16px; }
-  /* The sidebar is hidden at this width, so the toggle would do nothing. */
+  /* The sidebar is a drawer at this width, so the collapse toggle would do
+     nothing; the hamburger next to it opens the drawer instead. */
   .btn.topbar-toggle { display: none; }
+  .btn.topbar-menu { display: inline-flex; }
   /* ...and the sunburst it carried moves into the topbar, upper left. */
   .topbar-brand { display: flex; }
+
+  /* ---------- navigation drawer ---------- */
+  .nav-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 30, 40, .42);
+    z-index: 40;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .18s ease, visibility .18s ease;
+  }
+
+  .app-shell.nav-open .nav-scrim {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .sidebar {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100%;
+    width: min(288px, 84vw);
+    z-index: 45;
+    transform: translateX(-100%);
+    transition: transform .2s ease;
+    box-shadow: 8px 0 32px rgba(20, 30, 40, .18);
+  }
+
+  .app-shell.nav-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar-close { display: inline-flex; }
+
+  /* The drawer is always full width — the desktop rail preference must not
+     shrink it to icons. */
+  .sidebar-collapsed .sidebar-brand {
+    padding: 0 14px 0 20px;
+    justify-content: flex-start;
+  }
+
+  .sidebar-collapsed .sidebar-brand .mark { gap: 10px; }
+  .sidebar-collapsed .sidebar-brand .mark-text { display: inline; }
+  .sidebar-collapsed .sidebar-section { padding: 10px 8px 0; }
+  .sidebar-collapsed .sidebar-section-title {
+    height: auto;
+    margin: 0;
+    padding: 0 12px 6px;
+    font-size: inherit;
+    background: none;
+  }
+  .sidebar-collapsed .sidebar-link {
+    justify-content: flex-start;
+    padding: 8px 12px;
+    gap: 10px;
+    border-left-width: 3px;
+  }
+  .sidebar-collapsed .sidebar-link-label { display: inline; }
+  .sidebar-collapsed .sidebar-link .icon { width: 18px; height: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-scrim,
+  .sidebar { transition: none; }
 }

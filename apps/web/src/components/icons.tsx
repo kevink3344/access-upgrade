@@ -217,6 +217,20 @@ export const IconLayoutSidebar = (p: Props) => (
   </svg>
 );
 
+/** Hamburger — opens the navigation drawer where the sidebar is hidden. */
+export const IconMenu = (p: Props) => (
+  <svg {...base(p)}>
+    <path d="M3 6h18M3 12h18M3 18h18" />
+  </svg>
+);
+
+/** Close cross — dismisses the navigation drawer. */
+export const IconClose = (p: Props) => (
+  <svg {...base(p)}>
+    <path d="M18 6 6 18M6 6l12 12" />
+  </svg>
+);
+
 /** Sun — the theme toggle shows it in dark mode, meaning "switch to light". */
 export const IconSun = (p: Props) => (
   <svg {...base(p)}>
