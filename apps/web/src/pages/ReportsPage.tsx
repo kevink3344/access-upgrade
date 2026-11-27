@@ -4,6 +4,7 @@ import type { ReportCatalogueItem, ReportGroup } from '@pe/shared';
 import { api } from '../api';
 import { AppShell } from '../components/AppShell';
 import { IconReports } from '../components/icons';
+import { ReportSubscriptions } from '../components/ReportSubscriptions';
 
 const GROUP_LABELS: Record<ReportGroup, string> = {
   attendance: 'Attendance & enrollment',
@@ -237,6 +238,8 @@ export function ReportsPage() {
                       </button>
                     </div>
                   </div>
+
+                  <ReportSubscriptions report={selected} values={values} />
                 </div>
               </div>
 

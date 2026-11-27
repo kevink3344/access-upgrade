@@ -1358,6 +1358,43 @@ export interface ReportRunResponse {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Scheduled report subscriptions                                     */
+/* ------------------------------------------------------------------ */
+
+/** Date parameters are stored as tokens, resolved when the report fires. */
+export type ReportDateToken = 'last-7-days' | 'last-week' | 'this-week';
+
+export interface ReportSubscriptionParams {
+  /** A pinned school year, or `current` to use the report's own default. */
+  schoolYearId?: number | 'current';
+  from?: ReportDateToken;
+  to?: ReportDateToken;
+  categoryId?: number;
+  workshopId?: number;
+}
+
+export interface ReportSubscription {
+  reportSubscriptionId: number;
+  reportKey: string;
+  reportTitle: string;
+  params: ReportSubscriptionParams;
+  /** 0 = Sunday .. 6 = Saturday. */
+  dayOfWeek: number;
+  sendHour: number;
+  isActive: boolean;
+  lastSentOn: string | null;
+  /** Set when the report disappeared from the registry. */
+  disabledReason: string | null;
+  createdAt: string;
+  lastSend: {
+    sentAt: string;
+    rowsInReport: number | null;
+    succeeded: boolean;
+    error: string | null;
+  } | null;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Visual reports                                                     */
 /* ------------------------------------------------------------------ */
 

@@ -1007,6 +1007,42 @@ export const api = {
       const suffix = qs.toString() ? `?${qs}` : '';
       return `/api/reports/${key}/pdf${suffix}`;
     },
+
+    /** My scheduled report subscriptions. */
+    subscriptions: () =>
+      request<{ data: import('@pe/shared').ReportSubscription[] }>(
+        '/api/reports/subscriptions',
+      ),
+
+    subscribe: (body: {
+      reportKey: string;
+      params: import('@pe/shared').ReportSubscriptionParams;
+      dayOfWeek: number;
+      sendHour: number;
+    }) =>
+      request<import('@pe/shared').ReportSubscription>('/api/reports/subscriptions', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    updateSubscription: (
+      id: number,
+      body: { dayOfWeek?: number; sendHour?: number; isActive?: boolean },
+    ) =>
+      request<import('@pe/shared').ReportSubscription>(`/api/reports/subscriptions/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+
+    unsubscribe: (id: number) =>
+      request<void>(`/api/reports/subscriptions/${id}`, { method: 'DELETE' }),
+
+    /** Send one subscription immediately — the test button. */
+    sendSubscriptionNow: (id: number) =>
+      request<{ sent: boolean; reason?: string }>(
+        `/api/reports/subscriptions/${id}/send-now`,
+        { method: 'POST' },
+      ),
   },
 
   certificates: {    capabilities: () => request<{ pdfRendering: boolean }>('/api/certificates/capabilities'),

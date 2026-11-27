@@ -37,6 +37,7 @@ import { schoolCashRouter } from './routes/schoolcash.js';
 import { foldersRouter } from './routes/folders.js';
 import { utilitiesRouter } from './routes/utilities.js';
 import { calendarFeedRouter } from './routes/calendar-feed.js';
+import { startReportScheduler } from './services/report-scheduler.js';
 
 const app = express();
 
@@ -320,6 +321,10 @@ const server = isEntryPoint
         await getPool();
         console.log('  SQL      connected');
         await seedSuperAdmin();
+        // Started only in the real process: tests import `app` and must not
+        // run a background job.
+        startReportScheduler();
+        console.log('  Reports  subscription scheduler started');
       } catch (err) {
         console.error('  SQL      connection failed:', (err as Error).message);
       }

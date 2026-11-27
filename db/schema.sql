@@ -1489,3 +1489,56 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_FormAnswer_Question' A
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_FormQuestion_BranchOn' AND object_id = OBJECT_ID('core.FormQuestion'))
     CREATE INDEX IX_FormQuestion_BranchOn ON core.FormQuestion(BranchOnQuestionID) WHERE BranchOnQuestionID IS NOT NULL;
 GO
+-- =====================================================================
+--  Scheduled report subscriptions (migration 035)
+--  See docs/plans/report-subscriptions.md
+-- =====================================================================
+IF OBJECT_ID('core.ReportSubscription', 'U') IS NULL
+BEGIN
+CREATE TABLE core.ReportSubscription (
+    ReportSubscriptionID INT IDENTITY(1,1) NOT NULL
+        CONSTRAINT PK_ReportSubscription PRIMARY KEY,
+    UserID          INT           NOT NULL
+        CONSTRAINT FK_ReportSubscription_User REFERENCES core.AppUser(UserID),
+    ReportKey       NVARCHAR(60)  NOT NULL,
+    ParamsJson      NVARCHAR(MAX) NULL,
+    DayOfWeek       TINYINT       NOT NULL
+        CONSTRAINT DF_ReportSubscription_Day DEFAULT 5
+        CONSTRAINT CK_ReportSubscription_Day CHECK (DayOfWeek BETWEEN 0 AND 6),
+    SendHour        TINYINT       NOT NULL
+        CONSTRAINT DF_ReportSubscription_Hour DEFAULT 7
+        CONSTRAINT CK_ReportSubscription_Hour CHECK (SendHour BETWEEN 0 AND 23),
+    IsActive        BIT           NOT NULL
+        CONSTRAINT DF_ReportSubscription_Active DEFAULT 1,
+    LastSentOn      DATE          NULL,
+    DisabledReason  NVARCHAR(300) NULL,
+    CreatedAt       DATETIME2(0)  NOT NULL
+        CONSTRAINT DF_ReportSubscription_CreatedAt DEFAULT SYSUTCDATETIME(),
+    CreatedBy       NVARCHAR(200) NULL,
+    -- A UNIQUE constraint cannot include NVARCHAR(MAX), so the parameters are
+    -- hashed and the hash is what makes two identical subscriptions collide.
+    ParamsHash AS CONVERT(CHAR(64), HASHBYTES('SHA2_256', ISNULL(ParamsJson, '')), 2) PERSISTED
+);
+CREATE UNIQUE INDEX UQ_ReportSubscription
+    ON core.ReportSubscription (UserID, ReportKey, ParamsHash);
+END
+GO
+
+IF OBJECT_ID('core.ReportSubscriptionSend', 'U') IS NULL
+BEGIN
+CREATE TABLE core.ReportSubscriptionSend (
+    ReportSubscriptionSendID INT IDENTITY(1,1) NOT NULL
+        CONSTRAINT PK_ReportSubscriptionSend PRIMARY KEY,
+    ReportSubscriptionID INT       NOT NULL
+        CONSTRAINT FK_ReportSubscriptionSend_Subscription
+        FOREIGN KEY REFERENCES core.ReportSubscription(ReportSubscriptionID) ON DELETE CASCADE,
+    SentAt          DATETIME2(0)   NOT NULL
+        CONSTRAINT DF_ReportSubscriptionSend_SentAt DEFAULT SYSUTCDATETIME(),
+    RowsInReport    INT            NULL,
+    Succeeded       BIT            NOT NULL,
+    Error           NVARCHAR(1000) NULL
+);
+CREATE INDEX IX_ReportSubscriptionSend_Subscription
+    ON core.ReportSubscriptionSend (ReportSubscriptionID, SentAt DESC);
+END
+GO

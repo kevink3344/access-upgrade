@@ -12,6 +12,15 @@ import {
   type ReportRow,
 } from '../services/reports.js';
 import { CHARTS } from '../services/charts.js';
+import {
+  DATE_TOKENS,
+  create,
+  getForUser,
+  listForUser,
+  remove,
+  update,
+} from '../services/report-subscriptions.js';
+import { sendSubscription, workspaceNow } from '../services/report-scheduler.js';
 
 export const reportsRouter = Router();
 
@@ -101,6 +110,193 @@ reportsRouter.get('/', requireAuth, async (_req, res, next) => {
  *       200: { description: Rows }
  *       404: { description: Unknown report }
  */
+/* ------------------------------------------------------------------ */
+/*  Scheduled subscriptions                                            */
+/* ------------------------------------------------------------------ */
+
+/*
+ * These must be registered ABOVE `/:key`, or a request for
+ * `/api/reports/subscriptions` would match the report runner and answer
+ * "No such report" — the same trap `/charts/:key` avoids by being declared
+ * earlier.
+ */
+
+const subscriptionSchema = z.object({
+  reportKey: z.string().min(1).max(60),
+  params: z
+    .object({
+      schoolYearId: z.union([z.number().int().positive(), z.literal('current')]).optional(),
+      from: z.enum(DATE_TOKENS).optional(),
+      to: z.enum(DATE_TOKENS).optional(),
+      categoryId: z.number().int().positive().optional(),
+      workshopId: z.number().int().positive().optional(),
+    })
+    .default({}),
+  dayOfWeek: z.number().int().min(0).max(6).default(5),
+  sendHour: z.number().int().min(0).max(23).default(7),
+});
+
+const subscriptionPatch = z.object({
+  dayOfWeek: z.number().int().min(0).max(6).optional(),
+  sendHour: z.number().int().min(0).max(23).optional(),
+  isActive: z.boolean().optional(),
+});
+
+/**
+ * @openapi
+ * /api/reports/subscriptions:
+ *   get:
+ *     tags: [Reports]
+ *     summary: My report subscriptions
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Subscriptions, newest first }
+ *   post:
+ *     tags: [Reports]
+ *     summary: Subscribe to a report
+ *     description: >
+ *       Subscribing again with the same report and parameters updates the
+ *       day rather than creating a second email.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Subscription }
+ *       404: { description: Unknown report }
+ */
+reportsRouter.get('/subscriptions', requireAuth, async (req, res, next) => {
+  try {
+    res.json({ data: await listForUser(req.user!.userId) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+reportsRouter.post('/subscriptions', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = subscriptionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(422).json({
+        error: 'validation_failed',
+        message: parsed.error.issues[0]?.message ?? 'Invalid subscription',
+      });
+      return;
+    }
+
+    const def = REPORT_BY_KEY.get(parsed.data.reportKey);
+    if (!def) {
+      res.status(404).json({ error: 'not_found', message: 'No such report' });
+      return;
+    }
+
+    const id = await create({
+      userId: req.user!.userId,
+      reportKey: parsed.data.reportKey,
+      params: parsed.data.params,
+      dayOfWeek: parsed.data.dayOfWeek,
+      sendHour: parsed.data.sendHour,
+      createdBy: req.user!.email,
+    });
+
+    res.status(201).json(await getForUser(id, req.user!.userId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/subscriptions/{id}:
+ *   patch:
+ *     tags: [Reports]
+ *     summary: Change the day, hour, or active flag
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Updated }
+ *       404: { description: Not found, or not yours }
+ *   delete:
+ *     tags: [Reports]
+ *     summary: Unsubscribe
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       204: { description: Removed }
+ */
+reportsRouter.patch('/subscriptions/:id', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+
+    const parsed = subscriptionPatch.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(422).json({ error: 'validation_failed', message: 'Invalid change' });
+      return;
+    }
+
+    const ok = await update(id, req.user!.userId, parsed.data);
+    if (!ok) {
+      res.status(404).json({ error: 'not_found', message: 'Subscription not found' });
+      return;
+    }
+    res.json(await getForUser(id, req.user!.userId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+reportsRouter.delete('/subscriptions/:id', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+    const ok = await remove(id, req.user!.userId);
+    if (!ok) {
+      res.status(404).json({ error: 'not_found', message: 'Subscription not found' });
+      return;
+    }
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/subscriptions/{id}/send-now:
+ *   post:
+ *     tags: [Reports]
+ *     summary: Send this subscription once, now
+ *     description: >
+ *       The test button. Without it a staff member has to wait until Friday
+ *       to find out whether they configured it correctly.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: What happened }
+ *       404: { description: Not found, or not yours }
+ */
+reportsRouter.post('/subscriptions/:id/send-now', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid id' });
+      return;
+    }
+
+    const sub = await getForUser(id, req.user!.userId);
+    if (!sub) {
+      res.status(404).json({ error: 'not_found', message: 'Subscription not found' });
+      return;
+    }
+
+    const result = await sendSubscription(sub, workspaceNow());
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 /* ------------------------------------------------------------------ */
 /*  Visual reports                                                     */
 /* ------------------------------------------------------------------ */
