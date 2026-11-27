@@ -124,6 +124,21 @@
   color: rgba(31, 42, 55, .62);
 }
 
+/* The heading and the blurb are white for the dark panels. On a light theme
+   they must follow the panel's own text colour, or white on pale green is
+   unreadable. */
+.login-brand.theme-classroom h1,
+.login-brand.theme-garden h1,
+.login-brand.theme-paper h1 {
+  color: #1f2a37;
+}
+
+.login-brand.theme-classroom p,
+.login-brand.theme-garden p,
+.login-brand.theme-paper p {
+  color: rgba(31, 42, 55, .78);
+}
+
 .login-brand.theme-classroom .stat b,
 .login-brand.theme-garden .stat b,
 .login-brand.theme-paper .stat b {
