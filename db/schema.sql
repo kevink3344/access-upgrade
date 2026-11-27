@@ -1012,7 +1012,7 @@ CREATE TABLE core.CertificateAsset (
     Content            VARBINARY(MAX) NOT NULL,
     UploadedBy         NVARCHAR(200) NULL,
     UploadedAt         DATETIME2(0)  NOT NULL CONSTRAINT DF_CertificateAsset_UploadedAt DEFAULT SYSUTCDATETIME(),
-    CONSTRAINT CK_CertificateAsset_Kind CHECK (AssetKind IN ('template-logo','participant-image')),
+    CONSTRAINT CK_CertificateAsset_Kind CHECK (AssetKind IN ('template-logo','participant-image','form-header')),
     CONSTRAINT CK_CertificateAsset_Size CHECK (ByteSize > 0 AND ByteSize <= 2097152)
 );
 CREATE INDEX IX_CertificateAsset_Sha256 ON core.CertificateAsset (Sha256);
@@ -1409,6 +1409,13 @@ CREATE TABLE core.FormTemplate (
     -- and its answers all stay, and it can be restored.
     ArchivedAt     DATETIME2     NULL,
     ArchivedBy     NVARCHAR(200) NULL,
+    -- The form's own banner (migration 032). The bytes live in
+    -- core.CertificateAsset; alt text travels with the image because the
+    -- banner's heading is inside the pixels.
+    HeaderAssetID  INT           NULL
+        CONSTRAINT FK_FormTemplate_HeaderAsset
+        REFERENCES core.CertificateAsset (CertificateAssetID),
+    HeaderAltText  NVARCHAR(200) NULL,
     CreatedBy      NVARCHAR(200) NOT NULL,
     CreatedAt      DATETIME2     NOT NULL CONSTRAINT DF_FormTemplate_CreatedAt DEFAULT SYSUTCDATETIME(),
     UpdatedBy      NVARCHAR(200) NULL,

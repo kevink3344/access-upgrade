@@ -221,6 +221,34 @@
 /* ---------- standalone form public link (editor header) ---------- */
 .form-link-bar { margin-top: 10px; }
 
+/* ---------- header image panel ---------- */
+.form-header-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-header-panel-head h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.form-header-preview {
+  margin: 0;
+  border: 1px solid var(--surface-neutral);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface-subtle);
+}
+
+.form-header-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 180px;
+  object-fit: contain;
+}
+
 .form-link-row {
   display: flex;
   align-items: center;

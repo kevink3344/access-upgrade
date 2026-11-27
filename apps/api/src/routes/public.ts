@@ -5,6 +5,7 @@ import { query, sql, type SqlParam } from '../db.js';
 import { env } from '../env.js';
 import { checkWorkshopCapacity } from '../services/notifications.js';
 import { getVersionForLink, saveAnswers, getKindForLink, createTrainingRequestFromAnswers, saveTrainingRequestAnswers } from '../services/forms.js';
+import { loadPublicHeaderImage } from '../services/form-header.js';
 
 /**
  * Public registration endpoints. Mounted at /api/public.
@@ -90,8 +91,21 @@ interface ResolvedLink {
   WebTaken: number;
 }
 
-async function resolveSlug(slug: string): Promise<ResolvedLink | null> {
-  // LEFT JOIN the workshop: a standalone form link has none, and an INNER
+/**
+ * A form's banner alt text, or null when it has no banner. Kept beside the
+ * payload so the page never renders an image without its description.
+ */
+async function getHeaderAltText(formTemplateId: number | null): Promise<string | null> {
+  if (formTemplateId === null) return null;
+  const r = await query<{ HeaderAltText: string | null }>(
+    `SELECT HeaderAltText FROM core.FormTemplate
+      WHERE FormTemplateID = @id AND HeaderAssetID IS NOT NULL`,
+    { id: { type: sql.Int, value: formTemplateId } },
+  );
+  return r.recordset[0]?.HeaderAltText ?? null;
+}
+
+async function resolveSlug(slug: string): Promise<ResolvedLink | null> {  // LEFT JOIN the workshop: a standalone form link has none, and an INNER
   // JOIN would make it look like the slug does not exist.
   const r = await query<ResolvedLink>(
     `SELECT l.RegistrationLinkID, l.WorkshopID, l.FormTemplateID,
@@ -332,6 +346,13 @@ publicRouter.get('/registration-links/:slug', async (req, res, next) => {
       seatsRemaining: seatsRemaining(link),
       form,
       sessions,
+      /**
+       * The form's own banner, or null when it has none — the page then falls
+       * back to the standard lockup without a second request.
+       */
+      headerImageUrl:
+        link.FormTemplateID === null ? null : `/api/public/forms/${link.FormTemplateID}/header`,
+      headerAltText: await getHeaderAltText(link.FormTemplateID),
       opensAt: link.OpensAt?.toISOString() ?? null,
       // Sent to the browser so the confirmation screen can forward the
       // registrant to payment. Only exposed while the link is actually open.
@@ -765,6 +786,50 @@ publicRouter.post('/registration-links/:slug/register', async (req, res, next) =
  *                       id: { type: integer }
  *                       label: { type: string }
  */
+/**
+ * @openapi
+ * /api/public/forms/{id}/header:
+ *   get:
+ *     tags: [Public registration]
+ *     summary: A form's header image bytes
+ *     description: >
+ *       Only served while at least one live link uses the form — otherwise
+ *       this would be an open image host enumerable by form id.
+ *     security: []
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *     responses:
+ *       200: { description: The image }
+ *       404: { description: No header, or no live link }
+ */
+publicRouter.get('/forms/:id/header', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(404).end();
+      return;
+    }
+
+    if (!rateLimit(`header:${clientIp(req)}`, 240, 60_000)) {
+      res.status(429).end();
+      return;
+    }
+
+    const image = await loadPublicHeaderImage(id);
+    if (!image) {
+      res.status(404).end();
+      return;
+    }
+
+    // Bytes are immutable per asset, so the browser may keep them.
+    res.setHeader('Content-Type', image.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(image.content);
+  } catch (err) {
+    next(err);
+  }
+});
+
 publicRouter.get('/agencies', async (req, res, next) => {
   try {
     const ip = clientIp(req);

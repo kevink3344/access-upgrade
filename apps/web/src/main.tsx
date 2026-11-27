@@ -47,6 +47,7 @@ import { ApiDocsPage } from './pages/ApiDocsPage';
 import { SettingsPage, SettingsUnavailable } from './pages/SettingsPage';
 import { DropdownListsPage } from './pages/DropdownListsPage';
 import { PublicRegisterPage } from './pages/PublicRegisterPage';
+import { FormPreviewPage } from './pages/FormPreviewPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { canSeeSettings } from './settings';
@@ -267,6 +268,23 @@ function Router() {
       return <PlaceholderPage path={path} title="Not available" />;
     }
     return <FormEditorPage formTemplateId={Number(formEditorMatch[1])} />;
+  }
+
+  // Staff preview of the public page. Its own tab, so the editor keeps its
+  // unsaved state; the bar above the page says it is not the live form.
+  const formPreviewMatch = /^\/admin\/forms\/(\d+)\/preview\/?$/.exec(path);
+  if (formPreviewMatch) {
+    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      return <PlaceholderPage path={path} title="Not available" />;
+    }
+    const requested = new URLSearchParams(window.location.search).get('version');
+    const versionId = requested !== null && /^\d+$/.test(requested) ? Number(requested) : null;
+    return (
+      <FormPreviewPage
+        formTemplateId={Number(formPreviewMatch[1])}
+        versionId={versionId}
+      />
+    );
   }
 
   const title = ROUTES[path];

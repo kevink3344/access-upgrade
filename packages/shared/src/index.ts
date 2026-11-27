@@ -1114,6 +1114,10 @@ export interface PublicLinkState {  state: PublicLinkStatus;
    * a `session` question. Empty otherwise.
    */
   sessions: PublicSessionOption[];
+  /** The form's own banner, or null when it uses the standard lockup. */
+  headerImageUrl: string | null;
+  /** Required alongside the banner; the heading is inside the pixels. */
+  headerAltText: string | null;
   opensAt: string | null;
   /** True when staff configured a payment redirect for this link. */
   redirectToPayment: boolean;
@@ -1133,8 +1137,27 @@ export interface PublicLinkState {  state: PublicLinkStatus;
   };
 }
 
-/** Who the registrant is. Drives which questions the public form asks. */
-export type RegistrantRole = 'Educator' | 'Parent/caregiver';
+/**
+ * The public page's payload for a version, as the staff preview receives it.
+ * Same shape as the live page so one component renders both.
+ */
+export interface FormPreviewState extends PublicLinkState {
+  preview: {
+    formName: string;
+    versionNumber: number | null;
+    isPublished: boolean;
+  };
+}
+
+/** Header image state for the form editor. */
+export interface FormHeaderState {
+  hasHeaderImage: boolean;
+  headerAltText: string | null;
+  /** Authenticated bytes for the editor and the preview. */
+  headerImageUrl: string | null;
+}
+
+/** Who the registrant is. Drives which questions the public form asks. */export type RegistrantRole = 'Educator' | 'Parent/caregiver';
 
 export interface PublicRegisterRequest {
   // A training request form asks none of these, so they are optional here and

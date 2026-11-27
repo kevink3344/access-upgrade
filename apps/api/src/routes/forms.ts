@@ -1,6 +1,14 @@
 import { Router } from 'express';
+import type express from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '../auth/middleware.js';
+import { query, sql } from '../db.js';
+import type { FormTemplateKind } from '../services/forms.js';
+import {
+  decodeHeaderImage,
+  loadHeaderImage,
+  storeHeaderImage,
+} from '../services/form-header.js';
 import {
   answersForParticipant,
   answersForRegistration,
@@ -513,3 +521,316 @@ formsRouter.get('/answers/participant/:participantId', requireAuth, async (req, 
     next(err);
   }
 });
+
+/* ------------------------------------------------------------------ */
+/*  Header image                                                       */
+/* ------------------------------------------------------------------ */
+
+/** Header image state for the editor: whether there is one, and its alt text. */
+async function headerState(formTemplateId: number) {
+  const r = await query<{ HeaderAssetID: number | null; HeaderAltText: string | null }>(
+    `SELECT HeaderAssetID, HeaderAltText FROM core.FormTemplate WHERE FormTemplateID = @id`,
+    { id: { type: sql.Int, value: formTemplateId } },
+  );
+  const row = r.recordset[0];
+  if (!row) return null;
+  return {
+    hasHeaderImage: row.HeaderAssetID !== null,
+    headerAltText: row.HeaderAltText,
+    /** Authenticated bytes for the editor and the preview. */
+    headerImageUrl: row.HeaderAssetID === null ? null : `/api/forms/${formTemplateId}/header/image`,
+  };
+}
+
+/**
+ * @openapi
+ * /api/forms/{id}/header:
+ *   get:
+ *     tags: [Forms]
+ *     summary: Header image state for a form template
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Whether the form has a header image and its alt text }
+ */
+formsRouter.get('/:id/header', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid form id' });
+      return;
+    }
+    const state = await headerState(id);
+    if (!state) {
+      res.status(404).json({ error: 'not_found', message: 'Form not found' });
+      return;
+    }
+    res.json(state);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/forms/{id}/header:
+ *   post:
+ *     tags: [Forms]
+ *     summary: Upload or replace a form's header image
+ *     description: >
+ *       PNG, JPEG or WebP only — SVG is refused because the same bytes are
+ *       served from our origin on the public page. 2 MB ceiling.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Stored }
+ *       422: { description: Unsupported type, too large, or missing alt text }
+ */
+formsRouter.post('/:id/header', requireAuth, requireRole(...EDIT_ROLES), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid form id' });
+      return;
+    }
+
+    const parsed = z
+      .object({
+        data: z.string().min(1),
+        contentType: z.string().min(1),
+        fileName: z.string().max(260).optional(),
+        altText: z.string().trim().min(1, 'Alt text is required').max(200),
+      })
+      .safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(422).json({
+        error: 'validation_failed',
+        message: parsed.error.issues[0]?.message ?? 'Image data is required',
+      });
+      return;
+    }
+
+    const decoded = decodeHeaderImage(parsed.data);
+    if ('error' in decoded) {
+      res.status(422).json({ error: 'validation_failed', message: decoded.error });
+      return;
+    }
+
+    const assetId = await storeHeaderImage(decoded, req.user?.email ?? null);
+
+    const updated = await query(
+      `UPDATE core.FormTemplate
+          SET HeaderAssetID = @asset, HeaderAltText = @alt,
+              UpdatedBy = @by, UpdatedAt = SYSUTCDATETIME()
+        OUTPUT INSERTED.FormTemplateID
+        WHERE FormTemplateID = @id`,
+      {
+        asset: { type: sql.Int, value: assetId },
+        alt: { type: sql.NVarChar(200), value: parsed.data.altText },
+        by: { type: sql.NVarChar(200), value: req.user?.email ?? null },
+        id: { type: sql.Int, value: id },
+      },
+    );
+
+    if (updated.recordset.length === 0) {
+      res.status(404).json({ error: 'not_found', message: 'Form not found' });
+      return;
+    }
+
+    res.json(await headerState(id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/forms/{id}/header:
+ *   delete:
+ *     tags: [Forms]
+ *     summary: Remove a form's header image
+ *     description: >
+ *       Falls back to the standard lockup. The asset row is left in place —
+ *       another form may be using the same bytes.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Removed }
+ */
+formsRouter.delete('/:id/header', requireAuth, requireRole(...EDIT_ROLES), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid form id' });
+      return;
+    }
+
+    const updated = await query(
+      `UPDATE core.FormTemplate
+          SET HeaderAssetID = NULL, HeaderAltText = NULL,
+              UpdatedBy = @by, UpdatedAt = SYSUTCDATETIME()
+        OUTPUT INSERTED.FormTemplateID
+        WHERE FormTemplateID = @id`,
+      {
+        by: { type: sql.NVarChar(200), value: req.user?.email ?? null },
+        id: { type: sql.Int, value: id },
+      },
+    );
+
+    if (updated.recordset.length === 0) {
+      res.status(404).json({ error: 'not_found', message: 'Form not found' });
+      return;
+    }
+
+    res.json(await headerState(id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** The image bytes, for the editor and the preview. Any signed-in staff role. */
+formsRouter.get('/:id/header/image', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).end();
+      return;
+    }
+    const image = await loadHeaderImage(id);
+    if (!image) {
+      res.status(404).end();
+      return;
+    }
+    res.setHeader('Content-Type', image.contentType);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(image.content);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Lets a token arrive as `?token=`, but only on the preview route.
+ *
+ * The preview opens in its own tab, and a top-level navigation cannot set an
+ * Authorization header. The token is the same one the app already holds; it
+ * is promoted to the header form so `requireAuth` stays the single place that
+ * validates it. Scoped to this one read-only route — never to the whole
+ * router, which also handles writes.
+ */
+function allowPreviewToken(req: express.Request, _res: express.Response, next: express.NextFunction) {
+  if (!req.headers.authorization && typeof req.query.token === 'string' && req.query.token) {
+    req.headers.authorization = `Bearer ${req.query.token}`;
+  }
+  next();
+}
+
+/**
+ * @openapi
+ * /api/forms/{id}/preview:
+ *   get:
+ *     tags: [Forms]
+ *     summary: The public page's payload for a form version, for staff preview
+ *     description: >
+ *       Same shape the public link endpoint returns, but for any version —
+ *       draft included — with the link state forced to open. Never writes.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *       - { in: query, name: version, schema: { type: integer }, description: Omit for the newest version }
+ *       - { in: query, name: token, schema: { type: string }, description: Accepted in place of the bearer header — see the note on the route }
+ *     responses:
+ *       200: { description: Preview payload }
+ *       404: { description: Form or version not found }
+ */
+formsRouter.get(
+  '/:id/preview',
+  allowPreviewToken,
+  requireAuth,
+  requireRole(...EDIT_ROLES),
+  async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'bad_request', message: 'Invalid form id' });
+      return;
+    }
+
+    const template = await query<{ FormTemplateID: number; Name: string; Kind: FormTemplateKind }>(
+      `SELECT FormTemplateID, Name, Kind FROM core.FormTemplate WHERE FormTemplateID = @id`,
+      { id: { type: sql.Int, value: id } },
+    );
+    const tpl = template.recordset[0];
+    if (!tpl) {
+      res.status(404).json({ error: 'not_found', message: 'Form not found' });
+      return;
+    }
+
+    let versionId: number | null = null;
+    if (req.query.version !== undefined) {
+      const requested = Number(req.query.version);
+      if (!Number.isInteger(requested)) {
+        res.status(400).json({ error: 'bad_request', message: 'Invalid version id' });
+        return;
+      }
+      const owned = await query<{ FormTemplateVersionID: number }>(
+        `SELECT FormTemplateVersionID FROM core.FormTemplateVersion
+          WHERE FormTemplateVersionID = @v AND FormTemplateID = @id`,
+        {
+          v: { type: sql.Int, value: requested },
+          id: { type: sql.Int, value: id },
+        },
+      );
+      // A version from another template is a 404, never a fallback: a crafted
+      // id must not preview somebody else's draft.
+      if (owned.recordset.length === 0) {
+        res.status(404).json({ error: 'not_found', message: 'Version not found' });
+        return;
+      }
+      versionId = requested;
+    } else {
+      const newest = await query<{ FormTemplateVersionID: number }>(
+        `SELECT TOP 1 FormTemplateVersionID FROM core.FormTemplateVersion
+          WHERE FormTemplateID = @id ORDER BY VersionNumber DESC`,
+        { id: { type: sql.Int, value: id } },
+      );
+      versionId = newest.recordset[0]?.FormTemplateVersionID ?? null;
+    }
+
+    const version = versionId === null ? null : await getVersion(versionId);
+    const header = await headerState(id);
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      state: 'open',
+      kind: tpl.Kind,
+      seatsRemaining: null,
+      form: version,
+      sessions: [],
+      opensAt: null,
+      redirectToPayment: false,
+      paymentUrl: null,
+      headerImageUrl: header?.hasHeaderImage ? header.headerImageUrl : null,
+      headerAltText: header?.headerAltText ?? null,
+      preview: {
+        formName: tpl.Name,
+        versionNumber: version?.versionNumber ?? null,
+        isPublished: version?.publishedAt !== null && version?.publishedAt !== undefined,
+      },
+      workshop: {
+        title: null,
+        code: null,
+        startDate: null,
+        endDate: null,
+        startTime: null,
+        endTime: null,
+        room: null,
+        location: null,
+        cost: null,
+        credit: null,
+        ceus: null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+  },
+);

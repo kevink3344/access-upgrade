@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
-import type { FormPage, FormQuestion, PublicLinkState } from '@pe/shared';
+import type { FormPage, FormPreviewState, FormQuestion, PublicLinkState } from '@pe/shared';
 import { api, HttpError } from '../api';
 import { AgencyPicker } from '../components/AgencyPicker';
+import { AuthedImage } from '../components/AuthedImage';
 
 const schema = z.object({
   registrantRole: z.enum(['Educator', 'Parent/caregiver'], {
@@ -252,8 +253,38 @@ function fmtTime(t: string | null): string {
  *
  * Rendered inside the card rather than as a page banner, so the logo and the
  * workshop title share one surface instead of being split by a colour band.
+ *
+ * When the form carries its own banner, that replaces the lockup rather than
+ * sitting above it — the banner already contains the logo and the title, so
+ * showing both would print the logo twice.
  */
-function PublicBrand({ subtitle = 'Workshop Registration' }: { subtitle?: string }) {
+function PublicBrand({
+  subtitle = 'Workshop Registration',
+  imageUrl = null,
+  altText = null,
+  authed = false,
+}: {
+  subtitle?: string;
+  imageUrl?: string | null;
+  altText?: string | null;
+  /** The image lives behind an authenticated route (the staff preview). */
+  authed?: boolean;
+}) {
+  if (imageUrl) {
+    return (
+      <figure className="public-header">
+        {/* height:auto with a max-height cap, not a fixed box: the aspect
+            ratio is the staff member's, and a fixed box would crop a
+            differently-shaped upload — possibly cutting off the logo. */}
+        {authed ? (
+          <AuthedImage src={imageUrl} alt={altText ?? ''} />
+        ) : (
+          <img src={imageUrl} alt={altText ?? ''} />
+        )}
+      </figure>
+    );
+  }
+
   return (
     <div className="public-brand">
       <img
@@ -315,7 +346,13 @@ function Terminal({ title, message }: { title: string; message: string }) {
   );
 }
 
-export function PublicRegisterPage({ slug }: { slug: string }) {
+export function PublicRegisterPage({
+  slug,
+  preview,
+}: {
+  slug?: string;
+  preview?: FormPreviewState;
+}) {
   const mountedAt = useRef(Date.now());
   const [form, setForm] = useState<Record<string, string>>({});
   const [agencyId, setAgencyId] = useState<number | null>(null);
@@ -336,9 +373,15 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['public-link', slug],
-    queryFn: () => api.publicRegistration.resolve(slug),
+    queryFn: () => api.publicRegistration.resolve(slug!),
     retry: false,
+    // A preview arrives with its payload; there is no slug to ask about.
+    enabled: !preview,
   });
+
+  /** A preview renders the real page but must never write. */
+  const readOnly = preview !== undefined;
+  const page = preview ?? data;
 
   function set(key: string, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -349,7 +392,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
    * than one page: a single page (or none) is the ordinary continuous form,
    * so an older link that never used pages behaves exactly as before.
    */
-  const formPages = data?.form?.pages ?? [];
+  const formPages = page?.form?.pages ?? [];
   const paged = formPages.length > 1;
   /** The page being shown, or null for the continuous form. */
   const currentPage = paged ? (formPages[pageIndex] ?? formPages[0]!) : null;
@@ -366,7 +409,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
    * questions assigned to it.
    */
   function visibleQuestions(includeMapped = false) {
-    return (data?.form?.questions ?? [])
+    return (page?.form?.questions ?? [])
       .filter((q) => includeMapped || !q.mapsToColumn)
       .filter((q) => {
         if (!paged) return true;
@@ -447,6 +490,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
    */
   async function onSubmitStandalone(e: FormEvent) {
     e.preventDefault();
+    if (readOnly) return;
     setFormError(null);
 
     // Every page, not just the visible one: a visitor can reach the final
@@ -454,7 +498,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     // incomplete (Next validates, but a required question can be cleared
     // again on the way back).
     const missing: Record<string, string> = {};
-    for (const q of (data?.form?.questions ?? [])) {
+    for (const q of (page?.form?.questions ?? [])) {
       if (!q.isRequired) continue;
       const v = answers[q.questionKey];
       if (!v || (Array.isArray(v) && v.length === 0) || (typeof v === 'string' && !v.trim())) {
@@ -466,7 +510,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
       // Send the visitor to the page holding the first problem.
       if (paged) {
         const firstKey = Object.keys(missing)[0]!;
-        const q = data?.form?.questions.find((x) => x.questionKey === firstKey);
+        const q = page?.form?.questions.find((x) => x.questionKey === firstKey);
         const idx = q?.pageId ? formPages.findIndex((p) => p.formPageId === q.pageId) : 0;
         if (idx >= 0) setPageIndex(idx);
       }
@@ -476,7 +520,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     setSubmitting(true);
 
     try {
-      await api.publicRegistration.register(slug, {
+      await api.publicRegistration.register(slug!, {
         answers,
         website,
         elapsedMs: Date.now() - mountedAt.current,
@@ -497,6 +541,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (readOnly) return;
     setFormError(null);
 
     const parsed = schema.safeParse(form);
@@ -519,7 +564,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     // Custom questions on the pinned version. Built-in ones are already
     // validated by `schema` above, so only the extras are checked here.
     // Every page is checked, not just the visible one.
-    const customQuestions = (data?.form?.questions ?? []).filter((q) => {
+    const customQuestions = (page?.form?.questions ?? []).filter((q) => {
       if (q.mapsToColumn) return false;
       if (!q.branchOnQuestionKey) return true;
       const gate = answers[q.branchOnQuestionKey];
@@ -537,7 +582,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
       setAnswerErrors(customErrors);
       if (paged) {
         const firstKey = Object.keys(customErrors)[0]!;
-        const q = data?.form?.questions.find((x) => x.questionKey === firstKey);
+        const q = page?.form?.questions.find((x) => x.questionKey === firstKey);
         const idx = q?.pageId ? formPages.findIndex((p) => p.formPageId === q.pageId) : 0;
         if (idx >= 0) setPageIndex(idx);
       }
@@ -547,7 +592,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     setAnswerErrors({});
 
     try {
-      await api.publicRegistration.register(slug, {
+      await api.publicRegistration.register(slug!, {
         registrantRole: parsed.data.registrantRole as Role,
         firstName: parsed.data.firstName.trim(),
         lastName: parsed.data.lastName.trim(),
@@ -592,7 +637,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     );
   }
 
-  if (isError || !data) {
+  if (isError || !page) {
     return (
       <Terminal
         title="This link is not valid"
@@ -601,7 +646,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     );
   }
 
-  const link = data as PublicLinkState;
+  const link = page as PublicLinkState;
 
   if (link.state === 'revoked') {
     return (
@@ -700,11 +745,23 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
     return (
       <PublicChrome title="Project Enlightenment - Training Request">
         <div className="public-card">
-          <PublicBrand subtitle="Training Request" />
-          <h1>Training request</h1>
-          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13.5 }}>
-            Tell us what training you would like Project Enlightenment to deliver.
-          </p>
+          <PublicBrand
+            subtitle="Training Request"
+            imageUrl={link.headerImageUrl}
+            altText={link.headerAltText}
+            authed={readOnly}
+          />
+          {/* The banner already carries the heading, so the text below it
+              would say the same thing twice. Without a banner the heading
+              is the only thing naming the form, so it stays. */}
+          {!link.headerImageUrl && (
+            <>
+              <h1>Training request</h1>
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13.5 }}>
+                Tell us what training you would like Project Enlightenment to deliver.
+              </p>
+            </>
+          )}
         </div>
 
         <div className="public-card">
@@ -731,7 +788,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
                 value={answers[q.questionKey]}
                 err={answerErrors[q.questionKey]}
                 agencyLabel={agencyLabels[q.questionKey] ?? ''}
-                sessions={data?.sessions ?? []}
+                sessions={page?.sessions ?? []}
                 includeSession={false}
                 onChange={(v) => {
                   setAnswers((prev) => ({ ...prev, [q.questionKey]: v }));
@@ -747,17 +804,19 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
               />
             ))}
 
-            <div className="hp-field" aria-hidden="true">
-              <label htmlFor="r-website">Website</label>
-              <input
-                id="r-website"
-                name="website"
-                tabIndex={-1}
-                autoComplete="off"
-                value={website}
-                onChange={(e) => setWebsite(e.target.value)}
-              />
-            </div>
+            {!readOnly && (
+              <div className="hp-field" aria-hidden="true">
+                <label htmlFor="r-website">Website</label>
+                <input
+                  id="r-website"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                />
+              </div>
+            )}
 
             <div className="form-nav">
               {paged && pageIndex > 0 && (
@@ -770,7 +829,12 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
                   Next
                 </button>
               ) : (
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submitting || readOnly}
+                  title={readOnly ? 'Preview only — nothing is submitted' : undefined}
+                >
                   {submitting ? 'Submitting…' : 'Submit request'}
                 </button>
               )}
@@ -794,9 +858,21 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
   return (
     <PublicChrome>
       <div className="public-card">
-        <PublicBrand />
-        <h1>{w.title ?? 'Workshop'}</h1>
-        {w.code && <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13.5 }}>{w.code}</p>}
+        <PublicBrand
+          imageUrl={link.headerImageUrl}
+          altText={link.headerAltText}
+          authed={readOnly}
+        />
+        {/* The banner already carries the title, so the heading and code
+            below it would repeat it. The workshop details stay either way. */}
+        {!link.headerImageUrl && (
+          <>
+            <h1>{w.title ?? 'Workshop'}</h1>
+            {w.code && (
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13.5 }}>{w.code}</p>
+            )}
+          </>
+        )}
 
         <dl className="public-meta">
           <div>
@@ -1028,7 +1104,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
               value={answers[q.questionKey]}
               err={answerErrors[q.questionKey]}
               agencyLabel={agencyLabels[q.questionKey] ?? ''}
-              sessions={data?.sessions ?? []}
+              sessions={page?.sessions ?? []}
               includeSession
               onChange={(v) => {
                 setAnswers((prev) => ({ ...prev, [q.questionKey]: v }));
@@ -1047,17 +1123,19 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
           )}
 
           {/* Honeypot: hidden from people, tempting to bots. */}
-          <div className="hp-field" aria-hidden="true">
-            <label htmlFor="r-website">Website</label>
-            <input
-              id="r-website"
-              name="website"
-              tabIndex={-1}
-              autoComplete="off"
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-            />
-          </div>
+          {!readOnly && (
+            <div className="hp-field" aria-hidden="true">
+              <label htmlFor="r-website">Website</label>
+              <input
+                id="r-website"
+                name="website"
+                tabIndex={-1}
+                autoComplete="off"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+              />
+            </div>
+          )}
 
           {link.redirectToPayment && link.paymentUrl && (
             <p className="payment-notice">
@@ -1095,7 +1173,12 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
                 Next
               </button>
             ) : (
-              <button type="submit" className="btn btn-primary" disabled={submitting}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={submitting || readOnly}
+                title={readOnly ? 'Preview only — nothing is submitted' : undefined}
+              >
                 {submitting ? 'Registering…' : 'Register'}
               </button>
             )}

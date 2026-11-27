@@ -9,6 +9,7 @@ import type {
 } from '@pe/shared';
 import { api } from '../api';
 import { FormLinkPanel } from './FormLinkPanel';
+import { FormHeaderPanel } from './FormHeaderPanel';
 
 interface Props {
   formTemplateId: number;
@@ -320,6 +321,17 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
           )}
         </div>
         <div className="row-actions">
+          <a
+            className="btn btn-ghost"
+            href={`/admin/forms/${formTemplateId}/preview${
+              currentVersionId !== null ? `?version=${currentVersionId}` : ''
+            }`}
+            target="_blank"
+            rel="noopener"
+            title="Open the public page in a new tab — nothing is submitted"
+          >
+            Preview
+          </a>
           {canEdit && (
             <button
               type="button"
@@ -720,6 +732,10 @@ export function FormTemplateEditor({ formTemplateId, canEdit, canPublish, onBack
               </>
             )}
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 18 }}>
+        <FormHeaderPanel formTemplateId={formTemplateId} canEdit={!!canEdit} />
       </div>
     </div>
   );

@@ -1,11 +1,15 @@
 # Per-Form Header Image — A Staff-Uploaded Banner Stored in SQL Server
 
-**From:** Every public form shows the same Project Enlightenment lockup
-**To:** A form can carry its own header image (a single combined banner made by staff), and falls back to the standard lockup when it has none
+**From:** Every public form shows the same Project Enlightenment lockup, and the only way to see a form as the public sees it is to open its live link
+**To:** A form can carry its own header image (a single combined banner made by staff) and falls back to the standard lockup when it has none; staff can open a read-only preview of the public page from the form editor at any time, including before the form is published
 **Prepared:** 2026-11-26
+**Revised:** 2026-11-27 — preview added (§10)
 **Status:** **Planned** — not implemented. Two design points settled (§1.1); one still open (§7).
 
 **Related:** [Form designer](./form-designer.md) · [Form template](./form-template.md) · [Form types and storage](./form-types-and-storage.md) · [Public registration](../features/public-registration.md)
+
+**Contents:** §1 summary · §2 current behaviour · §3 schema · §4 API · §5 public page ·
+§6 admin UI · §7 open decision · §8 tests · §9 out of scope · **§10 preview** · §11 preview tests
 
 ---
 
@@ -29,7 +33,8 @@ The plumbing already exists. `core.CertificateAsset` stores images in SQL Server
 **Recommendation: generalise that table rather than build a second image store.** One upload
 path, one size limit, one set of checks — and two forms sharing a banner store the bytes once.
 
-**Effort estimate: ~1 day.**
+**Effort estimate: ~1.5 days** — about a day for the header image, half a day for the preview
+(§10), which shares the public page's rendering and so is cheap once the page exists.
 
 ### 1.1 Decisions taken
 
@@ -42,6 +47,14 @@ path, one size limit, one set of checks — and two forms sharing a banner store
 
 **Does the image attach to the form template, or to each version?** See §7. This changes the
 schema, so it is the one thing to settle before coding.
+
+### 1.3 The second request — preview the public page
+
+Staff also want to **see a form as the public sees it, from the form editor**, rather than
+opening the live link (which they may not have, which may be closed, and which always shows the
+*published* version, never the draft they are editing). Planned in §10. It is the same page —
+`PublicRegisterPage` — rendered read-only in a new tab, so the header image added here is
+visible in the preview the moment it is uploaded.
 
 ---
 
@@ -186,7 +199,7 @@ silently lost its banner on publish would look broken.
 
 ---
 
-## 8. Tests
+## 8. Tests (header image)
 
 | Test | Asserts |
 | --- | --- |
@@ -208,3 +221,177 @@ silently lost its banner on publish would look broken.
 - Per-workshop (rather than per-form) banners.
 - Moving the existing static `sunburst-logo.png` into the database. It stays a static asset;
   only an *override* is stored.
+
+---
+
+## 10. Preview the public page from the form editor
+
+**From:** the only way to see a form as the public sees it is to open its live link — which
+shows the *published* version, needs the link to exist and be open, and cannot show a draft.
+**To:** a **Preview** button in the form editor opens the real public page, read-only, for the
+version being edited.
+
+### 10.1 Decision — a real page, not a mock
+
+The preview renders the **same `PublicRegisterPage`** the public uses, in a new tab. A separate
+preview component would drift: the first time a question type is restyled, the preview would
+lie. Rendering the real page means the preview is correct by construction — including the
+header image from §5, the page steps, branching, and the built-in name/agency block.
+
+The trade-off is that the page must be told *not to submit* and *not to trust the link state*.
+Both are handled below.
+
+### 10.2 Route
+
+| | |
+| --- | --- |
+| URL | `/admin/forms/:id/preview` (`?version=<id>` optional) |
+| Auth | `requireAuth` + `requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')` — the same `EDIT_ROLES` as the editor |
+| Version | `?version=` when the editor is showing an older version; otherwise the newest version, **published or draft** |
+| Data | The same shape `GET /api/public/registration-links/:slug` returns, so one client type serves both |
+
+`/admin/forms/:id/preview` is a staff route with its own branch in `main.tsx`, placed beside
+the editor route. The public `/register/:slug` check is unaffected — different prefix — and the
+`formEditorMatch` regex only matches digits, so it cannot swallow the new path.
+
+The preview is a staff route, but it does **not** render inside the staff app shell — it renders
+the public page, full screen, with a slim preview bar on top:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Preview · v4 (draft) · not the live form   [Back to editor]  │
+├──────────────────────────────────────────────────────────────┤
+│                  (the public page, unchanged)                │
+└──────────────────────────────────────────────────────────────┘
+```
+
+The bar is `position: sticky; top: 0` and uses the staff app's colours, so nobody mistakes a
+preview for the live page. It is not part of `PublicChrome` — it wraps it.
+
+### 10.3 API
+
+One new authenticated endpoint, in `routes/forms.ts` beside the other version routes:
+
+| Endpoint | Auth | Purpose |
+| --- | --- | --- |
+| `GET /api/forms/:id/preview` | admin / manager | The public page's payload for a version |
+
+- `?version=<id>` selects the version; omit for the newest. A version belonging to a *different*
+  template is a 404, not a fallback — otherwise a crafted id previews someone else's draft.
+- The payload is the `PublicLinkState` shape with:
+  - `state: 'open'` — always. A preview must show the form, not "Registration is closed"; the
+    preview bar says it is not live.
+  - `seatsRemaining: null` — a preview is not a roster.
+  - `form` — the chosen version, **published or not**.
+  - `workshop` — all nulls for a standalone form (a training request has no workshop).
+- `headerImageUrl` follows §4.2. Because the preview is authenticated, it may point at the
+  authenticated `GET /api/forms/:id/header` instead of the public one — see §10.4.
+
+### 10.4 Header image in preview
+
+The public GET in §4.1 only serves a form that has a live link. A draft being previewed has no
+live link, so the public route would 404 and the banner would silently vanish from the preview —
+exactly the bug the preview exists to catch.
+
+So add a **second, authenticated** GET:
+
+| Endpoint | Auth | Purpose |
+| --- | --- | --- |
+| `GET /api/forms/:id/header` | any signed-in staff role | The image bytes, for the preview |
+
+It is the same handler as the public route with the live-link check dropped, because the caller
+is already authenticated. The preview payload's `headerImageUrl` points here; the public
+payload's points at `/api/public/forms/:id/header`.
+
+### 10.5 Client
+
+`PublicRegisterPage` gains one prop:
+
+```tsx
+export function PublicRegisterPage({ slug, preview }: { slug?: string; preview?: PreviewData })
+```
+
+- `preview` set → the query is skipped and `preview` is used as `data`. `slug` is unused.
+- The preview bar lives in a small `FormPreviewPage` wrapper that fetches
+  `GET /api/forms/:id/preview` and renders `<FormPreviewBar />` above
+  `<PublicRegisterPage preview={…} />`. Nothing about the public page's own markup changes.
+- `readOnly` (derived from `preview`) → both submit handlers return early, and the final
+  submit button renders as `disabled` with `title="Preview only — nothing is submitted"`.
+  **Next stays enabled** — paging through a multi-page form is part of what staff are checking.
+  The honeypot field is not rendered.
+- **All the interactive parts stay live**: typing, choosing a role, the agency picker, page
+  steps, and branching. Staff need to *drive* the form to see the conditional questions, so
+  only the final submit is inert. The agency picker's lookup is the public one, which needs no
+  session.
+- The preview bar renders above `<PublicChrome>`, so the document title and layout of the real
+  page are unchanged.
+
+### 10.6 Entry point
+
+A **Preview** button in the form editor's header (`FormTemplateEditor.tsx`), beside Save draft
+and Publish, for every role that can open the editor:
+
+```tsx
+<a
+  className="btn btn-ghost"
+  href={`/admin/forms/${formTemplateId}/preview${
+    currentVersionId !== null ? `?version=${currentVersionId}` : ''
+  }`}
+  target="_blank"
+  rel="noopener"
+>
+  Preview
+</a>
+```
+
+- **A new tab**, so the editor keeps its unsaved state. A same-tab navigation would discard
+  edits and lose the staff member's place.
+- **It previews what the editor is showing** — the newest version, or the older one selected
+  from the version list — so "what I see is what I preview" holds.
+- **Unsaved edits are not previewed.** The preview reads the saved version; the editor header
+  already says "Unsaved changes". Saving a draft first is one click and keeps the two in step.
+  (Previewing unsaved state would mean posting the whole draft to a render endpoint — a much
+  larger change for little gain; noted in §10.8.)
+- Also offered from the forms list (`FormsPage.tsx`) as a row action, since that is where staff
+  start.
+
+### 10.7 Accessibility and safety
+
+- The preview bar is the first focusable element and reads "Preview — this is not the live
+  form" to a screen reader, so a keyboard user is never confused about which page they are on.
+  The wrapper also sets the tab title to `Preview · <form name>`, so a preview tab is
+  identifiable in a crowded tab strip.
+- `Cache-Control: no-store` on `/api/forms/:id/preview` and the authenticated header GET — a
+  draft is not cacheable content.
+- The authenticated header GET is rate-limited like the public one, so a signed-in account
+  cannot use it to pull images in a loop.
+- The preview never writes: no `core.PublicSubmission` audit row, no rate-limit bucket
+  consumed, no participant created.
+
+### 10.8 Out of scope for the preview
+
+- Previewing **unsaved** editor state (see §10.6).
+- A side-by-side editor/preview split pane. A new tab is simpler, survives a refresh, and
+  works on a phone.
+- Previewing a *workshop* registration form's public page from the workshop drawer. That page
+  needs a workshop, not just a version; it can reuse this endpoint later by passing a
+  `workshopId`, but it is not part of this change.
+- A **preview link** on the public link panel (`FormLinkPanel.tsx`). That panel already shows
+  the live URL and Copy; the editor's Preview button covers the "show me the page" need without
+  a second way to reach the same screen.
+- Shareable preview links for people without a staff account.
+
+---
+
+## 11. Tests (preview)
+
+| Test | Asserts |
+| --- | --- |
+| Preview a draft | 200; payload `form` is the draft version; `state` is `open` |
+| Preview with `?version=` of another template | 404 |
+| Preview as a viewer | 403 |
+| Authenticated header GET, form with no live link | 200 with the image — the draft preview shows its banner |
+| Public header GET, same form | 404 — the public route stays gated |
+| Preview page | Submit is disabled; Next, typing and branching still work |
+| Preview page | No `POST` is issued when the disabled submit is clicked |
+

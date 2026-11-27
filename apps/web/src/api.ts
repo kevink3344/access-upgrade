@@ -878,6 +878,30 @@ export const api = {
         formVersionNumber: number | null;
         answers: { questionKey: string; label: string; value: string | null }[];
       }>(`/api/forms/answers/registration/${registrationId}`),
+
+    /** Header image state for the editor. */
+    header: (id: number) =>
+      request<import('@pe/shared').FormHeaderState>(`/api/forms/${id}/header`),
+
+    uploadHeader: (
+      id: number,
+      body: { data: string; contentType: string; fileName?: string; altText: string },
+    ) =>
+      request<import('@pe/shared').FormHeaderState>(`/api/forms/${id}/header`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    removeHeader: (id: number) =>
+      request<import('@pe/shared').FormHeaderState>(`/api/forms/${id}/header`, {
+        method: 'DELETE',
+      }),
+
+    /** The public page's payload for any version, draft included. */
+    preview: (id: number, versionId?: number | null) =>
+      request<import('@pe/shared').FormPreviewState>(
+        `/api/forms/${id}/preview${versionId ? `?version=${versionId}` : ''}`,
+      ),
   },
 
   webhooks: {

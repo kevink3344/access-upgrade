@@ -250,6 +250,17 @@ export function FormsPage() {
                         >
                           Edit
                         </button>
+                        <a
+                          className="btn btn-ghost btn-sm"
+                          href={`/admin/forms/${f.formTemplateId}/preview${
+                            f.currentVersionId !== null ? `?version=${f.currentVersionId}` : ''
+                          }`}
+                          target="_blank"
+                          rel="noopener"
+                          title="Open the public page in a new tab"
+                        >
+                          Preview
+                        </a>
                         {canPublish && !f.isArchived && (
                           <>
                             <button
