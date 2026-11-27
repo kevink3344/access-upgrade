@@ -291,7 +291,7 @@ function PublicChrome({ children, title = 'Project Enlightenment - Workshop Regi
     <div className="public-page">
       <main className="public-main">{children}</main>
       <p className="public-foot">
-        Wake County Public School System Â· Project Enlightenment
+        Wake County Public School System · Project Enlightenment
       </p>
     </div>
   );
@@ -829,7 +829,7 @@ export function PublicRegisterPage({ slug }: { slug: string }) {
               <dt>Credit</dt>
               <dd>
                 {w.credit}
-                {w.ceus ? ` Â· ${w.ceus} CEUs` : ''}
+                {w.ceus ? ` · ${w.ceus} CEUs` : ''}
               </dd>
             </div>
           )}
