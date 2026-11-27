@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getPool } from '../db.js';
 import { env } from '../env.js';
+import { getLoginTheme } from '../services/login-theme.js';
 
 export const healthRouter = Router();
 
@@ -64,9 +65,16 @@ healthRouter.get('/', (_req, res) => {
  *                     MODE environment variable is blank or unset.
  *                   example: TEST SITE
  */
-healthRouter.get('/config', (_req, res) => {
-  const mode = env.MODE && env.MODE.length > 0 ? env.MODE : null;
-  res.json({ mode });
+healthRouter.get('/config', async (_req, res, next) => {
+  try {
+    const mode = env.MODE && env.MODE.length > 0 ? env.MODE : null;
+    // The login screen's look, so it is right before anyone signs in. Not
+    // cached: an admin's change should show on the next page load.
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ mode, loginTheme: await getLoginTheme() });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**

@@ -1399,8 +1399,19 @@ export interface StatusReport {
   checks: StatusCheck[];
 }
 
-export interface ReportSubscription {  reportSubscriptionId: number;
-  reportKey: string;
+/* ------------------------------------------------------------------ */
+/*  Appearance                                                         */
+/* ------------------------------------------------------------------ */
+
+/** The login screen's left-hand panel. Workspace-wide, chosen by an admin. */
+export type LoginTheme = 'blue' | 'classroom' | 'garden' | 'night' | 'paper';
+
+export interface AppearanceState {
+  loginTheme: LoginTheme;
+  themes: LoginTheme[];
+}
+
+export interface ReportSubscription {  reportSubscriptionId: number;  reportKey: string;
   reportTitle: string;
   params: ReportSubscriptionParams;
   /** 0 = Sunday .. 6 = Saturday. */

@@ -39,6 +39,7 @@ import { utilitiesRouter } from './routes/utilities.js';
 import { calendarFeedRouter } from './routes/calendar-feed.js';
 import { startReportScheduler } from './services/report-scheduler.js';
 import { statusRouter } from './routes/status.js';
+import { appearanceRouter } from './routes/appearance.js';
 
 const app = express();
 
@@ -237,6 +238,7 @@ app.use('/api/credit-slips', creditSlipsRouter);
 app.use('/api/folders', foldersRouter);
 app.use('/api/admin/utilities', utilitiesRouter);
 app.use('/api/admin/status', statusRouter);
+app.use('/api/admin/appearance', appearanceRouter);
 app.use('/api/calendar', calendarFeedRouter);
 // The School Cash upload is the raw CSV as text/plain, not multipart, so it
 // needs its own body parser. Mounted before the router so only this path is

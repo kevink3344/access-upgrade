@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { z } from 'zod';
+import type { LoginTheme } from '@pe/shared';
 import { useAuth } from '../auth';
 import { api, HttpError } from '../api';
 import { IconAlert } from '../components/icons';
@@ -21,15 +22,21 @@ export function LoginPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [mode, setMode] = useState<string | null>(null);
+  const [theme, setTheme] = useState<LoginTheme>('blue');
 
-  // Deployment badge ("TEST SITE"). Fetched before login because staff need
-  // to know which environment they are about to sign into. A failure here
-  // must never block signing in, so errors are swallowed.
+  // Deployment badge ("TEST SITE") and the panel theme. Fetched before login
+  // because both are for people who have not signed in yet. A failure here
+  // must never block signing in, so errors are swallowed and the default
+  // blue panel is used.
   useEffect(() => {
     let cancelled = false;
     api
       .config()
-      .then((c) => !cancelled && setMode(c.mode))
+      .then((c) => {
+        if (cancelled) return;
+        setMode(c.mode);
+        if (c.loginTheme) setTheme(c.loginTheme);
+      })
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -76,7 +83,7 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
-      <section className="login-brand" aria-hidden="true">
+      <section className={`login-brand theme-${theme}`} aria-hidden="true">
         <div className="login-brand-inner">
           <div className="login-badges">
             <span className="login-kicker">Wake County Public School System</span>

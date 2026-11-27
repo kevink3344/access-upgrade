@@ -10,6 +10,12 @@
 }
 
 /* ---------- brand panel ---------- */
+/*
+ * The left-hand panel. The admin picks its look in Settings > Administration;
+ * the default is the WCPSS blue. Each theme is a background plus the text
+ * colours that stay legible on it — a photographic background needs a scrim
+ * and white text, a light one needs dark text.
+ */
 .login-brand {
   background: linear-gradient(135deg, #165788 0%, #12466e 55%, #0e3a5c 100%);
   color: #fff;
@@ -20,6 +26,82 @@
   position: relative;
   overflow: hidden;
 }
+
+/* ---------- login themes ---------- */
+
+/* Classroom — warm, light, the most "school" of the set. */
+.login-brand.theme-classroom {
+  background:
+    linear-gradient(135deg, rgba(255, 247, 235, .92) 0%, rgba(255, 238, 214, .88) 100%),
+    repeating-linear-gradient(90deg, #f3d9b1 0 26px, #e9c79a 26px 30px);
+  color: #3b2a17;
+}
+
+.login-brand.theme-classroom::after {
+  background: radial-gradient(circle, rgba(223, 109, 28, .22) 0%, transparent 68%);
+}
+
+/* Garden — soft greens, calm and outdoors. */
+.login-brand.theme-garden {
+  background:
+    linear-gradient(135deg, rgba(233, 246, 235, .94) 0%, rgba(212, 235, 216, .90) 100%),
+    repeating-linear-gradient(45deg, #cfe6d2 0 18px, #c2ddc7 18px 22px);
+  color: #1f3d2a;
+}
+
+.login-brand.theme-garden::after {
+  background: radial-gradient(circle, rgba(76, 145, 96, .22) 0%, transparent 68%);
+}
+
+/* Night — deep slate, for staff who prefer a dark panel. */
+.login-brand.theme-night {
+  background: linear-gradient(135deg, #1f2a37 0%, #16202b 55%, #0f1720 100%);
+  color: #e8eef5;
+}
+
+.login-brand.theme-night::after {
+  background: radial-gradient(circle, rgba(120, 170, 220, .22) 0%, transparent 68%);
+}
+
+/* Paper — a plain light panel, no tint: the quietest option. */
+.login-brand.theme-paper {
+  background: linear-gradient(135deg, #f7f8fa 0%, #eef1f5 100%);
+  color: #1f2a37;
+}
+
+.login-brand.theme-paper::after {
+  background: radial-gradient(circle, rgba(22, 87, 136, .12) 0%, transparent 68%);
+}
+
+/* The kicker and the stat labels are deliberately muted on the default blue;
+   on a light theme they need the same treatment in the other direction. */
+.login-brand.theme-classroom .login-kicker,
+.login-brand.theme-garden .login-kicker,
+.login-brand.theme-paper .login-kicker {
+  color: rgba(31, 42, 55, .72);
+}
+
+.login-brand.theme-classroom .login-brand p,
+.login-brand.theme-garden .login-brand p,
+.login-brand.theme-paper .login-brand p,
+.login-brand.theme-classroom .stat span,
+.login-brand.theme-garden .stat span,
+.login-brand.theme-paper .stat span {
+  color: rgba(31, 42, 55, .72);
+}
+
+.login-brand.theme-classroom .login-brand-subtitle,
+.login-brand.theme-garden .login-brand-subtitle,
+.login-brand.theme-paper .login-brand-subtitle {
+  color: rgba(31, 42, 55, .62);
+}
+
+.login-brand.theme-classroom .stat b,
+.login-brand.theme-garden .stat b,
+.login-brand.theme-paper .stat b {
+  color: #1f2a37;
+}
+
 
 .login-brand::after {
   content: '';

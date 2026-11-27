@@ -165,7 +165,13 @@ export const api = {
   dashboard: () => request<import('@pe/shared').DashboardSummary>('/api/dashboard'),
 
   /** Non-sensitive UI config, e.g. the deployment badge. */
-  config: () => request<{ mode: string | null }>('/health/config'),
+  config: () =>
+    request<{ mode: string | null; loginTheme: import('@pe/shared').LoginTheme }>(
+      '/health/config',
+      // The theme changes when an admin picks one; a cached copy would keep
+      // showing the old panel on the login screen.
+      { cache: 'no-store' },
+    ),
 
   users: {
     list: (params: { q?: string; role?: string; isActive?: boolean } = {}) => {
@@ -907,6 +913,16 @@ export const api = {
   admin: {
     /** Live health and configuration checks for the Developer status page. */
     status: () => request<import('@pe/shared').StatusReport>('/api/admin/status'),
+
+    /** Login screen theme, and the choices available. */
+    appearance: () =>
+      request<import('@pe/shared').AppearanceState>('/api/admin/appearance'),
+
+    setLoginTheme: (loginTheme: import('@pe/shared').LoginTheme) =>
+      request<import('@pe/shared').AppearanceState>('/api/admin/appearance', {
+        method: 'PATCH',
+        body: JSON.stringify({ loginTheme }),
+      }),
   },
 
   webhooks: {

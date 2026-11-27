@@ -162,6 +162,78 @@
   margin-top: 8px;
 }
 
+/* ---------- appearance settings ---------- */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.theme-option:hover:not(:disabled) {
+  border-color: var(--primary-color);
+}
+
+.theme-option.is-selected {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px var(--primary-color) inset;
+}
+
+.theme-option:disabled {
+  cursor: progress;
+  opacity: .75;
+}
+
+/* The preview reuses the login page's own classes, so what is shown here is
+   exactly what the login screen renders. */
+.theme-preview.login-brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  height: 96px;
+  padding: 12px 14px;
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.theme-preview-title {
+  font-family: var(--font-primary);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.theme-preview-sub {
+  font-size: 12px;
+  opacity: .8;
+}
+
+.theme-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.theme-option-text small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 /* ---------- developer status ---------- */
 .status-summary {
   display: flex;
