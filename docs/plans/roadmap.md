@@ -141,7 +141,7 @@ without reading stops being the only guard.
 | Piece | Why |
 | --- | --- |
 | Backups and a restore drill | I could not verify from the repo that production is backed up, or that a restore has ever been tried. A backup nobody has restored is a hope, not a backup. |
-| A status page | Checks DB reachability, the PDF renderer, and the last webhook delivery. A failure should be visible before a staff member reports it. |
+| A status page | Checks DB reachability, the PDF renderer, the last webhook delivery and the report scheduler. **Built** — Developer > Status, `/admin/status`. |
 | Audit visible in the UI | `audit.ChangeLog` is populated, but no screen shows who changed a registration or payment. For money and certificates that is worth surfacing. |
 
 ---

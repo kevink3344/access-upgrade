@@ -8,6 +8,7 @@
 import type { ReactNode } from 'react';
 import type { AuthUser } from '@pe/shared';
 import {
+  IconAlert,
   IconBell,
   IconAgencies,
   IconApi,
@@ -129,6 +130,13 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         label: 'Webhooks',
         description: 'Outbound event subscriptions.',
         icon: IconWebhook,
+        roles: ADMINS,
+      },
+      {
+        to: '/admin/status',
+        label: 'Status',
+        description: 'Database, PDF rendering, email and the scheduler — live.',
+        icon: IconAlert,
         roles: ADMINS,
       },
     ],

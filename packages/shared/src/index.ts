@@ -1373,8 +1373,33 @@ export interface ReportSubscriptionParams {
   workshopId?: number;
 }
 
-export interface ReportSubscription {
-  reportSubscriptionId: number;
+/* ------------------------------------------------------------------ */
+/*  Developer status                                                   */
+/* ------------------------------------------------------------------ */
+
+export type StatusCheckStatus = 'ok' | 'warn' | 'fail';
+
+export interface StatusCheck {
+  key: string;
+  label: string;
+  status: StatusCheckStatus;
+  /** One line a non-developer can act on. */
+  detail: string;
+  /** Extra facts for whoever is debugging. Never contains a secret. */
+  facts?: Record<string, string | number | boolean | null>;
+  latencyMs?: number;
+}
+
+export interface StatusReport {
+  /** The worst of the individual results. */
+  overall: StatusCheckStatus;
+  checkedAt: string;
+  uptimeSeconds: number;
+  version: string;
+  checks: StatusCheck[];
+}
+
+export interface ReportSubscription {  reportSubscriptionId: number;
   reportKey: string;
   reportTitle: string;
   params: ReportSubscriptionParams;

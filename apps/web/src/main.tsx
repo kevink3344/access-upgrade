@@ -43,6 +43,7 @@ import { CalendarFeedSettingsPage } from './pages/CalendarFeedSettingsPage';
 import { FormsPage } from './pages/FormsPage';
 import { FormEditorPage } from './pages/FormEditorPage';
 import { UtilitiesPage } from './pages/UtilitiesPage';
+import { StatusPage } from './pages/StatusPage';
 import { ApiDocsPage } from './pages/ApiDocsPage';
 import { SettingsPage, SettingsUnavailable } from './pages/SettingsPage';
 import { DropdownListsPage } from './pages/DropdownListsPage';
@@ -120,6 +121,7 @@ const ROUTES: Record<string, string> = {
   '/admin': 'Notifications',
   '/admin/users': 'Users',
   '/admin/utilities': 'Utilities',
+  '/admin/status': 'Status',
   '/settings/dropdown-lists': 'Dropdown lists',
   '/api-docs': 'API documentation',
   '/admin/webhooks': 'Webhooks',
@@ -239,6 +241,13 @@ function Router() {
       return <PlaceholderPage path={path} title="Not available" />;
     }
     return <UtilitiesPage />;
+  }
+
+  if (path === '/admin/status') {
+    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
+      return <PlaceholderPage path={path} title="Not available" />;
+    }
+    return <StatusPage />;
   }
 
   if (path === '/settings/dropdown-lists') {

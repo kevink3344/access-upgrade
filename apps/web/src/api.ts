@@ -904,6 +904,11 @@ export const api = {
       ),
   },
 
+  admin: {
+    /** Live health and configuration checks for the Developer status page. */
+    status: () => request<import('@pe/shared').StatusReport>('/api/admin/status'),
+  },
+
   webhooks: {
     list: () => request<{ data: import('@pe/shared').WebhookRow[] }>('/api/webhooks'),
     get: (id: number) => request<import('@pe/shared').WebhookRow>(`/api/webhooks/${id}`),
