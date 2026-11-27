@@ -27,13 +27,22 @@
 
 /* ---------- submitted form answers ----------
    A read-only label/value list, grouped one block per page the requester
-   saw. The label column is fixed so the values line up down the block. */
+   saw. The label column is fixed so the values line up down the block.
+
+   The grid belongs on each row, NOT on the <dl>. Both drawers wrap every
+   pair in a <div>, so a grid on the <dl> makes those divs the grid items
+   and lays two answers side by side — which reads as half the answers
+   missing. Keeping the <dl> as a plain block stacks the rows. */
 .answer-list {
+  display: block;
+  margin: 0;
+  font-size: 13px;
+}
+
+.answer-list > div {
   display: grid;
   grid-template-columns: minmax(140px, 38%) 1fr;
   gap: 8px 16px;
-  margin: 0;
-  font-size: 13px;
 }
 
 .answer-list dt {

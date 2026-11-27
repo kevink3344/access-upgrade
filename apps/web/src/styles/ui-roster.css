@@ -197,7 +197,9 @@
 }
 
 @media (max-width: 640px) {
-  .answer-list div { grid-template-columns: 1fr; gap: 2px; }
+  /* Must match the > div specificity of the rule above, or the two-column
+     grid wins on a phone and the label/value pair sits side by side. */
+  .answer-list > div { grid-template-columns: 1fr; gap: 2px; }
 }
 
 @media (max-width: 640px) {
