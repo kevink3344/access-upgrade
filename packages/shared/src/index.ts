@@ -1404,7 +1404,22 @@ export interface StatusReport {
 /* ------------------------------------------------------------------ */
 
 /** The login screen's left-hand panel. Workspace-wide, chosen by an admin. */
-export type LoginTheme = 'blue' | 'classroom' | 'garden' | 'night' | 'paper';
+export type LoginTheme =
+  | 'blue'
+  | 'classroom'
+  | 'garden'
+  | 'night'
+  | 'paper'
+  | 'photo-1'
+  | 'photo-2'
+  | 'photo-3'
+  | 'photo-4'
+  | 'photo-5'
+  | 'photo-6'
+  | 'photo-7'
+  | 'photo-8'
+  | 'photo-9'
+  | 'photo-10';
 
 export interface AppearanceState {
   loginTheme: LoginTheme;

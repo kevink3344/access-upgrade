@@ -73,6 +73,37 @@
   background: radial-gradient(circle, rgba(22, 87, 136, .12) 0%, transparent 68%);
 }
 
+/* Photographs. The image sits behind a dark scrim so the white text keeps
+   its contrast whatever the picture is doing. */
+.login-brand[class*="theme-photo-"] {
+  color: #fff;
+  background-size: cover;
+  background-position: center;
+}
+
+.login-brand[class*="theme-photo-"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(12, 32, 52, .78) 0%, rgba(12, 32, 52, .58) 100%);
+  pointer-events: none;
+}
+
+.login-brand[class*="theme-photo-"]::after {
+  background: radial-gradient(circle, rgba(223, 109, 28, .28) 0%, transparent 68%);
+}
+
+.login-brand.theme-photo-1 { background-image: url('/images/login-photo-1011.jpg'); }
+.login-brand.theme-photo-2 { background-image: url('/images/login-photo-1039.jpg'); }
+.login-brand.theme-photo-3 { background-image: url('/images/login-photo-1043.jpg'); }
+.login-brand.theme-photo-4 { background-image: url('/images/login-photo-1050.jpg'); }
+.login-brand.theme-photo-5 { background-image: url('/images/login-photo-1067.jpg'); }
+.login-brand.theme-photo-6 { background-image: url('/images/login-photo-1080.jpg'); }
+.login-brand.theme-photo-7 { background-image: url('/images/login-photo-1081.jpg'); }
+.login-brand.theme-photo-8 { background-image: url('/images/login-photo-1084.jpg'); }
+.login-brand.theme-photo-9 { background-image: url('/images/login-photo-1015.jpg'); }
+.login-brand.theme-photo-10 { background-image: url('/images/login-photo-1016.jpg'); }
+
 /* The kicker and the stat labels are deliberately muted on the default blue;
    on a light theme they need the same treatment in the other direction. */
 .login-brand.theme-classroom .login-kicker,

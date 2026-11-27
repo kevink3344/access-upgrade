@@ -11,10 +11,47 @@ import { query, sql } from '../db.js';
 
 export const LOGIN_THEME_KEY = 'ui:login-theme';
 
-export const LOGIN_THEMES = ['blue', 'classroom', 'garden', 'night', 'paper'] as const;
+export const LOGIN_THEMES = [
+  'blue',
+  'classroom',
+  'garden',
+  'night',
+  'paper',
+  'photo-1',
+  'photo-2',
+  'photo-3',
+  'photo-4',
+  'photo-5',
+  'photo-6',
+  'photo-7',
+  'photo-8',
+  'photo-9',
+  'photo-10',
+] as const;
 export type LoginTheme = (typeof LOGIN_THEMES)[number];
 
 export const DEFAULT_LOGIN_THEME: LoginTheme = 'blue';
+
+/**
+ * The photographs offered as backgrounds, in the order they are shown.
+ *
+ * Served from the web app's own `public/images`, so there is no external
+ * dependency and no per-request licence check. Each is a Picsum photo
+ * (Unsplash-licensed, free for commercial use) sized 1600×1200 and checked by
+ * eye for people and animals, which this list must never contain.
+ */
+export const LOGIN_PHOTOS: Record<string, { file: string; label: string }> = {
+  'photo-1': { file: 'login-photo-1011.jpg', label: 'Mountain lake' },
+  'photo-2': { file: 'login-photo-1039.jpg', label: 'Waterfall' },
+  'photo-3': { file: 'login-photo-1043.jpg', label: 'Forest path' },
+  'photo-4': { file: 'login-photo-1050.jpg', label: 'Harbour' },
+  'photo-5': { file: 'login-photo-1067.jpg', label: 'Coastline' },
+  'photo-6': { file: 'login-photo-1080.jpg', label: 'City skyline' },
+  'photo-7': { file: 'login-photo-1081.jpg', label: 'Downtown street' },
+  'photo-8': { file: 'login-photo-1084.jpg', label: 'Bridge' },
+  'photo-9': { file: 'login-photo-1015.jpg', label: 'River valley' },
+  'photo-10': { file: 'login-photo-1016.jpg', label: 'Desert road' },
+};
 
 /** Human names and descriptions for the Settings screen. */
 export const LOGIN_THEME_META: Record<LoginTheme, { label: string; description: string }> = {
@@ -38,7 +75,13 @@ export const LOGIN_THEME_META: Record<LoginTheme, { label: string; description: 
     label: 'Paper',
     description: 'A plain light panel with no tint — the quietest option.',
   },
-};
+  ...Object.fromEntries(
+    Object.entries(LOGIN_PHOTOS).map(([key, p]) => [
+      key,
+      { label: p.label, description: 'A photograph, with a dark scrim so the text stays readable.' },
+    ]),
+  ),
+} as Record<LoginTheme, { label: string; description: string }>;
 
 export function isLoginTheme(value: unknown): value is LoginTheme {
   return typeof value === 'string' && (LOGIN_THEMES as readonly string[]).includes(value);
