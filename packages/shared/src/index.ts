@@ -142,9 +142,10 @@ export interface WorkshopCalendarResponse {
 /**
  * The workshop calendar as a subscribable iCalendar feed.
  *
- * `url` is present only in the response that creates a link, because the
- * plaintext token is never stored (only its hash), so it cannot be shown
- * again later.
+ * `url` is the current subscription link, returned on every read: the token
+ * is stored sealed (AES-256-GCM) alongside its hash, so the settings screen
+ * can show it at any time. It is null when no link exists, or when the link
+ * predates migration 033 and only its hash survives.
  */
 export interface CalendarFeedState {
   enabled: boolean;

@@ -12,13 +12,13 @@ import { IconWorkshops } from '../components/icons';
  * on, because the URL is a credential: anyone holding it can read the
  * workshop schedule.
  *
- * The URL is shown only in the moment it is created. Only a hash is stored,
- * so the page cannot display it again later — the remedy for a lost or
- * over-shared link is to issue a new one, which stops the old one working.
+ * The URL comes from the server on every load: the token is stored sealed
+ * (AES-256-GCM) next to its hash, so the page can show the current link at
+ * any time. Issuing a new one still stops the old one working, which is the
+ * remedy for a link that has been shared too widely.
  */
 export function CalendarFeedSettingsPage() {
   const qc = useQueryClient();
-  const [url, setUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,21 +29,14 @@ export function CalendarFeedSettingsPage() {
   });
 
   const enabled = data?.enabled ?? false;
-
-  /** A new URL replaces the shown one, so the copy button never copies a stale link. */
-  function remember(next: { url?: string | null }) {
-    if (next.url) {
-      setUrl(next.url);
-      setCopied(false);
-    }
-  }
+  /** The link the server last reported; null when none exists or it predates migration 033. */
+  const url = data?.url ?? null;
 
   const toggle = useMutation({
     mutationFn: (next: boolean) => api.calendarFeed.setEnabled(next),
-    onSuccess: (next) => {
+    onSuccess: () => {
       setError(null);
-      remember(next);
-      if (!next.enabled) setUrl(null);
+      setCopied(false);
       qc.invalidateQueries({ queryKey: ['calendar-feed', 'settings'] });
     },
     onError: (err: unknown) =>
@@ -52,14 +45,21 @@ export function CalendarFeedSettingsPage() {
 
   const regenerate = useMutation({
     mutationFn: () => api.calendarFeed.regenerate(),
-    onSuccess: (next) => {
+    onSuccess: () => {
       setError(null);
-      remember(next);
-      qc.invalidateQueries({ queryKey: ['calendar-feed', 'settings'] });
+      setCopied(false);
+      void qc.invalidateQueries({ queryKey: ['calendar-feed', 'settings'] });
     },
     onError: (err: unknown) =>
       setError(err instanceof Error ? err.message : 'A new link could not be created.'),
   });
+
+  // A plain click on the button works; this is for the case where the sidebar
+  // overlaps it on a narrow window, where the click never reaches the button.
+  function issueNewLink() {
+    if (busy) return;
+    regenerate.mutate();
+  }
 
   const busy = toggle.isPending || regenerate.isPending;
 
@@ -156,7 +156,7 @@ export function CalendarFeedSettingsPage() {
               {url ? (
                 <>
                   <p className="notif-kind-desc" style={{ marginTop: 0 }}>
-                    Copy this link now — it is shown only once. In Google Calendar, choose
+                    In Google Calendar, choose
                     <b> Other calendars → + → From URL</b> and paste it. In Outlook, choose
                     <b> Add calendar → Subscribe from web</b>.
                   </p>
@@ -175,9 +175,10 @@ export function CalendarFeedSettingsPage() {
                 </>
               ) : data?.hasLink ? (
                 <p className="notif-kind-desc" style={{ marginTop: 0 }}>
-                  The link is already issued and is not shown again. If it has been lost or shared
-                  too widely, issue a new one — the old link stops working immediately and existing
-                  subscribers must be given the new one.
+                  This link was issued before the app could show it again, so only its
+                  fingerprint is stored. Issue a new one to get a link you can copy — the old
+                  link stops working immediately and existing subscribers must be given the new
+                  one.
                 </p>
               ) : (
                 <p className="notif-kind-desc" style={{ marginTop: 0 }}>

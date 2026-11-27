@@ -961,13 +961,13 @@ export const api = {
   },
 
   calendarFeed: {
-    /** Whether the feed is on, and whether a link has ever been issued. */
+    /** Whether the feed is on, plus the current subscription link. */
     settings: () =>
       request<import('@pe/shared').CalendarFeedState>('/api/calendar/settings'),
 
     /**
      * Switches the feed on or off. Switching on issues a link if there is
-     * none, and the response then carries the only copy of the URL.
+     * none; the response always carries the current link.
      */
     setEnabled: (enabled: boolean) =>
       request<import('@pe/shared').CalendarFeedState>('/api/calendar/settings', {

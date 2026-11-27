@@ -230,11 +230,41 @@ calendarFeedRouter.get('/workshops.ics', async (req, res, next) => {
 /* ------------------------------------------------------------------ */
 
 /**
+ * The absolute subscription URL.
+ *
+ * The browser builds this from its own origin, because the page's origin is
+ * the one the calendar app must reach: in development the API sits behind
+ * the Vite proxy, so the server's own Host header would name a port the
+ * browser never talked to. `WEB_ORIGIN` is the production fallback for the
+ * rare caller that sends no Origin.
+ */
+function feedUrl(req: Request, token: string): string {
+  const origin = req.get('origin') ?? env.WEB_ORIGIN;
+  return `${origin.replace(/\/+$/, '')}/api/calendar/workshops.ics?token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * The state the settings screen sees, with the link attached.
+ *
+ * `url` is null when no link exists, or when it was issued before migration
+ * 033 and only its hash survives — the screen then offers to issue a new one
+ * rather than showing a URL that cannot be rebuilt.
+ */
+async function settingsPayload(req: Request) {
+  const state = await getFeedState();
+  return { ...state, url: state.token ? feedUrl(req, state.token) : null };
+}
+
+/**
  * @openapi
  * /api/calendar/settings:
  *   get:
  *     tags: [Calendar feed]
  *     summary: Whether the workshop calendar feed is on
+ *     description: >
+ *       Includes the current subscription URL when a link exists. The token
+ *       is stored sealed (AES-256-GCM) alongside its hash, so the screen can
+ *       show the link again at any time instead of forcing a new one.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Feed state and the subscription URL when a link exists }
@@ -242,20 +272,20 @@ calendarFeedRouter.get('/workshops.ics', async (req, res, next) => {
  *     tags: [Calendar feed]
  *     summary: Switch the workshop calendar feed on or off
  *     description: >
- *       Switching on issues a link if none exists, and returns it once.
+ *       Switching on issues a link if none exists, and returns it.
  *       Switching off keeps the link so turning it back on restores the
  *       calendar staff already subscribed to.
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: New state, plus the link when one was just created }
+ *       200: { description: New state, plus the link }
  */
 calendarFeedRouter.get(
   '/settings',
   requireAuth,
   requireRole('SUPER_ADMIN', 'ADMIN'),
-  async (_req, res, next) => {
+  async (req, res, next) => {
     try {
-      res.json(await getFeedState());
+      res.json(await settingsPayload(req));
     } catch (err) {
       next(err);
     }
@@ -276,15 +306,8 @@ calendarFeedRouter.patch(
         return;
       }
 
-      const { token } = await setFeedEnabled(parsed.data.enabled, req.user!.email);
-      const state = await getFeedState();
-
-      res.json({
-        ...state,
-        // Shown once, so the administrator can copy it into their calendar
-        // app. It is never returned again.
-        url: token ? feedUrl(req, token) : null,
-      });
+      await setFeedEnabled(parsed.data.enabled, req.user!.email);
+      res.json(await settingsPayload(req));
     } catch (err) {
       next(err);
     }
@@ -299,7 +322,7 @@ calendarFeedRouter.patch(
  *     summary: Issue a new subscription URL, invalidating the old one
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: The new URL, returned once }
+ *       200: { description: The new URL }
  */
 calendarFeedRouter.post(
   '/link',
@@ -307,24 +330,10 @@ calendarFeedRouter.post(
   requireRole('SUPER_ADMIN', 'ADMIN'),
   async (req, res, next) => {
     try {
-      const { token } = await regenerateLink(req.user!.email);
-      res.json({ ...(await getFeedState()), url: feedUrl(req, token) });
+      await regenerateLink(req.user!.email);
+      res.json(await settingsPayload(req));
     } catch (err) {
       next(err);
     }
   },
 );
-
-/**
- * The absolute subscription URL.
- *
- * The browser builds this from its own origin, because the page's origin is
- * the one the calendar app must reach: in development the API sits behind
- * the Vite proxy, so the server's own Host header would name a port the
- * browser never talked to. `WEB_ORIGIN` is the production fallback for the
- * rare caller that sends no Origin.
- */
-function feedUrl(req: Request, token: string): string {
-  const origin = req.get('origin') ?? env.WEB_ORIGIN;
-  return `${origin.replace(/\/+$/, '')}/api/calendar/workshops.ics?token=${encodeURIComponent(token)}`;
-}
