@@ -96,13 +96,10 @@
 .login-brand.theme-photo-1 { background-image: url('/images/login-photo-1011.jpg'); }
 .login-brand.theme-photo-2 { background-image: url('/images/login-photo-1039.jpg'); }
 .login-brand.theme-photo-3 { background-image: url('/images/login-photo-1043.jpg'); }
-.login-brand.theme-photo-4 { background-image: url('/images/login-photo-1050.jpg'); }
-.login-brand.theme-photo-5 { background-image: url('/images/login-photo-1067.jpg'); }
-.login-brand.theme-photo-6 { background-image: url('/images/login-photo-1080.jpg'); }
-.login-brand.theme-photo-7 { background-image: url('/images/login-photo-1081.jpg'); }
-.login-brand.theme-photo-8 { background-image: url('/images/login-photo-1084.jpg'); }
-.login-brand.theme-photo-9 { background-image: url('/images/login-photo-1015.jpg'); }
-.login-brand.theme-photo-10 { background-image: url('/images/login-photo-1016.jpg'); }
+.login-brand.theme-photo-4 { background-image: url('/images/login-photo-1067.jpg'); }
+.login-brand.theme-photo-5 { background-image: url('/images/login-photo-1081.jpg'); }
+.login-brand.theme-photo-6 { background-image: url('/images/login-photo-1015.jpg'); }
+.login-brand.theme-photo-7 { background-image: url('/images/login-photo-1016.jpg'); }
 
 /* The kicker and the stat labels are deliberately muted on the default blue;
    on a light theme they need the same treatment in the other direction. */

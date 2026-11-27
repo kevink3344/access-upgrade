@@ -13,18 +13,15 @@ import { AppShell } from '../components/AppShell';
  * reads on it.
  */
 
-/** The ten photographs, in the order the API lists them. */
+/** The seven photographs, in the order the API lists them. */
 const PHOTOS: { value: LoginTheme; label: string }[] = [
   { value: 'photo-1', label: 'Mountain lake' },
   { value: 'photo-2', label: 'Waterfall' },
   { value: 'photo-3', label: 'Forest path' },
-  { value: 'photo-4', label: 'Harbour' },
-  { value: 'photo-5', label: 'Coastline' },
-  { value: 'photo-6', label: 'City skyline' },
-  { value: 'photo-7', label: 'Downtown street' },
-  { value: 'photo-8', label: 'Bridge' },
-  { value: 'photo-9', label: 'River valley' },
-  { value: 'photo-10', label: 'Desert road' },
+  { value: 'photo-4', label: 'City view' },
+  { value: 'photo-5', label: 'Downtown street' },
+  { value: 'photo-6', label: 'River valley' },
+  { value: 'photo-7', label: 'Desert road' },
 ];
 
 const THEMES: { value: LoginTheme; label: string; description: string }[] = [

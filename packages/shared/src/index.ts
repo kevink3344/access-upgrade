@@ -1416,10 +1416,7 @@ export type LoginTheme =
   | 'photo-4'
   | 'photo-5'
   | 'photo-6'
-  | 'photo-7'
-  | 'photo-8'
-  | 'photo-9'
-  | 'photo-10';
+  | 'photo-7';
 
 export interface AppearanceState {
   loginTheme: LoginTheme;

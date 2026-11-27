@@ -24,9 +24,6 @@ export const LOGIN_THEMES = [
   'photo-5',
   'photo-6',
   'photo-7',
-  'photo-8',
-  'photo-9',
-  'photo-10',
 ] as const;
 export type LoginTheme = (typeof LOGIN_THEMES)[number];
 
@@ -44,13 +41,10 @@ export const LOGIN_PHOTOS: Record<string, { file: string; label: string }> = {
   'photo-1': { file: 'login-photo-1011.jpg', label: 'Mountain lake' },
   'photo-2': { file: 'login-photo-1039.jpg', label: 'Waterfall' },
   'photo-3': { file: 'login-photo-1043.jpg', label: 'Forest path' },
-  'photo-4': { file: 'login-photo-1050.jpg', label: 'Harbour' },
-  'photo-5': { file: 'login-photo-1067.jpg', label: 'Coastline' },
-  'photo-6': { file: 'login-photo-1080.jpg', label: 'City skyline' },
-  'photo-7': { file: 'login-photo-1081.jpg', label: 'Downtown street' },
-  'photo-8': { file: 'login-photo-1084.jpg', label: 'Bridge' },
-  'photo-9': { file: 'login-photo-1015.jpg', label: 'River valley' },
-  'photo-10': { file: 'login-photo-1016.jpg', label: 'Desert road' },
+  'photo-4': { file: 'login-photo-1067.jpg', label: 'City view' },
+  'photo-5': { file: 'login-photo-1081.jpg', label: 'Downtown street' },
+  'photo-6': { file: 'login-photo-1015.jpg', label: 'River valley' },
+  'photo-7': { file: 'login-photo-1016.jpg', label: 'Desert road' },
 };
 
 /** Human names and descriptions for the Settings screen. */
